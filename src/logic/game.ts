@@ -1,10 +1,13 @@
+import { CRAIG } from '../data/craig';
+import { BATTERY, FOUNTAIN } from '../data/dayNight';
 import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
 import { DUCKS, type DuckKind } from '../data/ducks';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import type { Wave } from '../data/waves';
 import { createBattle, placeDuck, spawnEnemy, step, type Battle, type BattleEvent, type Duck, type Enemy } from './battle';
 import type { Point } from './geometry';
-import type { Path } from './path';
+import type { Level } from './level';
+import { makePath, type Path } from './path';
 
 /**
  * building: between waves, placing ducks
@@ -30,22 +33,42 @@ export interface Game {
   waveTime: number;
   /** This wave's predators that haven't appeared yet, soonest first. */
   pending: ScheduledSpawn[];
+  /** Solar battery charge, 0 to BATTERY.capacity. Powers the fountain. */
+  battery: number;
+  /** Craig's Guardian Blessing can be used once per level. */
+  blessingUsed: boolean;
+  /** Seconds of Craig's shield left (only counts down during waves). */
+  shieldTime: number;
+}
+
+/** What the game needs from a level. */
+export interface GameMap {
+  path: Path;
+  sky?: Point[];
+  /** Where the solar fountain is (leave out for no fountain). */
+  fountainAt?: Point;
+}
+
+/** The fountain sits in the middle of the level's first pond. */
+export function mapFromLevel(level: Level): GameMap {
+  return { path: makePath(level.path), sky: level.sky, fountainAt: level.ponds[0]?.center };
 }
 
 export type GameEvent =
   | BattleEvent
   | { type: 'spawned'; enemy: Enemy }
+  | { type: 'shooed'; enemy: Enemy }
   | { type: 'waveCleared'; waveIndex: number; bonus: number }
   | { type: 'won' }
   | { type: 'lost' };
 
-export function createGame(path: Path, waves: readonly Wave[], difficulty: Difficulty): Game {
+export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Difficulty): Game {
   if (waves.length === 0) {
     throw new Error('A level needs at least one wave');
   }
   const settings = DIFFICULTIES[difficulty];
   return {
-    battle: createBattle(path, settings.enemySpeed),
+    battle: createBattle(map.path, { sky: map.sky, fountainAt: map.fountainAt, enemySpeed: settings.enemySpeed }),
     waves,
     peas: settings.startingPeas,
     hearts: settings.hearts,
@@ -53,7 +76,28 @@ export function createGame(path: Path, waves: readonly Wave[], difficulty: Diffi
     phase: 'building',
     waveTime: 0,
     pending: [],
+    battery: BATTERY.startCharge,
+    blessingUsed: false,
+    shieldTime: 0,
   };
+}
+
+/** Day or night for the wave being fought, or the next one while building. */
+export function isNight(game: Game): boolean {
+  const wave = game.waves[Math.min(game.waveIndex, game.waves.length - 1)]!;
+  return wave.time === 'night';
+}
+
+export function canUseBlessing(game: Game): boolean {
+  return !game.blessingUsed && !isOver(game);
+}
+
+/** Craig's Guardian Blessing: shield the duck house. Once per level. */
+export function useBlessing(game: Game): boolean {
+  if (!canUseBlessing(game)) return false;
+  game.blessingUsed = true;
+  game.shieldTime = CRAIG.shieldTime;
+  return true;
 }
 
 export function isOver(game: Game): boolean {
@@ -88,6 +132,7 @@ export function startWave(game: Game): boolean {
   game.phase = 'wave';
   game.waveTime = 0;
   game.pending = scheduleWave(game.waves[game.waveIndex]!);
+  game.battle.night = isNight(game);
   return true;
 }
 
@@ -97,12 +142,20 @@ export function update(game: Game, dt: number): GameEvent[] {
   const events: GameEvent[] = [];
 
   game.waveTime += dt;
+  updateBattery(game, dt);
+  game.shieldTime = Math.max(0, game.shieldTime - dt);
   while (game.pending.length > 0 && game.pending[0]!.time <= game.waveTime) {
     const spawn = game.pending.shift()!;
     events.push({ type: 'spawned', enemy: spawnEnemy(game.battle, spawn.enemy) });
   }
 
+  const shielded = game.shieldTime > 0;
   for (const event of step(game.battle, dt)) {
+    if (event.type === 'reachedHouse' && shielded) {
+      // Craig shoos it away: no heart lost (and no peas either).
+      events.push({ type: 'shooed', enemy: event.enemy });
+      continue;
+    }
     events.push(event);
     if (event.type === 'defeated') game.peas += ENEMIES[event.enemy.kind].peas;
     if (event.type === 'reachedHouse') game.hearts = Math.max(0, game.hearts - 1);
@@ -128,4 +181,15 @@ export function update(game: Game, dt: number): GameEvent[] {
   }
 
   return events;
+}
+
+/** The sun charges the battery in day waves; the fountain runs off it whenever it has charge. */
+function updateBattery(game: Game, dt: number): void {
+  if (!isNight(game)) game.battery += BATTERY.solarPerSecond * dt;
+  const fountain = game.battle.fountain;
+  if (fountain) {
+    fountain.on = game.battery > 0;
+    if (fountain.on) game.battery -= FOUNTAIN.drawPerSecond * dt;
+  }
+  game.battery = Math.min(BATTERY.capacity, Math.max(0, game.battery));
 }

@@ -6,10 +6,9 @@ import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { ENEMIES } from '../data/enemies';
 import { LEVEL1_WAVES } from '../data/waves';
 import { enemyPosition, type Enemy } from '../logic/battle';
-import { buyDuck, canBuy, createGame, startWave, update, type Game, type GameEvent } from '../logic/game';
+import { buyDuck, canBuy, createGame, mapFromLevel, startWave, update, type Game, type GameEvent } from '../logic/game';
 import type { Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
-import { makePath } from '../logic/path';
 
 // Placeholder colors until the kids' art arrives.
 const COLORS = {
@@ -77,7 +76,7 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     // Scene restarts reuse this object, so reset everything here.
     this.level = parseLevel(level1);
-    this.state = createGame(makePath(this.level.path), LEVEL1_WAVES, this.difficulty);
+    this.state = createGame(mapFromLevel(this.level), LEVEL1_WAVES, this.difficulty);
     this.selected = 'sunny';
     this.enemySprites.clear();
     this.duckSprites.clear();
@@ -213,7 +212,7 @@ export class GameScene extends Phaser.Scene {
   // --- Predators ---
 
   private addEnemySprite(enemy: Enemy): void {
-    const pos = enemyPosition(this.state.battle, enemy);
+    const pos = enemyPosition(enemy);
     const body = drawRaccoon(this, pos.x, pos.y);
     const hpBack = this.add.rectangle(0, -34, HP_BAR_WIDTH, 6, COLORS.hpBack, 0.6);
     const hpFill = this.add.rectangle(-HP_BAR_WIDTH / 2, -34, HP_BAR_WIDTH, 6, COLORS.hpFill).setOrigin(0, 0.5);
@@ -229,7 +228,7 @@ export class GameScene extends Phaser.Scene {
     for (const enemy of this.state.battle.enemies) {
       const sprite = this.enemySprites.get(enemy.id);
       if (!sprite) continue;
-      const pos = enemyPosition(this.state.battle, enemy);
+      const pos = enemyPosition(enemy);
       sprite.body.setPosition(pos.x, pos.y);
       sprite.hpFill.width = HP_BAR_WIDTH * Math.max(0, enemy.hp / enemy.maxHp);
       sprite.dizzy.setVisible(enemy.stopTime > 0);

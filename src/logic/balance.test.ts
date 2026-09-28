@@ -6,7 +6,7 @@ import level1 from '../../maps/level1.tmj?raw';
 import type { Difficulty } from '../data/difficulty';
 import { DUCKS, type DuckKind } from '../data/ducks';
 import { LEVEL1_WAVES } from '../data/waves';
-import { buyDuck, canBuy, createGame, isOver, startWave, update, type Game } from './game';
+import { buyDuck, canBuy, createGame, isOver, mapFromLevel, startWave, update, type Game } from './game';
 import { distance, type Point } from './geometry';
 import { parseLevel } from './level';
 import { makePath, pointAt } from './path';
@@ -14,11 +14,17 @@ import { makePath, pointAt } from './path';
 const level = parseLevel(level1);
 const path = makePath(level.path);
 
-/** Slots sorted so the ones that can see the most path come first. */
+// Every route a predator can take: the ground path, plus a hawk's line from each sky point.
+const house = level.path[level.path.length - 1]!;
+const routes = [path, ...level.sky.map((from) => makePath([from, house]))];
+
+/** Slots sorted so the ones that can see the most of every route come first. */
 function bestSlots(range: number): Point[] {
   const coverage = (slot: Point) => {
     let seen = 0;
-    for (let d = 0; d <= path.length; d += 10) if (distance(slot, pointAt(path, d)) <= range) seen++;
+    for (const route of routes) {
+      for (let d = 0; d <= route.length; d += 10) if (distance(slot, pointAt(route, d)) <= range) seen++;
+    }
     return seen;
   };
   return [...level.slots].sort((a, b) => coverage(b) - coverage(a));
@@ -26,7 +32,7 @@ function bestSlots(range: number): Point[] {
 
 /** Before each wave, fill the best empty slots with `kind` until out of peas. */
 function play(difficulty: Difficulty, kind: DuckKind | null): Game {
-  const game = createGame(path, LEVEL1_WAVES, difficulty);
+  const game = createGame(mapFromLevel(level), LEVEL1_WAVES, difficulty);
   const slots = bestSlots(kind ? DUCKS[kind].range : 0);
   while (!isOver(game)) {
     while (kind && slots.length > 0 && canBuy(game, kind)) buyDuck(game, kind, slots.shift()!);

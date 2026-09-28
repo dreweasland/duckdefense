@@ -39,6 +39,8 @@ export interface Level {
   /** Where ducks can be placed. */
   slots: Point[];
   ponds: Ellipse[];
+  /** Where flying predators enter. They dive straight at the duck house. */
+  sky: Point[];
 }
 
 /** Turns the text of a Tiled .tmj file into a Level. See maps/README.md for the layer rules. */
@@ -70,12 +72,15 @@ export function parseLevel(tmjText: string): Level {
       radiusY: o.height / 2,
     }));
 
+  const sky = (findLayer(map, 'sky') ?? []).filter((o) => o.point).map((o) => ({ x: o.x, y: o.y }));
+
   return {
     width: map.width * map.tilewidth,
     height: map.height * map.tileheight,
     path,
     slots,
     ponds,
+    sky,
   };
 }
 

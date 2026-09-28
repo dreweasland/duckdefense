@@ -11,10 +11,11 @@ describe('level 1', () => {
     expect(level).toMatchObject({ width: 1280, height: 720 });
   });
 
-  it('has a path, slots, and a pond', () => {
+  it('has a path, slots, a pond, and places for hawks to fly in', () => {
     expect(level.path.length).toBeGreaterThanOrEqual(2);
     expect(level.slots.length).toBeGreaterThan(0);
     expect(level.ponds.length).toBe(1);
+    expect(level.sky.length).toBeGreaterThan(0);
   });
 
   it('keeps every slot off the path', () => {

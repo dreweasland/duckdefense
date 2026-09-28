@@ -9,6 +9,7 @@ export interface DuckStats {
   damage: number; // how much health each hit takes off
   attackInterval: number; // seconds between hits (smaller = faster)
   splashRadius: number; // predators this close to the target get hit too (0 = no splash)
+  canHitFlying: boolean; // can this duck hit hawks?
 
   // Special abilities. Leave one out and the duck doesn't have it.
   wingFlap?: {
@@ -36,6 +37,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
     damage: 12,
     attackInterval: 0.75,
     splashRadius: 40,
+    canHitFlying: true,
   },
 
   // Potato, the Black Swedish chaser: fast pecks, and his untucked wing
@@ -47,6 +49,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
     damage: 6,
     attackInterval: 0.3,
     splashRadius: 0,
+    canHitFlying: true,
     wingFlap: { everyNthAttack: 5, pushBack: 50 },
   },
 
@@ -59,6 +62,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
     damage: 5,
     attackInterval: 1,
     splashRadius: 0,
+    canHitFlying: false, // but his Alarm Quack still stuns hawks
     alarmQuack: { cooldown: 6, stunTime: 1.5 },
   },
 
@@ -72,6 +76,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
     damage: 4,
     attackInterval: 1,
     splashRadius: 0,
+    canHitFlying: false,
     holdTheLine: { holdTime: 2 },
   },
 };

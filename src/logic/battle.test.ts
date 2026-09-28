@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { DUCKS } from '../data/ducks';
 import { ENEMIES } from '../data/enemies';
-import { createBattle, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
+import { FOUNTAIN, NIGHT } from '../data/dayNight';
+import { PECKING_LOOP } from '../data/synergy';
+import { attackInterval, createBattle, enemyPosition, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
 import { makePath } from './path';
 
 const sunny = DUCKS.sunny;
@@ -153,5 +155,150 @@ describe('duck abilities', () => {
     const later = [...step(battle, holdTheLine!.holdTime), ...step(battle, 0.1)];
     expect(later.some((e) => e.type === 'held')).toBe(false);
     expect(enemy.distance).toBeGreaterThan(100);
+  });
+});
+
+describe('hawks', () => {
+  // The house is at (2000, 0). Hawks enter from above it.
+  function skyBattle() {
+    return createBattle(makePath([{ x: 0, y: 0 }, { x: 2000, y: 0 }]), {
+      sky: [{ x: 2000, y: -500 }, { x: 1500, y: 0 }],
+    });
+  }
+
+  it('fly in a straight line from a sky point to the house', () => {
+    const hawk = spawnEnemy(skyBattle(), 'hawk');
+    expect(enemyPosition(hawk)).toEqual({ x: 2000, y: -500 });
+    expect(hawk.path.length).toBe(500);
+  });
+
+  it('take turns entering from each sky point', () => {
+    const battle = skyBattle();
+    spawnEnemy(battle, 'hawk');
+    expect(enemyPosition(spawnEnemy(battle, 'hawk'))).toEqual({ x: 1500, y: 0 });
+  });
+
+  it('need a sky layer on the map', () => {
+    expect(() => spawnEnemy(newBattle(), 'hawk')).toThrow('"sky"');
+  });
+
+  it('are hit by ducks that can hit flyers', () => {
+    const battle = skyBattle();
+    const hawk = spawnEnemy(battle, 'hawk');
+    placeDuck(battle, 'sunny', { x: 2000, y: -500 });
+    step(battle, 0);
+    expect(hawk.hp).toBe(ENEMIES.hawk.maxHp - sunny.damage);
+  });
+
+  it("can't be pecked or held by Curtis", () => {
+    const battle = skyBattle();
+    const hawk = spawnEnemy(battle, 'hawk');
+    placeDuck(battle, 'curtis', { x: 2000, y: -500 });
+    const events = step(battle, 0);
+    expect(hawk.hp).toBe(ENEMIES.hawk.maxHp);
+    expect(events).toEqual([]);
+  });
+
+  it("are still stunned by Chester's Alarm Quack", () => {
+    const battle = skyBattle();
+    const hawk = spawnEnemy(battle, 'hawk');
+    placeDuck(battle, 'chester', { x: 2000, y: -500 });
+    const events = step(battle, 0);
+    expect(hawk.hp).toBe(ENEMIES.hawk.maxHp); // no peck
+    expect(events).toContainEqual(expect.objectContaining({ type: 'alarmQuack', stunnedIds: [hawk.id] }));
+  });
+
+  it('fly over the fountain spray', () => {
+    const battle = createBattle(makePath([{ x: 0, y: 0 }, { x: 2000, y: 0 }]), {
+      sky: [{ x: 2000, y: -500 }],
+      fountainAt: { x: 2000, y: -500 },
+    });
+    battle.fountain!.on = true;
+    const hawk = spawnEnemy(battle, 'hawk');
+    step(battle, 1);
+    expect(hawk.slowed).toBe(false);
+    expect(hawk.distance).toBe(ENEMIES.hawk.speed);
+  });
+});
+
+describe('fountain', () => {
+  function fountainBattle(on: boolean) {
+    const battle = createBattle(makePath([{ x: 0, y: 0 }, { x: 2000, y: 0 }]), { fountainAt: { x: 100, y: 0 } });
+    battle.fountain!.on = on;
+    const enemy = spawnEnemy(battle, 'raccoon');
+    enemy.distance = 100;
+    return { battle, enemy };
+  }
+
+  it('slows ground predators in its spray while it has power', () => {
+    const { battle, enemy } = fountainBattle(true);
+    step(battle, 1);
+    expect(enemy.distance).toBe(100 + raccoon.speed * FOUNTAIN.slow);
+  });
+
+  it('does nothing without power', () => {
+    const { battle, enemy } = fountainBattle(false);
+    step(battle, 1);
+    expect(enemy.distance).toBe(100 + raccoon.speed);
+  });
+});
+
+describe('night', () => {
+  it('makes predators faster', () => {
+    const battle = newBattle();
+    battle.night = true;
+    expect(spawnEnemy(battle, 'raccoon').speed).toBe(raccoon.speed * NIGHT.enemySpeed);
+  });
+});
+
+describe('Pecking Loop', () => {
+  const near = PECKING_LOOP.nearDistance - 10;
+  const far = PECKING_LOOP.nearDistance + 10;
+  const faster = (kind: 'sunny' | 'potato') => DUCKS[kind].attackInterval / (1 + PECKING_LOOP.attackSpeedBonus);
+
+  it('makes Sunny faster next to Chester', () => {
+    const battle = newBattle();
+    const s = placeDuck(battle, 'sunny', { x: 0, y: 0 });
+    placeDuck(battle, 'chester', { x: near, y: 0 });
+    expect(attackInterval(battle, s)).toBeCloseTo(faster('sunny'));
+  });
+
+  it('makes Potato faster next to Sunny', () => {
+    const battle = newBattle();
+    const p = placeDuck(battle, 'potato', { x: 0, y: 0 });
+    placeDuck(battle, 'sunny', { x: near, y: 0 });
+    expect(attackInterval(battle, p)).toBeCloseTo(faster('potato'));
+  });
+
+  it('only counts ducks that are near', () => {
+    const battle = newBattle();
+    const s = placeDuck(battle, 'sunny', { x: 0, y: 0 });
+    placeDuck(battle, 'chester', { x: far, y: 0 });
+    expect(attackInterval(battle, s)).toBe(sunny.attackInterval);
+  });
+
+  it("doesn't go backwards: Chester and Sunny's chasers get nothing from being chased", () => {
+    const battle = newBattle();
+    const c = placeDuck(battle, 'chester', { x: 0, y: 0 });
+    const s = placeDuck(battle, 'sunny', { x: near, y: 0 });
+    expect(attackInterval(battle, c)).toBe(DUCKS.chester.attackInterval);
+    placeDuck(battle, 'potato', { x: 0, y: near });
+    expect(attackInterval(battle, s)).toBeCloseTo(faster('sunny')); // from Chester, not Potato
+  });
+
+  it('Curtis ignores everyone', () => {
+    const battle = newBattle();
+    const c = placeDuck(battle, 'curtis', { x: 0, y: 0 });
+    for (const kind of ['sunny', 'potato', 'chester'] as const) placeDuck(battle, kind, { x: near, y: 0 });
+    expect(attackInterval(battle, c)).toBe(DUCKS.curtis.attackInterval);
+  });
+
+  it('is used for the real cooldown after an attack', () => {
+    const battle = newBattle();
+    spawnEnemy(battle, 'raccoon');
+    const s = placeDuck(battle, 'sunny', { x: 0, y: 0 });
+    placeDuck(battle, 'chester', { x: 0, y: near });
+    step(battle, 0);
+    expect(s.cooldown).toBeCloseTo(faster('sunny'));
   });
 });
