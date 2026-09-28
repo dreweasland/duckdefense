@@ -28,5 +28,16 @@ export class TitleScene extends Phaser.Scene {
         color: '#ffffff',
       })
       .setOrigin(0.5);
+
+    const tapToPlay = this.add
+      .text(width / 2, height - 90, 'Tap to play', {
+        fontFamily: 'Arial Black, Arial, sans-serif',
+        fontSize: '40px',
+        color: '#ffffff',
+      })
+      .setOrigin(0.5);
+    this.tweens.add({ targets: tapToPlay, alpha: 0.4, duration: 700, yoyo: true, repeat: -1 });
+
+    this.input.once('pointerdown', () => this.scene.start('GameScene'));
   }
 }
