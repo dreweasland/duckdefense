@@ -1,7 +1,7 @@
 # Duck Defense
 
 A tower-defense game starring a real backyard flock, built by Drew and his two sons.
-Live at **duckdefense.com**.
+Live at **www.duckdefense.com** (duckdefense.com redirects there).
 
 ## The pitch
 
@@ -16,9 +16,10 @@ game mechanics come from how they actually behave.
 - **Maps:** Tiled (`.tmj` JSON). The kids can design levels visually, no code needed.
 - **Tests:** Vitest, for game logic only (damage, waves, synergy). Keep rendering out of tests.
 - **Hosting:** Cloudflare Workers with static assets, configured in `wrangler.jsonc`, with
-  duckdefense.com as a custom domain. Cloudflare Workers Builds (connected to the GitHub
-  repo) builds and deploys on push to `main`. A GitHub Actions CI workflow runs tests and
-  the build on pushes and PRs, but does not deploy.
+  www.duckdefense.com as the main custom domain. A Cloudflare redirect rule sends the bare
+  domain to www. Cloudflare Workers Builds (connected to the GitHub repo) builds and
+  deploys on push to `main`. A GitHub Actions CI workflow runs tests and the build on
+  pushes and PRs, but does not deploy.
 - **Backend (later):** When a leaderboard or cloud saves are needed, add a small Worker
   API in the same project, backed by D1 or KV. No separate infrastructure.
 - **Art:** Placeholder shapes and CC0 assets first. Swap in the kids' drawings later.
@@ -96,7 +97,7 @@ When adding a feature, prefer a design where the tunable part lives in a data fi
 ## Milestones
 
 - **M0: Scaffold and ship.** Vite + Phaser + TS project, a blank scene, and a Cloudflare
-  Worker serving it at duckdefense.com. Get it live on day one.
+  Worker serving it at www.duckdefense.com. Get it live on day one.
 - **M1: One duck, one raccoon.** A map loaded from Tiled, one path, one enemy walking it,
   click to place Sunny, Sunny attacks, the enemy dies or reaches the house.
 - **M2: Full flock and waves.** All four ducks, a wave system, peas, lives, win/lose

@@ -10,8 +10,10 @@
     "not_found_handling": "single-page-application"
   },
 
-  // Attach the Worker directly to the apex domain (zone must be on this Cloudflare account).
+  // Custom domains (zone must be on this Cloudflare account).
+  // www is the main address; a Cloudflare redirect rule sends the bare domain to www.
   "routes": [
+    { "pattern": "www.duckdefense.com", "custom_domain": true },
     { "pattern": "duckdefense.com", "custom_domain": true }
   ]
 }
