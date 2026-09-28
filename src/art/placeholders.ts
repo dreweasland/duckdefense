@@ -87,3 +87,52 @@ export function drawBigButton(
   back.setInteractive({ useHandCursor: true }).once('pointerdown', onTap);
   return scene.add.container(x, y, [back, text]);
 }
+
+/** A hawk seen from above, facing right (+x). Rotate it to face where it's flying. */
+export function drawHawk(scene: Phaser.Scene, x: number, y: number): Phaser.GameObjects.Container {
+  const add = scene.add;
+  const brown = 0x7a5230;
+  return add.container(x, y, [
+    // Triangle points are measured from each triangle's top-left corner.
+    add.triangle(-2, -12, 0, 24, 24, 24, 4, 0, brown), // wing, swept back
+    add.triangle(-2, 12, 0, 0, 24, 0, 4, 24, brown), // other wing
+    add.ellipse(0, 0, 34, 14, 0x9b6b3d),
+    add.triangle(-20, 0, 0, 0, 10, 6, 0, 12, 0x5a3a1e),
+    add.circle(14, 0, 7, 0xe8dcc8),
+    add.triangle(21, 0, 0, 0, 6, 3, 0, 6, 0xf2c029),
+  ]);
+}
+
+/** Craig, the family's first duck: a female mallard, glowing as a spirit guide. */
+export function drawCraig(scene: Phaser.Scene, x: number, y: number): Phaser.GameObjects.Container {
+  const add = scene.add;
+  const brown = 0xa0784f;
+  return add.container(x, y, [
+    add.circle(0, 0, 44, 0xfff3b0, 0.35),
+    add.ellipse(0, 6, 54, 38, brown),
+    add.ellipse(-8, 2, 30, 20, 0x7a5634),
+    add.rectangle(-6, 12, 22, 7, 0x3355cc).setStrokeStyle(2, 0xffffff),
+    add.circle(12, -14, 14, brown),
+    add.rectangle(14, -16, 20, 3, 0x4a3320),
+    add.ellipse(28, -12, 18, 8, 0xd9822b),
+    add.circle(15, -18, 3, 0x000000),
+  ]);
+}
+
+/** The solar-powered pond fountain: a stone basin with a spray that shows while it has power. */
+export function drawFountain(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+): { container: Phaser.GameObjects.Container; spray: Phaser.GameObjects.Container } {
+  const add = scene.add;
+  const spray = add.container(0, 0, [
+    add.circle(0, -26, 6, 0xcfefff),
+    add.circle(-10, -16, 4, 0xcfefff),
+    add.circle(10, -16, 4, 0xcfefff),
+    add.rectangle(0, -12, 4, 22, 0xcfefff),
+  ]);
+  scene.tweens.add({ targets: spray, scaleY: 1.25, duration: 300, yoyo: true, repeat: -1 });
+  const container = add.container(x, y, [add.ellipse(0, 0, 44, 22, 0x9aa5ad).setStrokeStyle(3, 0x6c7780), spray]);
+  return { container, spray };
+}
