@@ -68,7 +68,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
   curtis: {
     name: 'Curtis',
     cost: 80,
-    range: 90,
+    range: 130, // most slots are 110 from the path, so this gives him a stretch to guard
     damage: 4,
     attackInterval: 1,
     splashRadius: 0,

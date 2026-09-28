@@ -1,16 +1,12 @@
 import Phaser from 'phaser';
 import level1 from '../../maps/level1.tmj?raw';
-import { DUCKS } from '../data/ducks';
+import { drawDuck, drawPea, drawRaccoon } from '../art/placeholders';
+import type { Difficulty } from '../data/difficulty';
+import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { ENEMIES } from '../data/enemies';
-import {
-  createBattle,
-  enemyPosition,
-  placeDuck,
-  spawnEnemy,
-  step,
-  type Battle,
-  type BattleEvent,
-} from '../logic/battle';
+import { LEVEL1_WAVES } from '../data/waves';
+import { enemyPosition, type Enemy } from '../logic/battle';
+import { buyDuck, canBuy, createGame, startWave, update, type Game, type GameEvent } from '../logic/game';
 import type { Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
 import { makePath } from '../logic/path';
@@ -20,71 +16,88 @@ const COLORS = {
   path: 0xc2a36b,
   pond: 0x4aa3df,
   slot: 0xffffff,
-  sunny: 0x5b7fa6,
-  bib: 0xffffff,
-  bill: 0x2f3b45,
-  raccoon: 0x7d7d7d,
-  mask: 0x222222,
   splash: 0x9fd8ff,
+  quack: 0xffe066,
   house: 0x8b5a2b,
   roof: 0xc0392b,
   hpBack: 0x000000,
   hpFill: 0x6ee06e,
   go: 0x2ecc71,
+  selected: 0xffe066,
 };
 
+const TEXT_FONT = 'Arial Black, Arial, sans-serif';
 const PATH_WIDTH = 48;
 const SLOT_RADIUS = 34; // big tap targets for small fingers
+const PICKER_RADIUS = 40;
 const HP_BAR_WIDTH = 44;
 const MAX_STEP = 0.1; // seconds; stops predators teleporting after a stalled frame
+
+// Said by the raccoon when it gets into the duck house. Losing a heart should be funny.
+const RACCOON_QUIPS = ['Nom nom!', 'Yoink!', 'Snack time!', 'Crunch!', 'Mine now!'];
+
+export interface GameSceneData {
+  difficulty: Difficulty;
+}
 
 interface EnemySprite {
   body: Phaser.GameObjects.Container;
   hpFill: Phaser.GameObjects.Rectangle;
+  dizzy: Phaser.GameObjects.Text;
 }
 
-type Phase = 'placing' | 'running' | 'done';
+interface PickerButton {
+  kind: DuckKind;
+  container: Phaser.GameObjects.Container;
+  ring: Phaser.GameObjects.Arc;
+}
 
 export class GameScene extends Phaser.Scene {
+  private difficulty: Difficulty = 'easy';
   private level!: Level;
-  private battle!: Battle;
-  private phase: Phase = 'placing';
+  private state!: Game;
+  private selected: DuckKind = 'sunny';
   private enemySprites = new Map<number, EnemySprite>();
   private duckSprites = new Map<number, Phaser.GameObjects.Container>();
+  private pickerButtons: PickerButton[] = [];
   private house!: Phaser.GameObjects.Container;
-  private raccoonReachedHouse = false;
+  private goButton!: Phaser.GameObjects.Container;
+  private peasText!: Phaser.GameObjects.Text;
+  private heartsText!: Phaser.GameObjects.Text;
+  private waveText!: Phaser.GameObjects.Text;
 
   constructor() {
     super('GameScene');
   }
 
+  init(data: Partial<GameSceneData>): void {
+    this.difficulty = data.difficulty ?? 'easy';
+  }
+
   create(): void {
-    // scene.restart() reuses this object, so reset everything here.
+    // Scene restarts reuse this object, so reset everything here.
     this.level = parseLevel(level1);
-    this.battle = createBattle(makePath(this.level.path));
-    this.phase = 'placing';
+    this.state = createGame(makePath(this.level.path), LEVEL1_WAVES, this.difficulty);
+    this.selected = 'sunny';
     this.enemySprites.clear();
     this.duckSprites.clear();
-    this.raccoonReachedHouse = false;
+    this.pickerButtons = [];
 
     this.drawPonds();
     this.drawPath();
     this.house = this.drawHouse(this.level.path[this.level.path.length - 1]!);
     this.level.slots.forEach((slot) => this.drawSlot(slot));
-    this.drawGoButton();
+    this.drawPicker();
+    this.drawHud();
+    this.goButton = this.drawGoButton();
+    this.refreshHud();
   }
 
   update(_time: number, deltaMs: number): void {
-    if (this.phase !== 'running') return;
-
-    const events = step(this.battle, Math.min(deltaMs / 1000, MAX_STEP));
+    const events = update(this.state, Math.min(deltaMs / 1000, MAX_STEP));
     events.forEach((event) => this.handleEvent(event));
     this.syncEnemySprites();
-
-    if (this.battle.enemies.length === 0) {
-      this.phase = 'done';
-      this.time.delayedCall(700, () => this.showResult());
-    }
+    if (events.length > 0) this.refreshHud();
   }
 
   // --- Map ---
@@ -105,13 +118,61 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawHouse(at: Point): Phaser.GameObjects.Container {
+    // Triangle points are measured from the triangle's top-left corner.
     const walls = this.add.rectangle(0, 0, 90, 70, COLORS.house);
     const roof = this.add.triangle(0, -55, 0, 40, 55, 0, 110, 40, COLORS.roof);
     const door = this.add.ellipse(0, 15, 30, 40, 0x3b2413);
     return this.add.container(at.x, at.y, [walls, roof, door]);
   }
 
-  // --- Ducks ---
+  // --- HUD: peas, hearts, wave ---
+
+  private drawHud(): void {
+    const style = { fontFamily: TEXT_FONT, fontSize: '32px', color: '#ffffff', stroke: '#1d3b2a', strokeThickness: 6 };
+    drawPea(this, 600, 44, 14);
+    this.peasText = this.add.text(622, 44, '', style).setOrigin(0, 0.5);
+    this.add.text(760, 44, '♥', { ...style, color: '#ff5c7a' }).setOrigin(0.5);
+    this.heartsText = this.add.text(782, 44, '', style).setOrigin(0, 0.5);
+    this.waveText = this.add.text(900, 44, '', style).setOrigin(0, 0.5);
+  }
+
+  private refreshHud(): void {
+    const game = this.state;
+    this.peasText.setText(String(game.peas));
+    this.heartsText.setText(String(game.hearts));
+    const wave = Math.min(game.waveIndex + 1, game.waves.length);
+    this.waveText.setText(`Wave ${wave}/${game.waves.length}`);
+    for (const button of this.pickerButtons) {
+      button.container.setAlpha(canBuy(game, button.kind) ? 1 : 0.4);
+      button.ring.setVisible(button.kind === this.selected);
+    }
+    this.goButton.setVisible(game.phase === 'building');
+  }
+
+  // --- Duck picker ---
+
+  private drawPicker(): void {
+    DUCK_ORDER.forEach((kind, i) => {
+      const x = 55 + i * 95;
+      const y = 50;
+      const ring = this.add.circle(0, 0, PICKER_RADIUS + 5).setStrokeStyle(6, COLORS.selected);
+      const back = this.add.circle(0, 0, PICKER_RADIUS, 0x000000, 0.25);
+      const duck = drawDuck(this, kind, 0, 4).setScale(kind === 'curtis' ? 0.9 : 0.8);
+      const pea = drawPea(this, -16, 48, 8);
+      const cost = this.add
+        .text(-4, 48, String(DUCKS[kind].cost), { fontFamily: TEXT_FONT, fontSize: '20px', color: '#ffffff' })
+        .setOrigin(0, 0.5);
+      const container = this.add.container(x, y, [ring, back, duck, pea, cost]);
+
+      back.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        this.selected = kind;
+        this.refreshHud();
+      });
+      this.pickerButtons.push({ kind, container, ring });
+    });
+  }
+
+  // --- Placing ducks ---
 
   private drawSlot(slot: Point): void {
     const circle = this.add
@@ -123,98 +184,56 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setAlpha(0.8);
 
-    circle.once('pointerdown', () => {
+    circle.on('pointerdown', () => {
+      const duck = buyDuck(this.state, this.selected, slot);
+      if (!duck) {
+        // Not enough peas: wiggle the pea counter.
+        this.tweens.add({ targets: this.peasText, x: '+=6', duration: 50, yoyo: true, repeat: 3 });
+        return;
+      }
       circle.destroy();
       plus.destroy();
-      this.placeSunny(slot);
+      this.drawPlacedDuck(duck.id, duck.kind, slot);
+      this.refreshHud();
     });
   }
 
-  private placeSunny(at: Point): void {
-    const duck = placeDuck(this.battle, 'sunny', at);
-    const stats = DUCKS.sunny;
-
-    // Faint ring so kids can see how far Sunny reaches.
-    this.add.circle(at.x, at.y, stats.range).setStrokeStyle(2, 0xffffff, 0.25);
-
-    const body = this.add.ellipse(0, 4, 50, 40, COLORS.sunny);
-    const bib = this.add.ellipse(6, 10, 18, 16, COLORS.bib);
-    const head = this.add.circle(10, -16, 14, COLORS.sunny);
-    const bill = this.add.ellipse(26, -14, 18, 8, COLORS.bill);
-    const eye = this.add.circle(14, -19, 3, 0x000000);
-    const sprite = this.add.container(at.x, at.y, [body, bib, head, bill, eye]);
-    this.duckSprites.set(duck.id, sprite);
+  private drawPlacedDuck(id: number, kind: DuckKind, at: Point): void {
+    // Faint ring so kids can see how far the duck reaches.
+    this.add.circle(at.x, at.y, DUCKS[kind].range).setStrokeStyle(2, 0xffffff, 0.25);
+    const sprite = drawDuck(this, kind, at.x, at.y);
+    this.duckSprites.set(id, sprite);
 
     // Plop in.
+    const scale = sprite.scale;
     sprite.setScale(0);
-    this.tweens.add({ targets: sprite, scale: 1, duration: 250, ease: 'Back.Out' });
+    this.tweens.add({ targets: sprite, scale, duration: 250, ease: 'Back.Out' });
   }
 
   // --- Predators ---
 
-  private spawnRaccoon(): void {
-    const enemy = spawnEnemy(this.battle, 'raccoon');
-
-    const body = this.add.circle(0, 0, 22, COLORS.raccoon);
-    const mask = this.add.rectangle(0, -4, 40, 10, COLORS.mask);
-    const eyeL = this.add.circle(-8, -4, 3, 0xffffff);
-    const eyeR = this.add.circle(8, -4, 3, 0xffffff);
+  private addEnemySprite(enemy: Enemy): void {
+    const pos = enemyPosition(this.state.battle, enemy);
+    const body = drawRaccoon(this, pos.x, pos.y);
     const hpBack = this.add.rectangle(0, -34, HP_BAR_WIDTH, 6, COLORS.hpBack, 0.6);
     const hpFill = this.add.rectangle(-HP_BAR_WIDTH / 2, -34, HP_BAR_WIDTH, 6, COLORS.hpFill).setOrigin(0, 0.5);
-    const pos = enemyPosition(this.battle, enemy);
-    const container = this.add.container(pos.x, pos.y, [body, mask, eyeL, eyeR, hpBack, hpFill]);
-
-    this.enemySprites.set(enemy.id, { body: container, hpFill });
+    const dizzy = this.add
+      .text(0, -52, '✦ ✦', { fontFamily: 'Arial', fontSize: '18px', color: '#ffe066' })
+      .setOrigin(0.5)
+      .setVisible(false);
+    body.add([hpBack, hpFill, dizzy]);
+    this.enemySprites.set(enemy.id, { body, hpFill, dizzy });
   }
 
   private syncEnemySprites(): void {
-    for (const enemy of this.battle.enemies) {
+    for (const enemy of this.state.battle.enemies) {
       const sprite = this.enemySprites.get(enemy.id);
       if (!sprite) continue;
-      const pos = enemyPosition(this.battle, enemy);
+      const pos = enemyPosition(this.state.battle, enemy);
       sprite.body.setPosition(pos.x, pos.y);
-      sprite.hpFill.width = HP_BAR_WIDTH * Math.max(0, enemy.hp / ENEMIES[enemy.kind].maxHp);
+      sprite.hpFill.width = HP_BAR_WIDTH * Math.max(0, enemy.hp / enemy.maxHp);
+      sprite.dizzy.setVisible(enemy.stopTime > 0);
     }
-  }
-
-  // --- Battle events ---
-
-  private handleEvent(event: BattleEvent): void {
-    switch (event.type) {
-      case 'attack':
-        this.showSplash(event.duckId, event.target);
-        break;
-      case 'defeated':
-        this.removeEnemySprite(event.enemy.id, true);
-        break;
-      case 'reachedHouse':
-        this.raccoonReachedHouse = true;
-        this.removeEnemySprite(event.enemy.id, false);
-        this.tweens.add({
-          targets: this.house,
-          angle: { from: -6, to: 6 },
-          duration: 80,
-          yoyo: true,
-          repeat: 3,
-          onComplete: () => this.house.setAngle(0),
-        });
-        break;
-    }
-  }
-
-  private showSplash(duckId: number, at: Point): void {
-    const duck = this.duckSprites.get(duckId);
-    if (duck) {
-      this.tweens.add({ targets: duck, scale: 1.15, duration: 80, yoyo: true });
-    }
-    const splash = this.add.circle(at.x, at.y, 8).setStrokeStyle(4, COLORS.splash);
-    this.tweens.add({
-      targets: splash,
-      radius: DUCKS.sunny.splashRadius,
-      alpha: 0,
-      duration: 250,
-      onComplete: () => splash.destroy(),
-    });
   }
 
   private removeEnemySprite(id: number, ranAway: boolean): void {
@@ -231,45 +250,137 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  // --- Buttons and results ---
+  // --- Game events ---
 
-  private drawGoButton(): void {
+  private handleEvent(event: GameEvent): void {
+    switch (event.type) {
+      case 'spawned':
+        this.addEnemySprite(event.enemy);
+        break;
+      case 'attack':
+        this.showAttack(event.duckId, event.target, event.wingFlap);
+        break;
+      case 'alarmQuack':
+        this.showAlarmQuack(event.duckId);
+        break;
+      case 'held':
+        this.showHeld(event.duckId);
+        break;
+      case 'defeated':
+        this.removeEnemySprite(event.enemy.id, true);
+        this.floatText(event.position, `+${ENEMIES[event.enemy.kind].peas}`, '#b6f28a');
+        break;
+      case 'reachedHouse':
+        this.removeEnemySprite(event.enemy.id, false);
+        this.showHouseRaid();
+        break;
+      case 'waveCleared':
+        this.showBanner(`Wave ${event.waveIndex + 1} done!${event.bonus > 0 ? `  +${event.bonus}` : ''}`);
+        break;
+      case 'won':
+      case 'lost':
+        this.time.delayedCall(900, () =>
+          this.scene.start('ResultScene', { won: event.type === 'won', difficulty: this.difficulty }),
+        );
+        break;
+    }
+  }
+
+  private bounce(duckId: number): void {
+    const duck = this.duckSprites.get(duckId);
+    if (!duck || this.tweens.isTweening(duck)) return;
+    this.tweens.add({ targets: duck, scale: duck.scale * 1.15, duration: 80, yoyo: true });
+  }
+
+  private showAttack(duckId: number, at: Point, wingFlap: boolean): void {
+    this.bounce(duckId);
+    const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+    const splashRadius = duck ? DUCKS[duck.kind].splashRadius : 0;
+    const ring = this.add.circle(at.x, at.y, 8).setStrokeStyle(4, COLORS.splash);
+    this.tweens.add({
+      targets: ring,
+      radius: Math.max(splashRadius, 20),
+      alpha: 0,
+      duration: 250,
+      onComplete: () => ring.destroy(),
+    });
+    if (wingFlap) this.floatText(at, 'FLAP!', '#ffffff');
+  }
+
+  private showAlarmQuack(duckId: number): void {
+    const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+    if (!duck) return;
+    this.bounce(duckId);
+    const { x, y } = duck.position;
+    const ring = this.add.circle(x, y, 20).setStrokeStyle(6, COLORS.quack);
+    this.tweens.add({
+      targets: ring,
+      radius: DUCKS[duck.kind].range,
+      alpha: 0,
+      duration: 500,
+      onComplete: () => ring.destroy(),
+    });
+    this.floatText({ x, y: y - 30 }, 'QUACK!', '#ffe066');
+  }
+
+  private showHeld(duckId: number): void {
+    const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+    if (duck) this.floatText({ x: duck.position.x, y: duck.position.y - 30 }, 'Nope.', '#ffffff');
+  }
+
+  private showHouseRaid(): void {
+    this.tweens.add({
+      targets: this.house,
+      angle: { from: -6, to: 6 },
+      duration: 80,
+      yoyo: true,
+      repeat: 3,
+      onComplete: () => this.house.setAngle(0),
+    });
+    const quip = RACCOON_QUIPS[Math.floor(Math.random() * RACCOON_QUIPS.length)]!;
+    this.floatText({ x: this.house.x, y: this.house.y - 90 }, quip, '#ffffff');
+    this.tweens.add({ targets: this.heartsText, scale: 1.4, duration: 120, yoyo: true });
+  }
+
+  private floatText(at: Point, message: string, color: string): void {
+    const text = this.add
+      .text(at.x, at.y, message, { fontFamily: TEXT_FONT, fontSize: '24px', color, stroke: '#1d3b2a', strokeThickness: 5 })
+      .setOrigin(0.5);
+    this.tweens.add({ targets: text, y: at.y - 40, alpha: 0, duration: 900, onComplete: () => text.destroy() });
+  }
+
+  private showBanner(message: string): void {
+    const { width, height } = this.scale;
+    const text = this.add
+      .text(width / 2, height / 2, message, {
+        fontFamily: TEXT_FONT,
+        fontSize: '56px',
+        color: '#ffe066',
+        stroke: '#3b2a00',
+        strokeThickness: 10,
+      })
+      .setOrigin(0.5)
+      .setScale(0);
+    this.tweens.chain({
+      targets: text,
+      tweens: [
+        { scale: 1, duration: 300, ease: 'Back.Out' },
+        { alpha: 0, delay: 1200, duration: 400 },
+      ],
+      onComplete: () => text.destroy(),
+    });
+  }
+
+  // --- Start-wave button ---
+
+  private drawGoButton(): Phaser.GameObjects.Container {
     const circle = this.add.circle(0, 0, 44, COLORS.go).setStrokeStyle(4, 0xffffff);
     const arrow = this.add.triangle(4, 0, 0, 0, 0, 36, 30, 18, 0xffffff);
     const button = this.add.container(1200, 70, [circle, arrow]);
-    circle.setInteractive({ useHandCursor: true }).once('pointerdown', () => {
-      button.destroy();
-      this.phase = 'running';
-      this.spawnRaccoon();
+    circle.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+      if (startWave(this.state)) this.refreshHud();
     });
     this.tweens.add({ targets: button, scale: 1.08, duration: 600, yoyo: true, repeat: -1 });
-  }
-
-  private showResult(): void {
-    const { width, height } = this.scale;
-    const message = this.raccoonReachedHouse
-      ? 'Uh oh! The raccoon raided the snack bin!'
-      : 'Hooray! The raccoon ran away!';
-
-    // Interactive so taps can't reach the duck slots underneath.
-    this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.35).setInteractive();
-    this.add
-      .text(width / 2, height / 2 - 60, message, {
-        fontFamily: 'Arial Black, Arial, sans-serif',
-        fontSize: '48px',
-        color: '#ffe066',
-        stroke: '#3b2a00',
-        strokeThickness: 8,
-        align: 'center',
-        wordWrap: { width: width - 160 },
-      })
-      .setOrigin(0.5);
-
-    // Big "play again" button.
-    const circle = this.add.circle(width / 2, height / 2 + 80, 56, COLORS.go).setStrokeStyle(4, 0xffffff);
-    this.add
-      .text(width / 2, height / 2 + 78, '↻', { fontFamily: 'Arial', fontSize: '72px', color: '#ffffff' })
-      .setOrigin(0.5);
-    circle.setInteractive({ useHandCursor: true }).once('pointerdown', () => this.scene.restart());
+    return button;
   }
 }
