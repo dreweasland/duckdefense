@@ -16,8 +16,9 @@ game mechanics come from how they actually behave.
 - **Maps:** Tiled (`.tmj` JSON). The kids can design levels visually, no code needed.
 - **Tests:** Vitest, for game logic only (damage, waves, synergy). Keep rendering out of tests.
 - **Hosting:** Cloudflare Workers with static assets, configured in `wrangler.jsonc`, with
-  duckdefense.com as a custom domain. Deploy with a GitHub Actions workflow running
-  `wrangler deploy` on push to `main`.
+  duckdefense.com as a custom domain. Cloudflare Workers Builds (connected to the GitHub
+  repo) builds and deploys on push to `main`. A GitHub Actions CI workflow runs tests and
+  the build on pushes and PRs, but does not deploy.
 - **Backend (later):** When a leaderboard or cloud saves are needed, add a small Worker
   API in the same project, backed by D1 or KV. No separate infrastructure.
 - **Art:** Placeholder shapes and CC0 assets first. Swap in the kids' drawings later.
@@ -112,7 +113,7 @@ When adding a feature, prefer a design where the tunable part lives in a data fi
 - `npm run dev`: local dev server with hot reload
 - `npm test`: run the Vitest logic tests (`src/logic/**/*.test.ts`)
 - `npm run build`: typecheck and build to `dist/`
-- `npm run deploy`: build and `wrangler deploy` by hand (CI does this on push to `main`)
+- `npm run deploy`: build and `wrangler deploy` by hand (Workers Builds does this on push to `main`)
 
 ## Conventions
 
