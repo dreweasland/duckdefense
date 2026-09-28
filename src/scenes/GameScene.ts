@@ -190,7 +190,14 @@ export class GameScene extends Phaser.Scene {
       case 'reachedHouse':
         this.raccoonReachedHouse = true;
         this.removeEnemySprite(event.enemy.id, false);
-        this.tweens.add({ targets: this.house, angle: { from: -6, to: 6 }, duration: 80, yoyo: true, repeat: 3 });
+        this.tweens.add({
+          targets: this.house,
+          angle: { from: -6, to: 6 },
+          duration: 80,
+          yoyo: true,
+          repeat: 3,
+          onComplete: () => this.house.setAngle(0),
+        });
         break;
     }
   }
@@ -244,7 +251,8 @@ export class GameScene extends Phaser.Scene {
       ? 'Uh oh! The raccoon raided the snack bin!'
       : 'Hooray! The raccoon ran away!';
 
-    this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.35);
+    // Interactive so taps can't reach the duck slots underneath.
+    this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.35).setInteractive();
     this.add
       .text(width / 2, height / 2 - 60, message, {
         fontFamily: 'Arial Black, Arial, sans-serif',
