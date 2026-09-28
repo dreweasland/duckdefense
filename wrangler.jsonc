@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "duckdefense",
+  "compatibility_date": "2026-09-28",
+
+  // Static-assets-only Worker: serves the Vite build, no server code needed.
+  "assets": {
+    "directory": "./dist",
+    // Single-page game: unknown paths fall back to index.html.
+    "not_found_handling": "single-page-application"
+  },
+
+  // Attach the Worker directly to the apex domain (zone must be on this Cloudflare account).
+  "routes": [
+    { "pattern": "duckdefense.com", "custom_domain": true }
+  ]
+}
