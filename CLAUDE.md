@@ -15,7 +15,11 @@ game mechanics come from how they actually behave.
 - **Build:** Vite (fast hot reload, so kids see changes instantly)
 - **Maps:** Tiled (`.tmj` JSON). The kids can design levels visually, no code needed.
 - **Tests:** Vitest, for game logic only (damage, waves, synergy). Keep rendering out of tests.
-- **Hosting:** S3 + CloudFront via a small CDK stack in `/infra`, with a GitHub Actions deploy on push to `main`.
+- **Hosting:** Cloudflare Workers with static assets, configured in `wrangler.jsonc`, with
+  duckdefense.com as a custom domain. Deploy with a GitHub Actions workflow running
+  `wrangler deploy` on push to `main`.
+- **Backend (later):** When a leaderboard or cloud saves are needed, add a small Worker
+  API in the same project, backed by D1 or KV. No separate infrastructure.
 - **Art:** Placeholder shapes and CC0 assets first. Swap in the kids' drawings later.
 
 Keep game logic, meaning stats, wave definitions, and synergy rules, in plain TypeScript
@@ -90,8 +94,8 @@ When adding a feature, prefer a design where the tunable part lives in a data fi
 
 ## Milestones
 
-- **M0: Scaffold and ship.** Vite + Phaser + TS project, a blank scene, and the CDK stack
-  deploying to duckdefense.com. Get it live on day one.
+- **M0: Scaffold and ship.** Vite + Phaser + TS project, a blank scene, and a Cloudflare
+  Worker serving it at duckdefense.com. Get it live on day one.
 - **M1: One duck, one raccoon.** A map loaded from Tiled, one path, one enemy walking it,
   click to place Sunny, Sunny attacks, the enemy dies or reaches the house.
 - **M2: Full flock and waves.** All four ducks, a wave system, peas, lives, win/lose
@@ -101,7 +105,14 @@ When adding a feature, prefer a design where the tunable part lives in a data fi
 - **M4: Make it ours.** The kids' art and sound pipeline, three or more kid-designed
   levels, the boss fight.
 - **M5: Polish.** Title screen, level select, save progress in localStorage, mobile touch
-  support, and maybe a leaderboard.
+  support, and a family leaderboard on Workers + D1.
+
+## Commands
+
+- `npm run dev`: local dev server with hot reload
+- `npm test`: run the Vitest logic tests (`src/logic/**/*.test.ts`)
+- `npm run build`: typecheck and build to `dist/`
+- `npm run deploy`: build and `wrangler deploy` by hand (CI does this on push to `main`)
 
 ## Conventions
 
