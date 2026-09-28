@@ -91,3 +91,67 @@ describe('battle', () => {
     expect(battle.enemies).toHaveLength(0);
   });
 });
+
+describe('duck abilities', () => {
+  it("Potato's Wing Flap knocks the target back on every Nth hit", () => {
+    const { wingFlap, attackInterval } = DUCKS.potato;
+    const battle = newBattle();
+    const enemy = spawnEnemy(battle, 'raccoon');
+    enemy.distance = 500;
+    enemy.speed = 0; // hold still so only the knockback moves it
+    placeDuck(battle, 'potato', { x: 500, y: 0 });
+    const flaps: boolean[] = [];
+    for (let i = 0; i < wingFlap!.everyNthAttack; i++) {
+      for (const e of step(battle, attackInterval)) if (e.type === 'attack') flaps.push(e.wingFlap);
+    }
+    expect(flaps.at(-1)).toBe(true);
+    expect(flaps.slice(0, -1).every((f) => !f)).toBe(true);
+    expect(enemy.distance).toBe(500 - wingFlap!.pushBack);
+  });
+
+  it("Chester's Alarm Quack freezes every predator in range", () => {
+    const { alarmQuack } = DUCKS.chester;
+    const battle = newBattle();
+    const near = spawnEnemy(battle, 'raccoon');
+    const alsoNear = spawnEnemy(battle, 'raccoon');
+    const far = spawnEnemy(battle, 'raccoon');
+    near.distance = 100;
+    alsoNear.distance = 150;
+    far.distance = 1000;
+    placeDuck(battle, 'chester', { x: 120, y: 0 });
+    const events = step(battle, 0);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'alarmQuack', stunnedIds: [near.id, alsoNear.id] }));
+
+    // Frozen predators don't move; the far one keeps walking.
+    step(battle, alarmQuack!.stunTime / 2);
+    expect(near.distance).toBe(100);
+    expect(far.distance).toBeGreaterThan(1000);
+  });
+
+  it('Chester waits for his cooldown before quacking again', () => {
+    const battle = newBattle();
+    const enemy = spawnEnemy(battle, 'raccoon');
+    enemy.distance = 100;
+    placeDuck(battle, 'chester', { x: 100, y: 0 });
+    step(battle, 0);
+    const events = step(battle, DUCKS.chester.alarmQuack!.cooldown / 2);
+    expect(events.some((e) => e.type === 'alarmQuack')).toBe(false);
+  });
+
+  it('Curtis holds each predator once, then lets it go', () => {
+    const { holdTheLine } = DUCKS.curtis;
+    const battle = newBattle();
+    const enemy = spawnEnemy(battle, 'raccoon');
+    enemy.distance = 100;
+    const curtis = placeDuck(battle, 'curtis', { x: 100, y: 0 });
+
+    expect(step(battle, 0)).toContainEqual({ type: 'held', duckId: curtis.id, enemyId: enemy.id });
+    step(battle, holdTheLine!.holdTime / 2);
+    expect(enemy.distance).toBe(100);
+
+    // After the hold, it walks on and Curtis doesn't grab it again.
+    const later = [...step(battle, holdTheLine!.holdTime), ...step(battle, 0.1)];
+    expect(later.some((e) => e.type === 'held')).toBe(false);
+    expect(enemy.distance).toBeGreaterThan(100);
+  });
+});
