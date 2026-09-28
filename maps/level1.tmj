@@ -1,0 +1,90 @@
+{ "compressionlevel":-1,
+ "height":18,
+ "infinite":false,
+ "layers":[
+        {
+         "draworder":"topdown",
+         "id":1,
+         "name":"pond",
+         "objects":[
+                {
+                 "ellipse":true,
+                 "height":110,
+                 "id":1,
+                 "name":"pond",
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":440,
+                 "x":420,
+                 "y":195
+                }],
+         "opacity":1,
+         "type":"objectgroup",
+         "visible":true,
+         "x":0,
+         "y":0
+        },
+        {
+         "draworder":"topdown",
+         "id":2,
+         "name":"path",
+         "objects":[
+                {
+                 "height":0,
+                 "id":2,
+                 "name":"path",
+                 "polyline":[
+                        { "x":0, "y":0 },
+                        { "x":1040, "y":0 },
+                        { "x":1040, "y":220 },
+                        { "x":320, "y":220 },
+                        { "x":320, "y":440 },
+                        { "x":1140, "y":440 }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":-40,
+                 "y":140
+                }],
+         "opacity":1,
+         "type":"objectgroup",
+         "visible":true,
+         "x":0,
+         "y":0
+        },
+        {
+         "draworder":"topdown",
+         "id":3,
+         "name":"slots",
+         "objects":[
+                { "height":0, "id":3, "name":"", "point":true, "rotation":0, "type":"", "visible":true, "width":0, "x":160, "y":250 },
+                { "height":0, "id":4, "name":"", "point":true, "rotation":0, "type":"", "visible":true, "width":0, "x":340, "y":250 },
+                { "height":0, "id":5, "name":"", "point":true, "rotation":0, "type":"", "visible":true, "width":0, "x":920, "y":250 },
+                { "height":0, "id":6, "name":"", "point":true, "rotation":0, "type":"", "visible":true, "width":0, "x":1120, "y":250 },
+                { "height":0, "id":7, "name":"", "point":true, "rotation":0, "type":"", "visible":true, "width":0, "x":160, "y":470 },
+                { "height":0, "id":8, "name":"", "point":true, "rotation":0, "type":"", "visible":true, "width":0, "x":480, "y":470 },
+                { "height":0, "id":9, "name":"", "point":true, "rotation":0, "type":"", "visible":true, "width":0, "x":720, "y":470 },
+                { "height":0, "id":10, "name":"", "point":true, "rotation":0, "type":"", "visible":true, "width":0, "x":960, "y":470 },
+                { "height":0, "id":11, "name":"", "point":true, "rotation":0, "type":"", "visible":true, "width":0, "x":640, "y":660 },
+                { "height":0, "id":12, "name":"", "point":true, "rotation":0, "type":"", "visible":true, "width":0, "x":500, "y":60 },
+                { "height":0, "id":13, "name":"", "point":true, "rotation":0, "type":"", "visible":true, "width":0, "x":1180, "y":470 }],
+         "opacity":1,
+         "type":"objectgroup",
+         "visible":true,
+         "x":0,
+         "y":0
+        }],
+ "nextlayerid":4,
+ "nextobjectid":14,
+ "orientation":"orthogonal",
+ "renderorder":"right-down",
+ "tiledversion":"1.11.2",
+ "tileheight":40,
+ "tilesets":[],
+ "tilewidth":40,
+ "type":"map",
+ "version":"1.10",
+ "width":32
+}
