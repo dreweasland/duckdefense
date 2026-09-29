@@ -59,7 +59,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
     name: 'Potato',
     power: { name: 'Wing Flap', description: 'Super fast pecks. Every 5th one flaps predators backward.', icon: 'flap' },
     cost: 120,
-    range: 120,
+    range: 140, // a little shorter than Sunny; his strength is speed
     damage: 6,
     attackInterval: 0.3,
     splashRadius: 0,

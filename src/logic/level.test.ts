@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DUCKS } from '../data/ducks';
 import { HUD_AREAS, type Area } from '../data/layout';
 import { LEVELS } from '../data/levels';
 import { distance, type Point } from './geometry';
@@ -44,6 +45,18 @@ for (const [index, info] of LEVELS.entries()) {
     it('has places for hawks to fly in from, if any wave has hawks', () => {
       const hasHawks = info.waves.some((w) => w.groups.some((g) => g.enemy === 'hawk'));
       if (hasHawks) expect(level.sky.length).toBeGreaterThan(0);
+    });
+
+    it('lets ducks that hit hawks reach every hawk route from at least two nests', () => {
+      // Uses the shortest reach of any duck that can hit hawks (Potato), so every
+      // hawk-hitter works near where hawks fly, including by the duck house.
+      const reach = Math.min(...Object.values(DUCKS).filter((d) => d.canHitFlying).map((d) => d.range));
+      for (const from of level.sky) {
+        const route = makePath([from, door]);
+        const points = Array.from({ length: Math.ceil(route.length / 5) + 1 }, (_, i) => pointAt(route, i * 5));
+        const covering = level.slots.filter((slot) => points.some((p) => distance(slot, p) <= reach));
+        expect(covering.length, `hawks from ${JSON.stringify(from)}`).toBeGreaterThanOrEqual(2);
+      }
     });
 
     it('keeps every nest off the path', () => {
