@@ -11,7 +11,7 @@ import { RENDER_SCALE, viewSize } from './ui/theme';
 function canvasSize(): { width: number; height: number } {
   const parent = document.getElementById('game');
   const view = viewSize(parent?.clientWidth ?? window.innerWidth, parent?.clientHeight ?? window.innerHeight);
-  return { width: view.width * RENDER_SCALE, height: view.height * RENDER_SCALE };
+  return { width: Math.round(view.width * RENDER_SCALE), height: Math.round(view.height * RENDER_SCALE) };
 }
 
 const initialSize = canvasSize();

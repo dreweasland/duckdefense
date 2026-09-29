@@ -24,7 +24,7 @@ export interface Rect {
 }
 
 /** How far past the world's edges the forest ring and patches reach (wide or tall screens). */
-const OUTSKIRTS = 700;
+const OUTSKIRTS = 420;
 
 export function drawGrass(scene: Phaser.Scene, seed: number): void {
   // Covers the whole backdrop so no edge ever shows, whatever the screen shape.
@@ -38,7 +38,7 @@ export function drawGrass(scene: Phaser.Scene, seed: number): void {
   // Soft light and shadow patches so the lawn isn't flat.
   const rng = seededRandom(seed);
   const g = scene.add.graphics().setDepth(DEPTH.ground);
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 28; i++) {
     const light = rng() < 0.5;
     g.fillStyle(light ? 0xfff6c0 : 0x1f4d1a, light ? 0.07 : 0.08).fillEllipse(
       -OUTSKIRTS + rng() * (WORLD.width + OUTSKIRTS * 2),
@@ -71,10 +71,10 @@ export function drawOutskirts(scene: Phaser.Scene, seed: number): void {
       else image.setFlipX(rng() < 0.5);
     }
   };
-  place('tree', 70, 70, 160, 160, true);
-  place('bush', 40, 30, 84, 70, false);
-  place('rock', 16, 10, 44, 32, false);
-  for (const key of ['flower-white', 'flower-pink', 'flower-purple']) place(key, 30, 0, 22, 22, true);
+  place('tree', 40, 70, 160, 160, true);
+  place('bush', 24, 30, 84, 70, false);
+  place('rock', 10, 10, 44, 32, false);
+  for (const key of ['flower-white', 'flower-pink', 'flower-purple']) place(key, 18, 0, 22, 22, true);
 }
 
 export function drawPath(scene: Phaser.Scene, points: Point[], seed: number): void {

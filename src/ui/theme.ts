@@ -1,29 +1,25 @@
 import Phaser from 'phaser';
+import { WORLD_SIZE, renderScaleFor, viewSizeFor } from '../logic/display';
 
 /** The game world is always 1280 x 720; everything is laid out in these units. */
-export const WORLD = { width: 1280, height: 720 };
+export const WORLD = WORLD_SIZE;
 
 /**
- * The canvas renders at this multiple of the world size so art stays sharp on
- * high-DPI phones and tablets. Each scene zooms its camera by the same amount.
+ * Canvas pixels per world unit, chosen once for this device: sharp on high-DPI phones and
+ * tablets (2 on desktops), but capped so the canvas never gets big enough to crash a phone.
+ * Each scene zooms its camera by the same amount.
  */
-export const RENDER_SCALE = 2;
+export const RENDER_SCALE = renderScaleFor(window.screen.width, window.screen.height, window.devicePixelRatio || 1);
+
+/** The world-unit size of the whole visible area for a window (see logic/display.ts). */
+export const viewSize = viewSizeFor;
 
 /**
- * The canvas matches the window's shape, so screens wider (or taller) than 16:9 see extra
- * scenery around the 1280 x 720 world instead of black bars. This is the world-unit size
- * of the whole visible area for a given window.
+ * Everything behind the world is drawn over this area, so no edge shows on any screen shape
+ * we support: up to about 2.4:1 wide (400 each side) and 4:3 tall (300 above and below).
+ * Kept no bigger than needed, since it costs memory on phones.
  */
-export function viewSize(windowWidth: number, windowHeight: number): { width: number; height: number } {
-  const aspect = windowWidth / Math.max(1, windowHeight);
-  const worldAspect = WORLD.width / WORLD.height;
-  return aspect >= worldAspect
-    ? { width: Math.round(WORLD.height * aspect), height: WORLD.height }
-    : { width: WORLD.width, height: Math.round(WORLD.width / aspect) };
-}
-
-/** Everything behind the world is drawn over this area, so no edge shows on any screen shape. */
-export const BACKDROP = { x: -1500, y: -1500, width: WORLD.width + 3000, height: WORLD.height + 3000 };
+export const BACKDROP = { x: -400, y: -300, width: WORLD.width + 800, height: WORLD.height + 600 };
 
 /** Zooms the camera to the render scale and keeps the world centered when the window resizes. */
 export function setupCamera(scene: Phaser.Scene): void {

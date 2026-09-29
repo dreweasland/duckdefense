@@ -17,7 +17,10 @@ export class BootScene extends Phaser.Scene {
       const url = URL.createObjectURL(new Blob([sprite.svg], { type: 'image/svg+xml' }));
       this.blobUrls.push(url);
       // Loaded at the canvas's render scale so it stays sharp when the camera zooms.
-      this.load.svg(sprite.key, url, { width: sprite.width * RENDER_SCALE, height: sprite.height * RENDER_SCALE });
+      this.load.svg(sprite.key, url, {
+        width: Math.round(sprite.width * RENDER_SCALE),
+        height: Math.round(sprite.height * RENDER_SCALE),
+      });
     }
     // The kids' recordings (any sound without one uses a built-in placeholder).
     for (const [sound, url] of Object.entries(recordingUrls())) {
