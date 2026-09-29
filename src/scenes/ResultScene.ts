@@ -3,10 +3,13 @@ import { drawGrass, drawOutskirts, drawPond, scatterDecor } from '../art/terrain
 import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER } from '../data/ducks';
 import { LEVELS } from '../data/levels';
+import { postScore } from '../api';
 import { playSound } from '../audio/sfx';
+import { askForName } from '../ui/nameForm';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
 import { drawBigButton, drawCard } from '../ui/widgets';
 import type { GameSceneData } from './GameScene';
+import type { LeaderboardSceneData } from './LeaderboardScene';
 import type { LevelSelectSceneData } from './LevelSelectScene';
 
 export interface ResultSceneData {
@@ -16,6 +19,8 @@ export interface ResultSceneData {
   stars?: number; // only for a win
   score?: number;
   newBest?: boolean;
+  hearts?: number; // hearts and peas left, for posting to the leaderboard
+  peas?: number;
 }
 
 const POND = { center: { x: WORLD.width / 2, y: 610 }, radiusX: 420, radiusY: 95 };
@@ -86,6 +91,7 @@ export class ResultScene extends Phaser.Scene {
         .text(cx, 318, `Score  ${this.result.score ?? 0}`, textStyle(30, { color: COLORS.inkCss, strokeThickness: 0, weight: '700' }))
         .setOrigin(0.5)
         .setDepth(51);
+      this.drawPostButton(cx + 300, 318);
       if (this.result.newBest) {
         this.add
           .text(score.x + score.width / 2 + 12, 318, 'New best!', textStyle(22, { color: '#e0447a', stroke: '#ffffff', strokeThickness: 5 }))
@@ -143,5 +149,44 @@ export class ResultScene extends Phaser.Scene {
 
     this.cameras.main.fadeIn(300, 0, 0, 0);
     playSound(this, won ? 'win' : 'lose');
+  }
+
+  /** "Post" puts this win on the public leaderboard (asks for a name first). */
+  private drawPostButton(x: number, y: number): void {
+    const { level, difficulty, hearts, peas } = this.result;
+    if (hearts === undefined || peas === undefined) return;
+    const button = drawBigButton(
+      this,
+      x,
+      y,
+      'Post',
+      COLORS.gold,
+      0xc99a1a,
+      async () => {
+        let posted: { id: number } | undefined;
+        const ok = await askForName(async (name) => {
+          const result = await postScore({ name, level, difficulty, hearts, peas });
+          if (!result.ok) return result.error;
+          posted = result.data;
+          return undefined;
+        });
+        if (!ok || !posted) {
+          // Cancelled: put a fresh button back (big buttons only fire once).
+          button.destroy();
+          this.drawPostButton(x, y);
+          return;
+        }
+        const data: LeaderboardSceneData = {
+          level,
+          difficulty,
+          highlightId: posted.id,
+          back: { scene: 'LevelSelectScene', data: { difficulty } },
+        };
+        this.cameras.main.fadeOut(250, 0, 0, 0);
+        this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('LeaderboardScene', data));
+      },
+      { width: 150, height: 56, fontSize: 24, icon: 'icon-trophy' },
+    );
+    button.setDepth(70);
   }
 }

@@ -4,7 +4,9 @@ import type { Difficulty } from '../data/difficulty';
 import { DIFFICULTIES } from '../data/difficulty';
 import { DUCK_ORDER } from '../data/ducks';
 import { COLORS, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
-import { drawBigButton, drawSoundButton } from '../ui/widgets';
+import { playSound } from '../audio/sfx';
+import { drawBigButton, drawRoundButton, drawSoundButton } from '../ui/widgets';
+import type { LeaderboardSceneData } from './LeaderboardScene';
 import type { LevelSelectSceneData } from './LevelSelectScene';
 
 const POND = { center: { x: WORLD.width / 2, y: 420 }, radiusX: 330, radiusY: 95 };
@@ -53,6 +55,17 @@ export class TitleScene extends Phaser.Scene {
     drawBigButton(this, cx + 170, 610, DIFFICULTIES.normal.label, COLORS.orange, COLORS.orangeDark, () => start('normal')).setDepth(100);
 
     drawSoundButton(this, WORLD.width - 40, WORLD.height - 40, 100);
+
+    // Top scores.
+    const trophy = this.add.image(0, 0, 'icon-trophy').setDisplaySize(44, 44);
+    const scores = drawRoundButton(this, WORLD.width - 70, 70, 42, COLORS.gold, 0xc99a1a, [trophy]);
+    scores.container.setDepth(100);
+    scores.hit.on('pointerdown', () => {
+      playSound(this, 'tap');
+      const data: LeaderboardSceneData = { back: { scene: 'TitleScene' } };
+      this.cameras.main.fadeOut(220, 0, 0, 0);
+      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('LeaderboardScene', data));
+    });
     this.cameras.main.fadeIn(300, 0, 0, 0);
   }
 }

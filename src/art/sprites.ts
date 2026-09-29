@@ -541,6 +541,20 @@ function holdIconSvg(): string {
   return svg(64, 64, '', `<polygon points="${points.join(' ')}" fill="#e0334f" ${stroke(4)}/><rect x="16" y="28" width="32" height="8" rx="3" fill="#ffffff"/>`);
 }
 
+function trophySvg(): string {
+  const defs = vGrad('cup', '#ffe680', '#e8a317');
+  return svg(
+    64,
+    64,
+    defs,
+    `<path d="M16 10 H48 V26 C48 38 40 44 32 44 C24 44 16 38 16 26 Z" fill="url(#cup)" ${stroke(4)}/>` +
+      `<path d="M16 16 H8 C8 28 14 30 18 30 M48 16 H56 C56 28 50 30 46 30" fill="none" ${stroke(4)}/>` +
+      `<rect x="28" y="44" width="8" height="8" fill="#e8a317" ${stroke(3)}/>` +
+      `<rect x="18" y="52" width="28" height="8" rx="3" fill="#b8791a" ${stroke(3)}/>` +
+      `<path d="M24 16 Q24 30 30 36" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.7"/>`,
+  );
+}
+
 /** A soft white glow, tinted and blended for lights. */
 function glowSvg(): string {
   return svg(128, 128, rGrad('g', '#ffffff', '#ffffff', 1, 0), `<circle cx="64" cy="64" r="64" fill="url(#g)"/>`);
@@ -607,6 +621,7 @@ export function allSprites(): SpriteArt[] {
     { key: 'power-flap', svg: flapIconSvg(), width: 32, height: 32 },
     { key: 'power-quack', svg: quackIconSvg(), width: 32, height: 32 },
     { key: 'power-hold', svg: holdIconSvg(), width: 32, height: 32 },
+    { key: 'icon-trophy', svg: trophySvg(), width: 40, height: 40 },
     { key: 'glow', svg: glowSvg(), width: 128, height: 128 },
     { key: 'star', svg: starSvg(), width: 24, height: 24 },
     { key: 'feather', svg: featherSvg(), width: 12, height: 24 },

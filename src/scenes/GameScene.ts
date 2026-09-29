@@ -931,6 +931,8 @@ export class GameScene extends Phaser.Scene {
         const result: ResultSceneData = { won: event.type === 'won', difficulty: this.difficulty, level: this.levelIndex };
         if (result.won) {
           // Save progress: this unlocks the next level and keeps the best stars and score.
+          result.hearts = this.state.hearts;
+          result.peas = this.state.peas;
           result.stars = starsFor(this.state.hearts, DIFFICULTIES[this.difficulty].hearts);
           result.score = scoreFor(this.state.hearts, this.state.peas, this.difficulty);
           const progress = loadProgress();

@@ -1,0 +1,46 @@
+import type { Difficulty } from './data/difficulty';
+
+// Talks to the leaderboard API in the Worker (worker/index.ts).
+
+export interface ScoreRow {
+  id: number;
+  name: string;
+  score: number;
+  hearts: number;
+}
+
+export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(path, { ...init, signal: controller.signal });
+    const body = (await response.json().catch(() => ({}))) as T & { error?: string };
+    if (!response.ok) return { ok: false, error: body.error ?? "Couldn't reach the leaderboard." };
+    return { ok: true, data: body };
+  } catch {
+    return { ok: false, error: "Couldn't reach the leaderboard. Are you online?" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function fetchScores(level: number, difficulty: Difficulty): Promise<ApiResult<ScoreRow[]>> {
+  const result = await request<{ scores: ScoreRow[] }>(`/api/scores?level=${level}&difficulty=${difficulty}`);
+  return result.ok ? { ok: true, data: result.data.scores } : result;
+}
+
+export async function postScore(entry: {
+  name: string;
+  level: number;
+  difficulty: Difficulty;
+  hearts: number;
+  peas: number;
+}): Promise<ApiResult<{ id: number; score: number; rank: number }>> {
+  return request('/api/scores', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry),
+  });
+}
