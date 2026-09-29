@@ -2,6 +2,7 @@
 // difficulty still feels right. If you tune numbers in src/data/ and one of
 // these fails, the level probably got too easy or too hard.
 import { describe, expect, it } from 'vitest';
+import { CHALLENGES, type Challenge } from '../data/challenges';
 import type { Difficulty } from '../data/difficulty';
 import { DUCKS, type DuckKind } from '../data/ducks';
 import { LEVELS, type LevelInfo } from '../data/levels';
@@ -41,11 +42,13 @@ export interface Strategy {
    * - 'upgrade-first': max out the ducks you have before buying another
    */
   upgrades?: 'none' | 'place-first' | 'upgrade-first';
+  /** Play with a Daily Challenge twist. */
+  challenge?: Challenge;
 }
 
 /** Before each wave, spend peas on `kind` ducks in the best slots (and upgrades, per the strategy). */
 export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | null, strategy: Strategy = {}): Game {
-  const game = createGame(mapFromLevel(parseLevel(info.map)), info.waves, difficulty);
+  const game = createGame(mapFromLevel(parseLevel(info.map)), info.waves, difficulty, strategy.challenge);
   const slots = bestSlots(info, kind ? DUCKS[kind].range : 0);
   const upgrades = strategy.upgrades ?? 'none';
 
@@ -103,3 +106,15 @@ for (const [index, info] of LEVELS.entries()) {
     });
   });
 }
+
+describe('daily challenge balance', () => {
+  for (const challenge of CHALLENGES) {
+    // Sunny if she's playing today, otherwise the first duck that is.
+    const kind = challenge.ducks?.includes('sunny') === false ? challenge.ducks[0]! : 'sunny';
+    for (const [index, info] of LEVELS.entries()) {
+      it(`${challenge.name} can be won on Easy on level ${index + 1} by placing ${DUCKS[kind].name}s and upgrading`, () => {
+        expect(play(info, 'easy', kind, { challenge, upgrades: 'place-first' }).phase).toBe('won');
+      });
+    }
+  }
+});

@@ -59,10 +59,10 @@ everywhere: dialogue, tooltips, code comments.
 | Enemy | Movement | Notes |
 |---|---|---|
 | Raccoon | Ground path | Baseline enemy. Clever: occasionally dodges |
-| Fox | Ground path | Fast, low health |
-| Mink | Ground path | Small and slippery. Harder to hit |
+| Fox | Ground path | Fast, low health. Shakes off most of an Alarm Quack, so Curtis's slow is the answer |
+| Mink | Ground path | Small and slippery. Hides in the grass: ducks only spot it up close until Chester's Alarm Quack flushes it out |
 | Hawk | Flying | Ignores the path and dives straight at the house. Only some ducks can hit it. Scares ducks it swoops over |
-| Snapping Turtle | From the pond | Slow, huge health. Spawns out of the water |
+| Snapping Turtle | From the pond | Slow, huge health. Climbs out of the pond and cuts across to the path. Its shell (armor) blocks part of every hit, so big splashes beat little pecks |
 | **Boss: The Night Bandit** | Ground path | A masked mega-raccoon at the end of each world. Whistles up raccoon minions, scaring nearby ducks |
 
 ## Economy and systems
@@ -75,6 +75,16 @@ everywhere: dialogue, tooltips, code comments.
 - **Day/night cycle:** Night waves are harder. The **solar battery meter** powers the
   pond fountain, whose refreshing spray makes nearby ducks hit harder. It charges during
   day waves and drains at night, just like the real Victron setup.
+- **Aiming:** Tap a duck to pick who it goes after: First, Strong, Last, or Near
+  (`src/data/targeting.ts`).
+- **Wave preview:** Between waves, chips beside the start button show what's coming. Tap one
+  for what that predator does and which duck beats it (`description` and `beatenBy` in
+  `src/data/enemies.ts`).
+- **Call early:** Once a wave's predators are all out, you can send the next wave right away
+  for its bonus plus peas per predator still out (`EARLY_CALL` in `src/data/waves.ts`).
+- **Daily Challenge:** One level and one twist per UTC day, the same for everyone, with its
+  own leaderboard. Twists live in `src/data/challenges.ts`; the rules shared with the server
+  are in `src/logic/daily.ts`.
 - **Upgrades:** Two tiers per duck (e.g. Sunny → "Seasoned Sunny" → "Legendary Sunny"),
   bought from the duck's panel. Names, prices, and what changes are in `src/data/ducks.ts`.
 

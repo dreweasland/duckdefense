@@ -21,6 +21,7 @@ export interface ResultSceneData {
   newBest?: boolean;
   hearts?: number; // hearts and peas left, for posting to the leaderboard
   peas?: number;
+  daily?: string; // the Daily Challenge date, if that's what was played
 }
 
 const POND = { center: { x: WORLD.width / 2, y: 610 }, radiusX: 420, radiusY: 95 };
@@ -39,9 +40,9 @@ export class ResultScene extends Phaser.Scene {
   create(): void {
     setupCamera(this);
     const cx = WORLD.width / 2;
-    const { won, difficulty, level } = this.result;
-    const hasNext = won && level + 1 < LEVELS.length;
-    const beatEverything = won && !hasNext;
+    const { won, difficulty, level, daily } = this.result;
+    const hasNext = won && !daily && level + 1 < LEVELS.length;
+    const beatEverything = won && !daily && !hasNext;
 
     drawGrass(this, 41);
     drawOutskirts(this, 44);
@@ -66,7 +67,13 @@ export class ResultScene extends Phaser.Scene {
       .text(
         cx,
         172,
-        beatEverything ? 'You beat every level! The flock is so proud.' : won ? 'The flock is safe and proud.' : 'The ducks want a rematch!',
+        daily && won
+          ? "You beat today's Daily Challenge!"
+          : beatEverything
+            ? 'You beat every level! The flock is so proud.'
+            : won
+              ? 'The flock is safe and proud.'
+              : 'The ducks want a rematch!',
         textStyle(30, { color: COLORS.inkCss, strokeThickness: 0 }),
       )
       .setOrigin(0.5)
@@ -132,7 +139,7 @@ export class ResultScene extends Phaser.Scene {
       this.cameras.main.fadeOut(250, 0, 0, 0);
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start(scene, data));
     };
-    const again: GameSceneData = { difficulty, level };
+    const again: GameSceneData = { difficulty, level, daily };
     const levels: LevelSelectSceneData = { difficulty };
     const y = 560;
     if (hasNext) {
@@ -153,7 +160,7 @@ export class ResultScene extends Phaser.Scene {
 
   /** "Post" puts this win on the public leaderboard (asks for a name first). */
   private drawPostButton(x: number, y: number): void {
-    const { level, difficulty, hearts, peas } = this.result;
+    const { level, difficulty, hearts, peas, daily } = this.result;
     if (hearts === undefined || peas === undefined) return;
     const button = drawBigButton(
       this,
@@ -165,7 +172,7 @@ export class ResultScene extends Phaser.Scene {
       async () => {
         let posted: { id: number } | undefined;
         const ok = await askForName(async (name) => {
-          const result = await postScore({ name, level, difficulty, hearts, peas });
+          const result = await postScore({ name, level, difficulty, hearts, peas, daily });
           if (!result.ok) return result.error;
           posted = result.data;
           return undefined;
@@ -179,6 +186,7 @@ export class ResultScene extends Phaser.Scene {
         const data: LeaderboardSceneData = {
           level,
           difficulty,
+          daily,
           highlightId: posted.id,
           back: { scene: 'LevelSelectScene', data: { difficulty } },
         };

@@ -4,11 +4,14 @@ import { playSound } from '../audio/sfx';
 import { drawGrass, drawOutskirts } from '../art/terrain';
 import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
 import { LEVELS } from '../data/levels';
+import { dailyDate, dailyFor } from '../logic/daily';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
 import { drawCard, drawRoundButton } from '../ui/widgets';
 
 export interface LeaderboardSceneData {
   level?: number;
+  /** Show this date's Daily Challenge board (YYYY-MM-DD) instead of a level's. */
+  daily?: string;
   difficulty?: Difficulty;
   /** Score id to highlight (the one just posted). */
   highlightId?: number;
@@ -21,6 +24,9 @@ const MEDALS = [0xffd23f, 0xc9d1d9, 0xe0955a];
 
 export class LeaderboardScene extends Phaser.Scene {
   private level = 0;
+  /** The Daily Challenge date the Daily tab shows, and whether that tab is picked. */
+  private dailyDate = '';
+  private showDaily = false;
   private difficulty: Difficulty = 'easy';
   private highlightId?: number;
   private back: { scene: string; data?: object } = { scene: 'TitleScene' };
@@ -34,6 +40,8 @@ export class LeaderboardScene extends Phaser.Scene {
 
   init(data: LeaderboardSceneData): void {
     this.level = data.level ?? 0;
+    this.dailyDate = data.daily ?? dailyDate();
+    this.showDaily = !!data.daily;
     this.difficulty = data.difficulty ?? 'easy';
     this.highlightId = data.highlightId;
     this.back = data.back ?? { scene: 'TitleScene' };
@@ -50,10 +58,16 @@ export class LeaderboardScene extends Phaser.Scene {
     this.add.image(cx - 190, 62, 'icon-trophy').setDisplaySize(60, 60);
     this.add.text(cx + 30, 62, 'Top Scores', textStyle(58, { weight: '700', strokeThickness: 10 })).setOrigin(0.5);
 
-    // Level tabs, then Easy / Normal.
+    // The Daily Challenge tab, then level tabs, then Easy / Normal.
+    const tabs = LEVELS.length + 1;
+    const dailyName = dailyFor(this.dailyDate)?.challenge.name ?? 'Daily';
+    this.drawTab(cx - ((tabs - 1) / 2) * 196, 138, 184, `★ ${dailyName}`, () => this.showDaily, () => (this.showDaily = true));
     LEVELS.forEach((info, i) => {
-      const x = cx + (i - (LEVELS.length - 1) / 2) * 200;
-      this.drawTab(x, 138, 184, `${i + 1}. ${info.name}`, () => this.level === i, () => (this.level = i));
+      const x = cx + (i + 1 - (tabs - 1) / 2) * 196;
+      this.drawTab(x, 138, 184, `${i + 1}. ${info.name}`, () => !this.showDaily && this.level === i, () => {
+        this.showDaily = false;
+        this.level = i;
+      });
     });
     (['easy', 'normal'] as const).forEach((difficulty, i) => {
       this.drawTab(cx + (i - 0.5) * 170, 192, 150, DIFFICULTIES[difficulty].label, () => this.difficulty === difficulty, () => (this.difficulty = difficulty));
@@ -115,7 +129,7 @@ export class LeaderboardScene extends Phaser.Scene {
   private async loadScores(): Promise<void> {
     const id = ++this.requestId;
     this.message('Loading...');
-    const result = await fetchScores(this.level, this.difficulty);
+    const result = await fetchScores(this.level, this.difficulty, this.showDaily ? this.dailyDate : undefined);
     if (id !== this.requestId || !this.sys.isActive()) return; // a newer tab was picked, or we left
     if (!result.ok) {
       this.message(result.error);

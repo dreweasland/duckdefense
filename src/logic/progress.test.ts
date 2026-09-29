@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emptyProgress, isUnlocked, parseProgress, recordWin, scoreFor, starsFor } from './progress';
+import { dailyRecord, emptyProgress, isUnlocked, parseProgress, recordDailyWin, recordWin, scoreFor, starsFor } from './progress';
 
 describe('stars', () => {
   it('gives 3 stars for keeping almost every heart', () => {
@@ -50,5 +50,29 @@ describe('progress', () => {
   it('ignores corrupt or tampered saves', () => {
     expect(parseProgress('not json')).toEqual(emptyProgress());
     expect(parseProgress(JSON.stringify({ levels: { easy: { 0: { stars: 99 } } } }))).toEqual(emptyProgress());
+  });
+});
+
+describe('daily challenge progress', () => {
+  it('keeps the best result for the day on each difficulty', () => {
+    let progress = recordDailyWin(emptyProgress(), '2026-09-29', 'easy', 2, 500);
+    progress = recordDailyWin(progress, '2026-09-29', 'easy', 1, 900);
+    progress = recordDailyWin(progress, '2026-09-29', 'normal', 3, 300);
+    expect(dailyRecord(progress, '2026-09-29', 'easy')).toEqual({ stars: 2, bestScore: 900 });
+    expect(dailyRecord(progress, '2026-09-29', 'normal')).toEqual({ stars: 3, bestScore: 300 });
+    expect(dailyRecord(progress, '2026-09-30', 'easy')).toBeUndefined();
+  });
+
+  it("starts fresh on a new day, and doesn't touch level progress", () => {
+    let progress = recordWin(emptyProgress(), 'easy', 0, 3, 100);
+    progress = recordDailyWin(progress, '2026-09-29', 'easy', 2, 500);
+    progress = recordDailyWin(progress, '2026-09-30', 'normal', 1, 50);
+    expect(progress.daily).toEqual({ date: '2026-09-30', results: { normal: { stars: 1, bestScore: 50 } } });
+    expect(progress.levels.easy[0]).toEqual({ stars: 3, bestScore: 100 });
+  });
+
+  it('survives saving and loading', () => {
+    const progress = recordDailyWin(emptyProgress(), '2026-09-29', 'easy', 2, 500);
+    expect(parseProgress(JSON.stringify(progress))).toEqual(progress);
   });
 });

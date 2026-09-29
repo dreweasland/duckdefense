@@ -1,6 +1,7 @@
 import { englishDataset, englishRecommendedTransformers, RegExpMatcher } from 'obscenity';
-import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
+import type { Difficulty } from '../data/difficulty';
 import { LEVEL_COUNT } from '../data/levelCount';
+import { challengeSettings, dailyFor, isPostableDate } from './daily';
 import { scoreFor } from './progress';
 
 // Rules for the public leaderboard, shared by the game and the server so both agree.
@@ -29,21 +30,32 @@ export interface ScoreSubmission {
   difficulty: Difficulty;
   hearts: number;
   peas: number;
+  /** The Daily Challenge date (YYYY-MM-DD), for a daily score. Its level comes from the date. */
+  daily?: string;
 }
 
 export type SubmissionCheck = { ok: true; entry: ScoreSubmission & { score: number } } | { ok: false; reason: string };
 
 /** Validates a score someone wants to post, and works out the score itself (never trusting a sent one). */
-export function checkSubmission(body: unknown): SubmissionCheck {
+export function checkSubmission(body: unknown, now: Date = new Date()): SubmissionCheck {
   if (typeof body !== 'object' || body === null) return { ok: false, reason: 'Bad request.' };
-  const { name, level, difficulty, hearts, peas } = body as Record<string, unknown>;
+  const { name, difficulty, hearts, peas, daily } = body as Record<string, unknown>;
+  let { level } = body as Record<string, unknown>;
   const nameCheck = checkName(typeof name === 'string' ? name : '');
   if (!nameCheck.ok) return nameCheck;
   if (difficulty !== 'easy' && difficulty !== 'normal') return { ok: false, reason: 'Unknown difficulty.' };
+
+  // A Daily Challenge score: only for today (or yesterday), and the date decides the level and twist.
+  const today = daily === undefined ? undefined : typeof daily === 'string' ? dailyFor(daily) : undefined;
+  if (daily !== undefined && (!today || !isPostableDate(today.date, now))) {
+    return { ok: false, reason: "That Daily Challenge is over. Try today's!" };
+  }
+  if (today) level = today.level;
+
   if (!Number.isInteger(level) || (level as number) < 0 || (level as number) >= LEVEL_COUNT) {
     return { ok: false, reason: 'Unknown level.' };
   }
-  const maxHearts = DIFFICULTIES[difficulty].hearts;
+  const maxHearts = challengeSettings(difficulty, today?.challenge).hearts;
   if (!Number.isInteger(hearts) || (hearts as number) < 1 || (hearts as number) > maxHearts) {
     return { ok: false, reason: 'That score is not possible.' };
   }
@@ -56,6 +68,7 @@ export function checkSubmission(body: unknown): SubmissionCheck {
     difficulty,
     hearts: hearts as number,
     peas: peas as number,
+    ...(today && { daily: today.date }),
   };
   return { ok: true, entry: { ...entry, score: scoreFor(entry.hearts, entry.peas, entry.difficulty) } };
 }

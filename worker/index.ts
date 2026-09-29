@@ -1,11 +1,13 @@
 // The Duck Defense Worker: serves the game (static assets) and a small leaderboard API.
 //
-//   GET    /api/scores?level=0&difficulty=easy   top scores for a level
-//   POST   /api/scores                           post a win { name, level, difficulty, hearts, peas }
+//   GET    /api/scores?level=0&difficulty=easy          top scores for a level
+//   GET    /api/scores?daily=2026-09-29&difficulty=easy top scores for a Daily Challenge
+//   POST   /api/scores                                  post a win { name, level, difficulty, hearts, peas, daily? }
 //   DELETE /api/scores/:id                       remove an entry (needs the ADMIN_TOKEN secret)
 
 import { checkSubmission } from '../src/logic/leaderboard';
 import { LEVEL_COUNT } from '../src/data/levelCount';
+import { dailyFor } from '../src/logic/daily';
 
 interface Env {
   DB: D1Database;
@@ -47,14 +49,29 @@ function json(data: unknown, status = 200): Response {
 }
 
 async function listScores(url: URL, env: Env): Promise<Response> {
-  const level = Number(url.searchParams.get('level'));
   const difficulty = url.searchParams.get('difficulty');
-  if (!Number.isInteger(level) || level < 0 || level >= LEVEL_COUNT || (difficulty !== 'easy' && difficulty !== 'normal')) {
-    return json({ error: 'Unknown level or difficulty.' }, 400);
+  if (difficulty !== 'easy' && difficulty !== 'normal') return json({ error: 'Unknown difficulty.' }, 400);
+
+  const dailyParam = url.searchParams.get('daily');
+  if (dailyParam !== null) {
+    const daily = dailyFor(dailyParam);
+    if (!daily) return json({ error: 'Unknown day.' }, 400);
+    const { results } = await env.DB.prepare(
+      `SELECT id, name, score, hearts, created_at AS createdAt FROM scores
+       WHERE daily = ? AND difficulty = ?
+       ORDER BY score DESC, created_at ASC
+       LIMIT ?`,
+    )
+      .bind(daily.date, difficulty, TOP_SCORES)
+      .all();
+    return json({ scores: results });
   }
+
+  const level = Number(url.searchParams.get('level'));
+  if (!Number.isInteger(level) || level < 0 || level >= LEVEL_COUNT) return json({ error: 'Unknown level.' }, 400);
   const { results } = await env.DB.prepare(
     `SELECT id, name, score, hearts, created_at AS createdAt FROM scores
-     WHERE level = ? AND difficulty = ?
+     WHERE level = ? AND difficulty = ? AND daily IS NULL
      ORDER BY score DESC, created_at ASC
      LIMIT ?`,
   )
@@ -85,16 +102,20 @@ async function postScore(request: Request, env: Env): Promise<Response> {
     return json({ error: 'Slow down! Try again in a minute.' }, 429);
   }
 
+  const daily = entry.daily ?? null;
   const inserted = await env.DB.prepare(
-    `INSERT INTO scores (name, level, difficulty, hearts, peas, score, ip_hash)
-     VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    `INSERT INTO scores (name, level, difficulty, hearts, peas, score, ip_hash, daily)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
   )
-    .bind(entry.name, entry.level, entry.difficulty, entry.hearts, entry.peas, entry.score, ipHash)
+    .bind(entry.name, entry.level, entry.difficulty, entry.hearts, entry.peas, entry.score, ipHash, daily)
     .first<{ id: number }>();
+  // Rank among scores on the same board: this level's, or this day's Daily Challenge.
   const better = await env.DB.prepare(
-    `SELECT COUNT(*) AS count FROM scores WHERE level = ? AND difficulty = ? AND score > ?`,
+    daily === null
+      ? `SELECT COUNT(*) AS count FROM scores WHERE level = ? AND difficulty = ? AND daily IS NULL AND score > ?`
+      : `SELECT COUNT(*) AS count FROM scores WHERE daily = ? AND difficulty = ? AND score > ?`,
   )
-    .bind(entry.level, entry.difficulty, entry.score)
+    .bind(daily ?? entry.level, entry.difficulty, entry.score)
     .first<{ count: number }>();
   return json({ id: inserted?.id, name: entry.name, score: entry.score, rank: (better?.count ?? 0) + 1 }, 201);
 }

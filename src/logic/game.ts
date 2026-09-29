@@ -1,12 +1,14 @@
 import { CRAIG } from '../data/craig';
 import { BATTERY, FOUNTAIN } from '../data/dayNight';
-import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
+import type { Challenge } from '../data/challenges';
+import type { Difficulty } from '../data/difficulty';
 import { DUCKS, MOVE_SETTLE_TIME, SELL_REFUND, type DuckKind } from '../data/ducks';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import type { Targeting } from '../data/targeting';
 import { EARLY_CALL, type Wave } from '../data/waves';
 import { createBattle, placeDuck, spawnEnemy, step, type Battle, type BattleEvent, type Duck, type Enemy } from './battle';
 import { distance, type Point } from './geometry';
+import { challengeSettings, challengeWaves } from './daily';
 import { nextUpgrade, totalSpent } from './upgrades';
 import type { Level } from './level';
 import { makePath, type Path } from './path';
@@ -41,6 +43,8 @@ export interface Game {
   blessingUsed: boolean;
   /** Seconds of Craig's shield left (only counts down during waves). */
   shieldTime: number;
+  /** The Daily Challenge twist being played, if any. */
+  challenge?: Challenge;
 }
 
 /** What the game needs from a level. */
@@ -67,14 +71,15 @@ export type GameEvent =
   | { type: 'won' }
   | { type: 'lost' };
 
-export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Difficulty): Game {
+/** A new game. A Daily Challenge twist, if given, changes the peas, hearts, waves, and rules. */
+export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Difficulty, challenge?: Challenge): Game {
   if (waves.length === 0) {
     throw new Error('A level needs at least one wave');
   }
-  const settings = DIFFICULTIES[difficulty];
+  const settings = challengeSettings(difficulty, challenge);
   return {
     battle: createBattle(map.path, { sky: map.sky, fountainAt: map.fountainAt, pondAt: map.pondAt, enemySpeed: settings.enemySpeed }),
-    waves,
+    waves: challengeWaves(waves, challenge),
     peas: settings.startingPeas,
     hearts: settings.hearts,
     waveIndex: 0,
@@ -84,6 +89,7 @@ export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Dif
     battery: BATTERY.startCharge,
     blessingUsed: false,
     shieldTime: 0,
+    challenge,
   };
 }
 
@@ -94,7 +100,7 @@ export function isNight(game: Game): boolean {
 }
 
 export function canUseBlessing(game: Game): boolean {
-  return !game.blessingUsed && !isOver(game);
+  return !game.blessingUsed && !isOver(game) && !game.challenge?.noCraig;
 }
 
 /** Craig's Guardian Blessing: shield the duck house. Once per level. */
@@ -109,8 +115,18 @@ export function isOver(game: Game): boolean {
   return game.phase === 'won' || game.phase === 'lost';
 }
 
+/** Whether this duck can play today (a Daily Challenge can leave some out). */
+export function isDuckAllowed(game: Game, kind: DuckKind): boolean {
+  return game.challenge?.ducks?.includes(kind) ?? true;
+}
+
 export function canBuy(game: Game, kind: DuckKind): boolean {
-  return !isOver(game) && game.peas >= DUCKS[kind].cost;
+  return !isOver(game) && isDuckAllowed(game, kind) && game.peas >= DUCKS[kind].cost;
+}
+
+/** Whether ducks can be sold (a Daily Challenge can turn it off). */
+export function canSell(game: Game): boolean {
+  return !isOver(game) && !game.challenge?.noSelling;
 }
 
 /** Spends peas to place a duck. Returns undefined if you can't afford it. */
@@ -143,7 +159,7 @@ export function upgradeDuck(game: Game, duckId: number): boolean {
 
 /** Sells a duck for part of its cost. Returns the peas refunded, or undefined if it can't be sold. */
 export function sellDuck(game: Game, duckId: number): number | undefined {
-  if (isOver(game)) return undefined;
+  if (!canSell(game)) return undefined;
   const duck = game.battle.ducks.find((d) => d.id === duckId);
   if (!duck) return undefined;
   game.battle.ducks = game.battle.ducks.filter((d) => d !== duck);

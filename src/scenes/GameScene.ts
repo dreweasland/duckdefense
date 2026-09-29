@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { drawGrass, drawOutskirts, drawPath, drawPathEntrance, drawPond, scatterDecor } from '../art/terrain';
 import { BATTERY, FOUNTAIN } from '../data/dayNight';
-import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
+import type { Challenge } from '../data/challenges';
+import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { CHASES } from '../data/synergy';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
@@ -15,7 +16,9 @@ import {
   callNextWave,
   canBuy,
   canCallEarly,
+  canSell,
   earlyBonus,
+  isDuckAllowed,
   canUpgrade,
   setTargeting,
   upgradeDuck,
@@ -37,7 +40,8 @@ import {
 import { closestPointOnPolyline, type Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
 import { nameAt, nextUpgrade, statsAt } from '../logic/upgrades';
-import { recordWin, scoreFor, starsFor } from '../logic/progress';
+import { challengeSettings, dailyFor } from '../logic/daily';
+import { dailyRecord, recordDailyWin, recordWin, scoreFor, starsFor } from '../logic/progress';
 import { loadProgress, saveProgress } from '../save';
 import type { ResultSceneData } from './ResultScene';
 import { BACKDROP, COLORS, DEPTH, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
@@ -85,6 +89,8 @@ export interface GameSceneData {
   difficulty: Difficulty;
   /** Index into LEVELS (0 = the first level). */
   level?: number;
+  /** Play the Daily Challenge for this date (YYYY-MM-DD) instead; the date picks the level. */
+  daily?: string;
 }
 
 interface DuckSprite {
@@ -136,6 +142,8 @@ interface Effects {
 export class GameScene extends Phaser.Scene {
   private difficulty: Difficulty = 'easy';
   private levelIndex = 0;
+  /** The Daily Challenge being played, if any. */
+  private daily?: { date: string; challenge: Challenge };
   private level!: Level;
   private state!: Game;
   private selected: DuckKind = 'sunny';
@@ -179,6 +187,9 @@ export class GameScene extends Phaser.Scene {
   init(data: Partial<GameSceneData>): void {
     this.difficulty = data.difficulty ?? 'easy';
     this.levelIndex = Math.min(data.level ?? 0, LEVELS.length - 1);
+    const daily = data.daily ? dailyFor(data.daily) : undefined;
+    this.daily = daily && { date: daily.date, challenge: daily.challenge };
+    if (daily) this.levelIndex = Math.min(daily.level, LEVELS.length - 1);
   }
 
   create(): void {
@@ -186,8 +197,8 @@ export class GameScene extends Phaser.Scene {
     // Scene restarts reuse this object, so reset everything here.
     const info = LEVELS[this.levelIndex]!;
     this.level = parseLevel(info.map);
-    this.state = createGame(mapFromLevel(this.level), info.waves, this.difficulty);
-    this.selected = 'sunny';
+    this.state = createGame(mapFromLevel(this.level), info.waves, this.difficulty, this.daily?.challenge);
+    this.selected = DUCK_ORDER.find((kind) => isDuckAllowed(this.state, kind)) ?? 'sunny';
     this.duckSprites.clear();
     this.enemySprites.clear();
     this.pickerCards = [];
@@ -216,7 +227,13 @@ export class GameScene extends Phaser.Scene {
     this.craigButton = this.drawCraigButton();
     drawSoundButton(this, 1245, 685, DEPTH.hud);
     this.refreshHud();
-    this.time.delayedCall(350, () => this.showBanner(`Level ${this.levelIndex + 1}: ${info.name}`));
+    if (this.daily) {
+      const { challenge } = this.daily;
+      this.time.delayedCall(350, () => this.showBanner(`Daily Challenge: ${challenge.name}`));
+      this.time.delayedCall(2500, () => this.showChallengeInfo(challenge));
+    } else {
+      this.time.delayedCall(350, () => this.showBanner(`Level ${this.levelIndex + 1}: ${info.name}`));
+    }
   }
 
   update(time: number, deltaMs: number): void {
@@ -472,6 +489,7 @@ export class GameScene extends Phaser.Scene {
     this.callEarlyButton.container.setVisible(early);
     if (early) this.callEarlyButton.label.setText(`+${game.waves[game.waveIndex]!.bonusPeas + earlyBonus(game)}`);
     const blessing = canUseBlessing(game);
+    this.craigButton.setVisible(!game.challenge?.noCraig);
     this.craigButton.setAlpha(blessing ? 1 : 0.35);
     this.craigGlow.setVisible(blessing);
   }
@@ -528,6 +546,28 @@ export class GameScene extends Phaser.Scene {
     return image.setScale(fit);
   }
 
+  /** The Daily Challenge's twist, shown when the level starts. */
+  private showChallengeInfo(challenge: Challenge): void {
+    if (this.popup) return;
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    const card = drawCard(this.add.graphics(), 420, 150, { radius: 18, border: COLORS.gold, borderWidth: 5 });
+    const popup = this.add
+      .container(WORLD.width / 2, 250, [
+        card,
+        this.add.image(-172, -38, 'star').setDisplaySize(40, 40).setTint(COLORS.gold),
+        this.add.text(-142, -38, challenge.name, textStyle(28, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-186, -6, challenge.description, { ...textStyle(19, ink), wordWrap: { width: 372 } }).setOrigin(0, 0),
+      ])
+      .setDepth(DEPTH.hud + 5);
+    popup.setScale(0.8).setAlpha(0);
+    this.tweens.add({ targets: popup, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
+    this.popup = popup;
+    this.popupTimer = this.time.delayedCall(6000, () => {
+      if (this.popup !== popup) return;
+      this.tweens.add({ targets: popup, alpha: 0, duration: 250, onComplete: () => this.popup === popup && this.closePopup() });
+    });
+  }
+
   /** What a predator does and which duck is best against it, shown when you tap it in the preview. */
   private showEnemyInfo(kind: EnemyKind, tapped = true): void {
     this.cancelMove();
@@ -579,10 +619,29 @@ export class GameScene extends Phaser.Scene {
         parts.push(this.add.circle(31, -34, 11, 0x87ceeb).setStrokeStyle(2.5, COLORS.ink));
         parts.push(this.add.image(31, -34, 'hawk').setDisplaySize(17, 17));
       }
+      const allowed = isDuckAllowed(this.state, kind);
+      if (!allowed) {
+        // Not playing in today's Daily Challenge: a big "no" sign over the card.
+        parts.push(
+          this.add
+            .graphics()
+            .lineStyle(9, COLORS.ink)
+            .strokeCircle(0, -4, 30)
+            .lineBetween(-21, 17, 21, -25)
+            .lineStyle(5, 0xff6b5a)
+            .strokeCircle(0, -4, 30)
+            .lineBetween(-21, 17, 21, -25),
+        );
+      }
       const hit = this.add.zone(0, 0, CARD.width, CARD.height).setInteractive({ useHandCursor: true });
       parts.push(hit);
       const container = this.add.container(50 + i * CARD.spacing, CARD.y, parts).setDepth(DEPTH.hud);
       hit.on('pointerdown', () => {
+        if (!allowed) {
+          playSound(this, 'noPeas');
+          popSpeechBubble(this, container.x, container.y + 60, 'Day off today!', DEPTH.floatText);
+          return;
+        }
         this.cancelMove();
         this.selected = kind;
         playSound(this, 'tap');
@@ -855,9 +914,10 @@ export class GameScene extends Phaser.Scene {
     }
 
     const small = { width: 132, height: 54, fontSize: 26 };
-    parts.push(drawBigButton(this, -74, 192, 'Move', COLORS.blue, COLORS.blueDark, () => this.startMove(duckId), small));
-    // Sell shows how many peas you get back (upgrades included).
-    parts.push(
+    const sellable = canSell(this.state);
+    parts.push(drawBigButton(this, sellable ? -74 : 0, 192, 'Move', COLORS.blue, COLORS.blueDark, () => this.startMove(duckId), small));
+    // Sell shows how many peas you get back (upgrades included). A Daily Challenge can turn it off.
+    if (sellable) parts.push(
       drawBigButton(this, 74, 192, `+${sellValue(duck.kind, duck.level)}`, COLORS.orange, COLORS.orangeDark, () => this.sell(duckId), {
         ...small,
         icon: 'icon-pea',
@@ -1261,17 +1321,29 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'won':
       case 'lost': {
-        const result: ResultSceneData = { won: event.type === 'won', difficulty: this.difficulty, level: this.levelIndex };
+        const result: ResultSceneData = {
+          won: event.type === 'won',
+          difficulty: this.difficulty,
+          level: this.levelIndex,
+          daily: this.daily?.date,
+        };
         if (result.won) {
           // Save progress: this unlocks the next level and keeps the best stars and score.
+          // (A Daily Challenge win is saved on its own and doesn't unlock anything.)
           result.hearts = this.state.hearts;
           result.peas = this.state.peas;
-          result.stars = starsFor(this.state.hearts, DIFFICULTIES[this.difficulty].hearts);
+          result.stars = starsFor(this.state.hearts, challengeSettings(this.difficulty, this.daily?.challenge).hearts);
           result.score = scoreFor(this.state.hearts, this.state.peas, this.difficulty);
           const progress = loadProgress();
-          const previousBest = progress.levels[this.difficulty][this.levelIndex]?.bestScore ?? 0;
+          const previousBest = this.daily
+            ? (dailyRecord(progress, this.daily.date, this.difficulty)?.bestScore ?? 0)
+            : (progress.levels[this.difficulty][this.levelIndex]?.bestScore ?? 0);
           result.newBest = previousBest > 0 && result.score > previousBest;
-          saveProgress(recordWin(progress, this.difficulty, this.levelIndex, result.stars, result.score));
+          saveProgress(
+            this.daily
+              ? recordDailyWin(progress, this.daily.date, this.difficulty, result.stars, result.score)
+              : recordWin(progress, this.difficulty, this.levelIndex, result.stars, result.score),
+          );
         }
         this.time.delayedCall(1000, () => this.scene.start('ResultScene', result));
         break;

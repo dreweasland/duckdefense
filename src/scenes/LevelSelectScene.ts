@@ -4,7 +4,8 @@ import { drawGrass, drawOutskirts } from '../art/terrain';
 import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
 import { LEVELS } from '../data/levels';
 import { parseLevel, type Level } from '../logic/level';
-import { isUnlocked } from '../logic/progress';
+import { dailyDate, dailyFor } from '../logic/daily';
+import { dailyRecord, isUnlocked, type Progress } from '../logic/progress';
 import { loadProgress } from '../save';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
 import { drawCard, drawRoundButton, drawSoundButton } from '../ui/widgets';
@@ -50,6 +51,8 @@ export class LevelSelectScene extends Phaser.Scene {
       const y = 380 + row * (CARD.height + 30);
       this.drawLevelCard(x, y, i, info.name, parseLevel(info.map), progress.levels[this.difficulty][i]?.stars ?? 0, isUnlocked(progress, this.difficulty, i));
     });
+
+    this.drawDailyButton(cx, 648, progress);
 
     // Back to the title screen.
     const arrow = this.add
@@ -127,6 +130,48 @@ export class LevelSelectScene extends Phaser.Scene {
       playSound(this, 'tap');
       this.tweens.add({ targets: container, scale: 0.95, duration: 80, yoyo: true });
       const data: GameSceneData = { difficulty: this.difficulty, level: index };
+      this.go('GameScene', data);
+    });
+  }
+
+  /** Today's Daily Challenge: the same level and twist for everyone, with its own leaderboard. */
+  private drawDailyButton(x: number, y: number, progress: Progress): void {
+    const date = dailyDate();
+    const daily = dailyFor(date);
+    if (!daily) return;
+    const W = 600;
+    const H = 84;
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    const record = dailyRecord(progress, date, this.difficulty);
+    const parts: Phaser.GameObjects.GameObject[] = [
+      drawCard(this.add.graphics(), W, H, { radius: 22, fill: 0xfff0b3, border: COLORS.gold, borderWidth: 5 }),
+      this.add.image(-W / 2 + 46, 0, 'star').setDisplaySize(48, 48).setTint(COLORS.gold),
+      this.add.text(-W / 2 + 82, -16, 'Daily Challenge', textStyle(26, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+      this.add
+        .text(-W / 2 + 82, 16, `${daily.challenge.name}  ·  ${LEVELS[daily.level]?.name ?? ''}`, textStyle(20, { ...ink, color: '#8a5a20' }))
+        .setOrigin(0, 0.5),
+    ];
+    if (record) {
+      // Already won today: show the stars (you can still play again for a better score).
+      for (let s = 0; s < 3; s++) {
+        parts.push(this.add.image(W / 2 - 130 + s * 40, 0, 'star').setDisplaySize(36, 36).setTint(s < record.stars ? 0xffd23f : 0xd8d2cc));
+      }
+    } else {
+      const play = this.add.graphics().fillStyle(COLORS.green).fillCircle(0, 0, 26).lineStyle(4, COLORS.ink).strokeCircle(0, 0, 26);
+      play.fillStyle(0xffffff).fillTriangle(-8, -12, -8, 12, 13, 0).lineStyle(3, COLORS.ink).strokeTriangle(-8, -12, -8, 12, 13, 0);
+      play.x = W / 2 - 52;
+      parts.push(play);
+      this.tweens.add({ targets: play, scale: 1.1, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+    }
+    const hit = this.add.zone(0, 0, W, H).setInteractive({ useHandCursor: true });
+    parts.push(hit);
+    const container = this.add.container(x, y, parts);
+    container.setAlpha(0);
+    this.tweens.add({ targets: container, alpha: 1, duration: 260, delay: LEVELS.length * 90 });
+    hit.on('pointerdown', () => {
+      playSound(this, 'tap');
+      this.tweens.add({ targets: container, scale: 0.96, duration: 80, yoyo: true });
+      const data: GameSceneData = { difficulty: this.difficulty, daily: date };
       this.go('GameScene', data);
     });
   }

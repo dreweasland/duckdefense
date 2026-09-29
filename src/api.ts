@@ -26,8 +26,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T
   }
 }
 
-export async function fetchScores(level: number, difficulty: Difficulty): Promise<ApiResult<ScoreRow[]>> {
-  const result = await request<{ scores: ScoreRow[] }>(`/api/scores?level=${level}&difficulty=${difficulty}`);
+/** Top scores for a level, or for a Daily Challenge when `daily` (a YYYY-MM-DD date) is given. */
+export async function fetchScores(level: number, difficulty: Difficulty, daily?: string): Promise<ApiResult<ScoreRow[]>> {
+  const board = daily ? `daily=${encodeURIComponent(daily)}` : `level=${level}`;
+  const result = await request<{ scores: ScoreRow[] }>(`/api/scores?${board}&difficulty=${difficulty}`);
   return result.ok ? { ok: true, data: result.data.scores } : result;
 }
 
@@ -37,6 +39,7 @@ export async function postScore(entry: {
   difficulty: Difficulty;
   hearts: number;
   peas: number;
+  daily?: string;
 }): Promise<ApiResult<{ id: number; score: number; rank: number }>> {
   return request('/api/scores', {
     method: 'POST',

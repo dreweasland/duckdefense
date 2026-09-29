@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DIFFICULTIES } from '../data/difficulty';
 import { LEVEL_COUNT } from '../data/levelCount';
 import { LEVELS } from '../data/levels';
+import { challengeSettings, dailyFor } from './daily';
 import { MAX_PEAS, NAME_MAX_LENGTH, checkName, checkSubmission } from './leaderboard';
 import { scoreFor } from './progress';
 
@@ -51,6 +52,33 @@ describe('score submissions', () => {
 
   it('checks the name too', () => {
     expect(checkSubmission({ ...good, name: 'shit' }).ok).toBe(false);
+  });
+});
+
+describe('daily challenge submissions', () => {
+  const now = new Date('2026-09-29T12:00:00Z');
+  const today = dailyFor('2026-09-29')!;
+  const good = { name: 'Sunny Fan', difficulty: 'easy', hearts: 3, peas: 100, daily: '2026-09-29' };
+
+  it("takes today's level from the date, whatever level was sent", () => {
+    const result = checkSubmission({ ...good, level: (today.level + 1) % LEVEL_COUNT }, now);
+    expect(result).toEqual({
+      ok: true,
+      entry: { name: 'Sunny Fan', level: today.level, difficulty: 'easy', hearts: 3, peas: 100, daily: '2026-09-29', score: scoreFor(3, 100, 'easy') },
+    });
+  });
+
+  it("allows yesterday's challenge (a game that started before midnight), but nothing older or newer", () => {
+    expect(checkSubmission({ ...good, daily: '2026-09-28' }, now).ok).toBe(true);
+    expect(checkSubmission({ ...good, daily: '2026-09-27' }, now).ok).toBe(false);
+    expect(checkSubmission({ ...good, daily: '2026-09-30' }, now).ok).toBe(false);
+    expect(checkSubmission({ ...good, daily: 20260929 }, now).ok).toBe(false);
+  });
+
+  it("uses the twist's hearts to spot impossible scores", () => {
+    const maxHearts = challengeSettings('easy', today.challenge).hearts;
+    expect(checkSubmission({ ...good, hearts: maxHearts }, now).ok).toBe(true);
+    expect(checkSubmission({ ...good, hearts: maxHearts + 1 }, now).ok).toBe(false);
   });
 });
 
