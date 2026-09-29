@@ -4,7 +4,7 @@ import type { Difficulty } from '../data/difficulty';
 import { DIFFICULTIES } from '../data/difficulty';
 import { DUCK_ORDER } from '../data/ducks';
 import { COLORS, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
-import { drawBigButton } from '../ui/widgets';
+import { drawBigButton, drawSoundButton } from '../ui/widgets';
 import type { GameSceneData } from './GameScene';
 
 const POND = { center: { x: WORLD.width / 2, y: 420 }, radiusX: 330, radiusY: 95 };
@@ -52,6 +52,7 @@ export class TitleScene extends Phaser.Scene {
     drawBigButton(this, cx - 170, 610, DIFFICULTIES.easy.label, COLORS.green, COLORS.greenDark, () => start('easy')).setDepth(100);
     drawBigButton(this, cx + 170, 610, DIFFICULTIES.normal.label, COLORS.orange, COLORS.orangeDark, () => start('normal')).setDepth(100);
 
+    drawSoundButton(this, WORLD.width - 40, WORLD.height - 40, 100);
     this.cameras.main.fadeIn(300, 0, 0, 0);
   }
 }

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { isMuted, playSound, setMuted } from '../audio/sfx';
 import { COLORS, WORLD, textStyle } from './theme';
 
 /** A dark rounded "pill" behind HUD counters. Returns the graphics so it can be layered. */
@@ -75,9 +76,37 @@ export function drawBigButton(
   const button = scene.add.container(x, y, [g, face, hit]);
   hit.once('pointerdown', () => {
     draw(true);
+    playSound(scene, 'tap');
     scene.time.delayedCall(90, onTap);
   });
   return button;
+}
+
+/** A small round speaker button that turns sound on and off (remembered between visits). */
+export function drawSoundButton(scene: Phaser.Scene, x: number, y: number, depth: number): Phaser.GameObjects.Container {
+  const icon = scene.add.graphics();
+  const draw = () => {
+    icon.clear().fillStyle(0xffffff).lineStyle(3, COLORS.ink);
+    // Speaker.
+    icon.fillRect(-12, -5, 7, 10).strokeRect(-12, -5, 7, 10);
+    icon.fillTriangle(-5, -5, 5, -13, 5, 13).fillTriangle(-5, -5, 5, 13, -5, 5);
+    icon.strokeTriangle(-5, -5, 5, -13, 5, 13);
+    if (isMuted()) {
+      icon.lineStyle(4, 0xff6b5a).lineBetween(9, -7, 19, 7).lineBetween(19, -7, 9, 7);
+    } else {
+      icon.lineStyle(3, 0xffffff);
+      icon.beginPath().arc(6, 0, 8, -0.9, 0.9).strokePath();
+      icon.beginPath().arc(6, 0, 14, -0.9, 0.9).strokePath();
+    }
+  };
+  draw();
+  const back = scene.add.circle(0, 0, 26, COLORS.panel, 0.7).setStrokeStyle(3, 0xffffff, 0.35);
+  back.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+    setMuted(scene, !isMuted());
+    draw();
+    playSound(scene, 'tap');
+  });
+  return scene.add.container(x, y, [back, icon]).setDepth(depth);
 }
 
 /** A round button with an icon or glyph, e.g. play. */

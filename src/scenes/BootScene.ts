@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { allSprites } from '../art/sprites';
+import { isMuted, recordingKey, recordingUrls } from '../audio/sfx';
+import type { SoundKey } from '../data/sounds';
 import { FONT, RENDER_SCALE } from '../ui/theme';
 
 /** Turns the SVG art into textures and waits for the font, then shows the title. */
@@ -17,11 +19,16 @@ export class BootScene extends Phaser.Scene {
       // Loaded at the canvas's render scale so it stays sharp when the camera zooms.
       this.load.svg(sprite.key, url, { width: sprite.width * RENDER_SCALE, height: sprite.height * RENDER_SCALE });
     }
+    // The kids' recordings (any sound without one uses a built-in placeholder).
+    for (const [sound, url] of Object.entries(recordingUrls())) {
+      this.load.audio(recordingKey(sound as SoundKey), url);
+    }
   }
 
   create(): void {
     this.blobUrls.forEach((url) => URL.revokeObjectURL(url));
     this.blobUrls = [];
+    this.sound.mute = isMuted();
 
     // Small white dot for particles (tinted per effect).
     const g = this.make.graphics({ x: 0, y: 0 }, false);

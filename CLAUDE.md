@@ -108,8 +108,11 @@ When adding a feature, prefer a design where the tunable part lives in a data fi
   screens, and an Easy/Normal difficulty toggle.
 - **M3: Depth.** Pecking Loop synergy, flying hawks, day/night cycle with the solar
   battery, the fountain tower, Craig's blessing.
-- **M4: Make it ours.** The kids' sound pipeline, three or more kid-designed levels, the
-  boss fight. (Art was overhauled into polished vector art instead of the kids' drawings.)
+- **M4: Make it ours.** Sound system (the kids' recordings drop into `src/sounds/`; anything
+  missing uses a built-in placeholder), three levels (`src/data/levels.ts`), and the Night
+  Bandit boss fight at the end of level 3. Levels 2 and 3 were designed by Claude; the kids
+  can redesign them or add their own in Tiled. (Art was overhauled into polished vector art
+  instead of the kids' drawings.)
 - **M5: Polish.** Title screen, level select, save progress in localStorage, mobile touch
   support, and a family leaderboard on Workers + D1.
 

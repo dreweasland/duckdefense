@@ -3,6 +3,7 @@ import { drawGrass, drawOutskirts, drawPond, scatterDecor } from '../art/terrain
 import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER } from '../data/ducks';
 import { LEVELS } from '../data/levels';
+import { playSound } from '../audio/sfx';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
 import { drawBigButton, drawCard } from '../ui/widgets';
 import type { GameSceneData } from './GameScene';
@@ -106,5 +107,6 @@ export class ResultScene extends Phaser.Scene {
     }
 
     this.cameras.main.fadeIn(300, 0, 0, 0);
+    playSound(this, won ? 'win' : 'lose');
   }
 }

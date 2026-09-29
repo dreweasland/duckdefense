@@ -23,7 +23,8 @@ import {
 import { closestPointOnPolyline, type Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
 import { BACKDROP, COLORS, DEPTH, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
-import { drawCard, drawPill, drawRoundButton, popSpeechBubble } from '../ui/widgets';
+import { drawCard, drawPill, drawRoundButton, drawSoundButton, popSpeechBubble } from '../ui/widgets';
+import { playSound } from '../audio/sfx';
 
 const DUCK_SIZE = 84;
 const NEST_SIZE = 72;
@@ -141,6 +142,7 @@ export class GameScene extends Phaser.Scene {
     this.drawHud();
     this.goButton = this.drawGoButton();
     this.craigButton = this.drawCraigButton();
+    drawSoundButton(this, 1245, 685, DEPTH.hud);
     this.refreshHud();
     this.time.delayedCall(350, () => this.showBanner(`Level ${this.levelIndex + 1}: ${info.name}`));
   }
@@ -397,6 +399,7 @@ export class GameScene extends Phaser.Scene {
       const container = this.add.container(50 + i * CARD.spacing, CARD.y, parts).setDepth(DEPTH.hud);
       hit.on('pointerdown', () => {
         this.selected = kind;
+        playSound(this, 'tap');
         this.tweens.add({ targets: duck, scale: duck.scale * 1.15, duration: 90, yoyo: true });
         this.refreshHud();
       });
@@ -417,10 +420,12 @@ export class GameScene extends Phaser.Scene {
       const duck = buyDuck(this.state, this.selected, slot);
       if (!duck) {
         // Not enough peas: wiggle the pea counter.
+        playSound(this, 'noPeas');
         this.tweens.add({ targets: this.peasText, x: '+=6', duration: 50, yoyo: true, repeat: 3 });
         return;
       }
       nest.disableInteractive();
+      playSound(this, 'place');
       this.tweens.killTweensOf(plus);
       plus.destroy();
       this.drawPlacedDuck(duck.id, duck.kind, slot);
@@ -582,27 +587,36 @@ export class GameScene extends Phaser.Scene {
         this.showAttack(event.duckId, event.target, event.hitIds, event.wingFlap);
         break;
       case 'alarmQuack':
+        playSound(this, 'quack');
         this.showAlarmQuack(event.duckId);
         break;
       case 'held':
+        playSound(this, 'nope');
         this.showHeld(event.duckId);
         break;
       case 'defeated':
+        playSound(this, 'chasedOff');
         this.removeEnemySprite(event.enemy.id, 'defeated');
         this.flyPea(event.position, ENEMIES[event.enemy.kind].peas);
-        if (ENEMIES[event.enemy.kind].boss) this.showBossGone(event.position, 'The Night Bandit ran away!');
+        if (ENEMIES[event.enemy.kind].boss) {
+          playSound(this, 'bossDefeated');
+          this.showBossGone(event.position, 'The Night Bandit ran away!');
+        }
         break;
       case 'reachedHouse':
+        playSound(this, 'heartLost');
         this.removeEnemySprite(event.enemy.id, 'house');
         this.showHouseRaid();
         if (ENEMIES[event.enemy.kind].boss) this.showBossGone(this.house, 'The Night Bandit raided the snacks!');
         break;
       case 'shooed':
+        playSound(this, 'shoo');
         this.removeEnemySprite(event.enemy.id, 'shooed');
         popSpeechBubble(this, this.house.x, this.house.y - 150, 'Shoo!', DEPTH.floatText);
         if (ENEMIES[event.enemy.kind].boss) this.showBossGone(this.house, 'Craig shooed the Night Bandit!');
         break;
       case 'waveCleared':
+        playSound(this, 'waveCleared');
         this.showBanner(`Wave ${event.waveIndex + 1} cleared!`, event.bonus);
         break;
       case 'won':
@@ -644,6 +658,7 @@ export class GameScene extends Phaser.Scene {
         duration: 140,
         onComplete: () => {
           ball.destroy();
+          playSound(this, 'splash');
           flash();
           this.fx.splash.explode(12, target.x, target.y - 20);
           this.ring(target.x, target.y - 20, DUCKS.sunny.splashRadius, COLORS.water, 250);
@@ -653,11 +668,13 @@ export class GameScene extends Phaser.Scene {
       // A quick lunge and peck.
       const dx = Math.sign(target.x - position.x) * 10;
       this.tweens.add({ targets: sprite.art, x: dx, duration: 70, yoyo: true });
+      playSound(this, 'peck');
       flash();
       this.ring(target.x, target.y - 20, 18, 0xffffff, 180);
     }
 
     if (wingFlap) {
+      playSound(this, 'flap');
       this.fx.feathers.explode(8, position.x, position.y - 30);
       this.floatText({ x: target.x, y: target.y - 50 }, 'FLAP!', '#ffffff');
     }
@@ -711,6 +728,7 @@ export class GameScene extends Phaser.Scene {
       ease: 'Cubic.In',
       onComplete: () => {
         pea.destroy();
+        playSound(this, 'pea');
         this.tweens.add({ targets: this.peasText, scale: 1.2, duration: 80, yoyo: true });
       },
     });
@@ -761,6 +779,7 @@ export class GameScene extends Phaser.Scene {
   // --- The Night Bandit ------------------------------------------------------
 
   private showBossEntrance(enemy: Enemy): void {
+    playSound(this, 'bossArrives');
     this.showBanner('The Night Bandit is here!');
     this.cameras.main.shake(450, 0.004);
 
@@ -789,6 +808,7 @@ export class GameScene extends Phaser.Scene {
 
   private showSummon(bossId: number, minions: Enemy[]): void {
     const boss = this.enemySprites.get(bossId);
+    playSound(this, 'whistle');
     if (boss) popSpeechBubble(this, boss.root.x, boss.root.y - 110, 'Tweet-tweet!', DEPTH.floatText);
     for (const minion of minions) {
       this.addEnemySprite(minion);
@@ -819,6 +839,7 @@ export class GameScene extends Phaser.Scene {
     container.setDepth(DEPTH.hud);
     hit.on('pointerdown', () => {
       if (!startWave(this.state)) return;
+      playSound(this, 'waveStart');
       this.tweens.add({ targets: container, scale: 0.85, duration: 80, yoyo: true });
       this.refreshHud();
     });
@@ -839,6 +860,7 @@ export class GameScene extends Phaser.Scene {
       .setDepth(DEPTH.hud);
     frame.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
       if (!useBlessing(this.state)) return;
+      playSound(this, 'craig');
       this.showBanner('Craig is watching over the duck house!');
       this.shield.setScale(0);
       this.tweens.add({ targets: this.shield, scale: 1, duration: 450, ease: 'Back.Out' });
