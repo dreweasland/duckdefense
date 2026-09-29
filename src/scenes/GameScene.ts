@@ -44,7 +44,8 @@ const MAX_STEP = 0.1; // seconds; stops predators teleporting after a stalled fr
 // HUD positions.
 const PEA_ICON = { x: 596, y: 38 };
 // Duck picker cards along the top-left, kept short so the path below stays visible.
-const CARD = { width: 84, height: 90, y: 48, spacing: 92 };
+// Low enough that the raised (selected) card and its corner badges never go off the top of the screen.
+const CARD = { width: 84, height: 90, y: 54, spacing: 92, lift: 3 };
 const GO_BUTTON = { x: 1200, y: 70 };
 const CRAIG_BUTTON = { x: 100, y: 640 };
 
@@ -399,7 +400,7 @@ export class GameScene extends Phaser.Scene {
         borderWidth: selected ? 6 : 3,
       });
       picker.container.setAlpha(canBuy(game, picker.kind) ? 1 : 0.45);
-      picker.container.y = selected ? CARD.y - 4 : CARD.y;
+      picker.container.y = selected ? CARD.y - CARD.lift : CARD.y;
     }
     this.goButton.setVisible(game.phase === 'building');
     const blessing = canUseBlessing(game);
@@ -410,19 +411,20 @@ export class GameScene extends Phaser.Scene {
   private drawPicker(): void {
     DUCK_ORDER.forEach((kind, i) => {
       const card = drawCard(this.add.graphics(), CARD.width, CARD.height);
-      const duck = this.add.image(0, -12, `duck-${kind}`).setDisplaySize(62, 62);
+      const duck = this.add.image(0, -6, `duck-${kind}`).setDisplaySize(56, 56);
       const pea = this.add.image(-18, 30, 'icon-pea').setDisplaySize(18, 18);
       const cost = this.add
         .text(-6, 30, String(DUCKS[kind].cost), textStyle(19, { color: COLORS.inkCss, strokeThickness: 0 }))
         .setOrigin(0, 0.5);
       const parts: Phaser.GameObjects.GameObject[] = [card, duck, pea, cost];
       // Power badge: what's special about this duck.
-      parts.push(this.add.circle(-32, -36, 14, 0xffffff).setStrokeStyle(3, COLORS.ink));
-      parts.push(this.add.image(-32, -36, `power-${DUCKS[kind].power.icon}`).setDisplaySize(20, 20));
+      // Badges sit in the card's top corners, clear of the duck's head.
+      parts.push(this.add.circle(-31, -34, 11, 0xffffff).setStrokeStyle(2.5, COLORS.ink));
+      parts.push(this.add.image(-31, -34, `power-${DUCKS[kind].power.icon}`).setDisplaySize(16, 16));
       if (DUCKS[kind].canHitFlying) {
         // Hawk badge: this duck can hit flyers.
-        parts.push(this.add.circle(32, -36, 14, 0x87ceeb).setStrokeStyle(3, COLORS.ink));
-        parts.push(this.add.image(32, -36, 'hawk').setDisplaySize(22, 22));
+        parts.push(this.add.circle(31, -34, 11, 0x87ceeb).setStrokeStyle(2.5, COLORS.ink));
+        parts.push(this.add.image(31, -34, 'hawk').setDisplaySize(17, 17));
       }
       const hit = this.add.zone(0, 0, CARD.width, CARD.height).setInteractive({ useHandCursor: true });
       parts.push(hit);

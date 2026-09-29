@@ -9,7 +9,7 @@ export interface Area {
 }
 
 export const HUD_AREAS: Area[] = [
-  { x: 0, y: 0, width: 390, height: 100 }, // duck picker
+  { x: 0, y: 0, width: 390, height: 105 }, // duck picker
   { x: 560, y: 0, width: 600, height: 70 }, // peas, hearts, wave, battery
   { x: 1150, y: 20, width: 110, height: 105 }, // start-wave button
   { x: 40, y: 580, width: 120, height: 120 }, // Craig
