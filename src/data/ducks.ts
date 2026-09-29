@@ -9,6 +9,7 @@ export interface DuckStats {
     name: string;
     description: string;
     icon: 'splash' | 'flap' | 'quack' | 'hold'; // picture on the duck's card
+    stat: string; // what the damage report counts for this power, e.g. "Froze" (predators frozen)
   };
   cost: number; // peas to place this duck
   range: number; // how far away the duck can reach a predator
@@ -67,7 +68,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
   // Sunny, the Blue Swedish veteran: steady all-rounder with a small splash.
   sunny: {
     name: 'Sunny',
-    power: { name: 'Splash!', description: 'Throws water that splashes a whole group.', icon: 'splash' },
+    power: { name: 'Splash!', description: 'Throws water that splashes a whole group.', icon: 'splash', stat: 'Splashed' },
     cost: 100,
     range: 150,
     damage: 12,
@@ -84,7 +85,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
   // gives a Wing Flap that knocks predators back.
   potato: {
     name: 'Potato',
-    power: { name: 'Wing Flap', description: 'Super fast pecks. Every 5th one flaps predators backward.', icon: 'flap' },
+    power: { name: 'Wing Flap', description: 'Super fast pecks. Every 5th one flaps predators backward.', icon: 'flap', stat: 'Flapped' },
     cost: 120,
     range: 140, // a little shorter than Sunny; his strength is speed
     damage: 6,
@@ -107,7 +108,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
   // every predator in range.
   chester: {
     name: 'Chester',
-    power: { name: 'Alarm Quack', description: 'QUACK! Freezes every predator nearby, even hawks.', icon: 'quack' },
+    power: { name: 'Alarm Quack', description: 'QUACK! Freezes every predator nearby, even hawks.', icon: 'quack', stat: 'Froze' },
     cost: 150,
     range: 160,
     damage: 5,
@@ -131,7 +132,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
   // hawks and the Night Bandit scare everyone else.
   curtis: {
     name: 'Curtis',
-    power: { name: 'Hold the Line', description: 'Never gets scared. Predators near him slow to a trudge.', icon: 'hold' },
+    power: { name: 'Hold the Line', description: 'Never gets scared. Predators near him slow to a trudge.', icon: 'hold', stat: 'Slowed' },
     cost: 80,
     range: 160, // his slow zone: big enough to cover a bend in the path
     damage: 4,

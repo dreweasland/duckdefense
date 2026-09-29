@@ -165,6 +165,8 @@ export class GameScene extends Phaser.Scene {
   private speedButton!: { container: Phaser.GameObjects.Container; draw: () => void };
   private callEarlyButton!: { container: Phaser.GameObjects.Container; label: Phaser.GameObjects.Text };
   /** The open call-early card, if any, and its peas text (kept up to date as predators are chased off). */
+  /** The open duck panel's report numbers, refreshed as the battle goes on. */
+  private panelReport?: { row: Phaser.GameObjects.Container; refresh: () => void };
   private callEarlyCard?: { popup: Phaser.GameObjects.Container; bonus: Phaser.GameObjects.Text };
   private craigButton!: Phaser.GameObjects.Container;
   private craigGlow!: Phaser.GameObjects.Image;
@@ -218,6 +220,7 @@ export class GameScene extends Phaser.Scene {
     this.previewKey = '';
     this.bannerQueue = [];
     this.callEarlyCard = undefined;
+    this.panelReport = undefined;
     this.bannerShowing = false;
 
     this.drawWorld();
@@ -269,7 +272,10 @@ export class GameScene extends Phaser.Scene {
     this.shield.setVisible(shielded);
     this.fx.sparkles.emitting = shielded;
 
-    if (events.length > 0) this.refreshHud();
+    if (events.length > 0) {
+      this.refreshHud();
+      if (this.panelReport?.row.active) this.panelReport.refresh();
+    }
   }
 
   // --- World -------------------------------------------------------------
@@ -903,13 +909,14 @@ export class GameScene extends Phaser.Scene {
     scrim.on('pointerdown', () => this.closePopup());
 
     const partner = chasePartner(this.state.battle, duck)?.kind;
-    const H = 500; // panel height; content is laid out from its center
+    const H = 530; // panel height; content is laid out from its center
     const card = drawCard(this.add.graphics(), 310, H, { radius: 18 });
     const block = this.add.zone(0, 0, 310, H).setInteractive(); // taps on the panel itself don't close it
     const info = this.add.container(0, -150, this.duckInfoLines(duck.kind, partner, duck.level));
-    const aim = this.drawTargetingButtons(duckId, duck.kind, 0, -28);
-    const divider = this.add.rectangle(0, 14, 270, 3, COLORS.ink, 0.12);
-    const parts: Phaser.GameObjects.GameObject[] = [card, block, info, aim, divider];
+    const stats = this.drawDuckReport(duckId, duck.kind, 0, -50);
+    const aim = this.drawTargetingButtons(duckId, duck.kind, 0, 2);
+    const divider = this.add.rectangle(0, 44, 270, 3, COLORS.ink, 0.12);
+    const parts: Phaser.GameObjects.GameObject[] = [card, block, info, stats, aim, divider];
 
     // Upgrade section.
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
@@ -917,12 +924,12 @@ export class GameScene extends Phaser.Scene {
     if (next) {
       const affordable = canUpgrade(this.state, duckId);
       parts.push(
-        this.add.text(-138, 38, `Upgrade: ${next.name}`, textStyle(20, { ...ink, weight: '700' })).setOrigin(0, 0.5),
-        this.add.text(-138, 64, next.description, { ...textStyle(16, ink), wordWrap: { width: 276 } }).setOrigin(0, 0.5),
+        this.add.text(-138, 68, `Upgrade: ${next.name}`, textStyle(20, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-138, 94, next.description, { ...textStyle(16, ink), wordWrap: { width: 276 } }).setOrigin(0, 0.5),
         drawBigButton(
           this,
           0,
-          116,
+          146,
           `${next.cost}`,
           affordable ? COLORS.green : 0xb8b0a8,
           affordable ? COLORS.greenDark : 0x8a8079,
@@ -931,15 +938,15 @@ export class GameScene extends Phaser.Scene {
         ),
       );
     } else {
-      parts.push(this.add.text(0, 80, 'Fully upgraded!', textStyle(26, { color: COLORS.goldCss, weight: '700' })).setOrigin(0.5));
+      parts.push(this.add.text(0, 110, 'Fully upgraded!', textStyle(26, { color: COLORS.goldCss, weight: '700' })).setOrigin(0.5));
     }
 
     const small = { width: 132, height: 54, fontSize: 26 };
     const sellable = canSell(this.state);
-    parts.push(drawBigButton(this, sellable ? -74 : 0, 192, 'Move', COLORS.blue, COLORS.blueDark, () => this.startMove(duckId), small));
+    parts.push(drawBigButton(this, sellable ? -74 : 0, 222, 'Move', COLORS.blue, COLORS.blueDark, () => this.startMove(duckId), small));
     // Sell shows how many peas you get back (upgrades included). A Daily Challenge can turn it off.
     if (sellable) parts.push(
-      drawBigButton(this, 74, 192, `+${sellValue(duck.kind, duck.level)}`, COLORS.orange, COLORS.orangeDark, () => this.sell(duckId), {
+      drawBigButton(this, 74, 222, `+${sellValue(duck.kind, duck.level)}`, COLORS.orange, COLORS.orangeDark, () => this.sell(duckId), {
         ...small,
         icon: 'icon-pea',
       }),
@@ -961,6 +968,29 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: panel, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
     const container = this.add.container(0, 0, [scrim, panel]).setDepth(DEPTH.hud + 4);
     this.popup = container;
+  }
+
+  /** Three numbers for a placed duck: predators chased off, its power's count, and damage. Kept up to date while open. */
+  private drawDuckReport(duckId: number, kind: DuckKind, x: number, y: number): Phaser.GameObjects.Container {
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    const labels = ['Chased off', DUCKS[kind].power.stat, 'Damage'];
+    const values = labels.map((label, i) => {
+      const cx = (i - 1) * 96;
+      return {
+        value: this.add.text(cx, -8, '0', textStyle(20, { ...ink, weight: '700' })).setOrigin(0.5),
+        label: this.add.text(cx, 11, label, textStyle(13, { ...ink, color: '#8a7f85' })).setOrigin(0.5),
+      };
+    });
+    const back = this.add.graphics().fillStyle(COLORS.ink, 0.06).fillRoundedRect(-140, -24, 280, 48, 12);
+    const row = this.add.container(x, y, [back, ...values.flatMap((v) => [v.value, v.label])]);
+    const refresh = () => {
+      const report = this.state.battle.ducks.find((d) => d.id === duckId)?.report;
+      if (!report) return;
+      [report.chasedOff, report.special, Math.round(report.damage)].forEach((n, i) => values[i]!.value.setText(n.toLocaleString()));
+    };
+    refresh();
+    this.panelReport = { row, refresh };
+    return row;
   }
 
   /** "Aim at" buttons: which predator this duck goes after. The chosen one is gold. */
@@ -1348,6 +1378,7 @@ export class GameScene extends Phaser.Scene {
           difficulty: this.difficulty,
           level: this.levelIndex,
           daily: this.daily?.date,
+          report: this.state.battle.report,
         };
         if (result.won) {
           // Save progress: this unlocks the next level and keeps the best stars and score.

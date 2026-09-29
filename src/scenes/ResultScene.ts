@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { drawGrass, drawOutskirts, drawPond, scatterDecor } from '../art/terrain';
 import type { Difficulty } from '../data/difficulty';
-import { DUCK_ORDER } from '../data/ducks';
+import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { LEVELS } from '../data/levels';
 import { postScore } from '../api';
+import { topDuck, type KindReport } from '../logic/battle';
 import { playSound } from '../audio/sfx';
 import { askForName } from '../ui/nameForm';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
@@ -22,6 +23,7 @@ export interface ResultSceneData {
   hearts?: number; // hearts and peas left, for posting to the leaderboard
   peas?: number;
   daily?: string; // the Daily Challenge date, if that's what was played
+  report?: Partial<Record<DuckKind, KindReport>>; // what each kind of duck did (the damage report)
 }
 
 const POND = { center: { x: WORLD.width / 2, y: 610 }, radiusX: 420, radiusY: 95 };
@@ -50,8 +52,8 @@ export class ResultScene extends Phaser.Scene {
     scatterDecor(this, { ponds: [POND], blocked: [{ x: 200, y: 40, width: 880, height: 480 }] }, 43);
 
     // Panel.
-    const panel = drawCard(this.add.graphics(), 820, 420, { radius: 28, borderWidth: 5 });
-    this.add.container(cx, 260, [panel]).setDepth(50);
+    const panel = drawCard(this.add.graphics(), 820, 460, { radius: 28, borderWidth: 5 });
+    this.add.container(cx, 262, [panel]).setDepth(50);
 
     // Losing should never feel harsh: silly message, same big "again" button.
     this.add
@@ -85,8 +87,8 @@ export class ResultScene extends Phaser.Scene {
       for (let s = 0; s < 3; s++) {
         const earned = s < stars;
         const star = this.add
-          .image(cx + (s - 1) * 90, 250, 'star')
-          .setDisplaySize(80, 80)
+          .image(cx + (s - 1) * 80, 236, 'star')
+          .setDisplaySize(66, 66)
           .setTint(earned ? 0xffd23f : 0xd8d2cc)
           .setDepth(52);
         // Pop in one after another; stars you didn't earn are smaller and grey.
@@ -95,28 +97,40 @@ export class ResultScene extends Phaser.Scene {
         this.tweens.add({ targets: star, scale: earned ? full : full * 0.8, delay: 300 + s * 250, duration: 300, ease: 'Back.Out' });
       }
       const score = this.add
-        .text(cx, 318, `Score  ${this.result.score ?? 0}`, textStyle(30, { color: COLORS.inkCss, strokeThickness: 0, weight: '700' }))
+        .text(cx, 296, `Score  ${this.result.score ?? 0}`, textStyle(30, { color: COLORS.inkCss, strokeThickness: 0, weight: '700' }))
         .setOrigin(0.5)
         .setDepth(51);
-      this.drawPostButton(cx + 300, 318);
+      this.drawPostButton(cx + 300, 296);
       if (this.result.newBest) {
         this.add
-          .text(score.x + score.width / 2 + 12, 318, 'New best!', textStyle(22, { color: '#e0447a', stroke: '#ffffff', strokeThickness: 5 }))
+          .text(score.x + score.width / 2 + 12, 296, 'New best!', textStyle(22, { color: '#e0447a', stroke: '#ffffff', strokeThickness: 5 }))
           .setOrigin(0, 0.5)
           .setDepth(51)
           .setAngle(-6);
       }
     }
 
-    // Happy ducks hop when you win; on a loss they shake their heads.
+    // Happy ducks hop when you win; on a loss they shake their heads. Under each one, the
+    // damage report: what it did this level. The duck that did the most damage wears a crown.
+    const report = this.result.report;
+    const top = report && topDuck(report);
     DUCK_ORDER.forEach((kind, i) => {
-      const y = won ? 400 : 320;
-      const duck = this.add.image(cx - 240 + i * 160, y, `duck-${kind}`).setDisplaySize(won ? 90 : 110, won ? 90 : 110).setDepth(51);
-      this.tweens.add(
-        won
-          ? { targets: duck, y: y - 30, duration: 320, yoyo: true, repeat: -1, delay: i * 120, ease: 'Quad.Out' }
-          : { targets: duck, angle: { from: -8, to: 8 }, duration: 260, yoyo: true, repeat: -1, delay: i * 80 },
-      );
+      const x = report ? cx - 285 + i * 190 : cx - 240 + i * 160;
+      const size = report ? (won ? 72 : 96) : won ? 90 : 110;
+      const y = report ? (won ? 380 : 320) : won ? 400 : 320;
+      const stats = report?.[kind];
+      const stayedHome = !!report && !stats?.placed;
+      const parts: Phaser.GameObjects.GameObject[] = [this.add.image(0, 0, `duck-${kind}`).setDisplaySize(size, size)];
+      if (kind === top) parts.push(this.drawCrown(0, -size / 2 - 4));
+      const duck = this.add.container(x, y, parts).setDepth(51).setAlpha(stayedHome ? 0.4 : 1);
+      if (!stayedHome) {
+        this.tweens.add(
+          won
+            ? { targets: duck, y: y - (report ? 12 : 30), duration: 320, yoyo: true, repeat: -1, delay: i * 120, ease: 'Quad.Out' }
+            : { targets: duck, angle: { from: -8, to: 8 }, duration: 260, yoyo: true, repeat: -1, delay: i * 80 },
+        );
+      }
+      if (report) this.drawDuckReport(x, y + size / 2 + 8, kind, stats);
     });
 
     if (won) {
@@ -156,6 +170,36 @@ export class ResultScene extends Phaser.Scene {
 
     this.cameras.main.fadeIn(300, 0, 0, 0);
     playSound(this, won ? 'win' : 'lose');
+  }
+
+  /** A duck's damage report under its picture. Ducks that weren't placed "stayed home". */
+  private drawDuckReport(x: number, y: number, kind: DuckKind, stats: KindReport | undefined): void {
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    if (!stats?.placed) {
+      this.add.text(x, y + 8, 'Stayed home', textStyle(16, { ...ink, color: '#8a7f85' })).setOrigin(0.5).setDepth(51);
+      return;
+    }
+    const name = stats.placed > 1 ? `${DUCKS[kind].name} ×${stats.placed}` : DUCKS[kind].name;
+    const lines = [
+      this.add.text(x, y, name, textStyle(15, { ...ink, color: '#8a7f85' })),
+      this.add.text(x, y + 19, `Chased off ${stats.chasedOff}`, textStyle(17, { ...ink, weight: '700' })),
+      this.add.text(x, y + 39, `${Math.round(stats.damage).toLocaleString()} damage · ${DUCKS[kind].power.stat} ${stats.special}`, textStyle(13, ink)),
+    ];
+    lines.forEach((line) => line.setOrigin(0.5, 0).setDepth(51));
+  }
+
+  /** A little gold crown for the duck that did the most damage. */
+  private drawCrown(x: number, y: number): Phaser.GameObjects.Graphics {
+    const points = [-18, 8, -18, -8, -9, 0, 0, -12, 9, 0, 18, -8, 18, 8].map((n, i) => n + (i % 2 ? y : x));
+    const shape = Array.from({ length: points.length / 2 }, (_, i) => new Phaser.Math.Vector2(points[i * 2]!, points[i * 2 + 1]!));
+    return this.add
+      .graphics()
+      .fillStyle(COLORS.gold)
+      .fillPoints(shape, true)
+      .lineStyle(3, COLORS.ink)
+      .strokePoints(shape, true)
+      .fillStyle(0xff7aa2)
+      .fillCircle(x, y + 2, 3);
   }
 
   /** "Post" puts this win on the public leaderboard (asks for a name first). */

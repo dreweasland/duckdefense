@@ -82,6 +82,10 @@ everywhere: dialogue, tooltips, code comments.
   `src/data/enemies.ts`).
 - **Call early:** Once a wave's predators are all out, you can send the next wave right away
   for its bonus plus peas per predator still out (`EARLY_CALL` in `src/data/waves.ts`).
+- **Damage report:** Each duck counts its damage, the predators it chased off (last hit),
+  and its power (`power.stat` in `src/data/ducks.ts`: splashed, flapped, froze, slowed).
+  Tap a duck to see its numbers; the result screen totals them per kind, and the top
+  damage-dealer wears a crown.
 - **Daily Challenge:** One level and one twist per UTC day, the same for everyone, with its
   own leaderboard. Twists live in `src/data/challenges.ts`; the rules shared with the server
   are in `src/logic/daily.ts`.

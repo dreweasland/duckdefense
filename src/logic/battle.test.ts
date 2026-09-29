@@ -3,7 +3,7 @@ import { DUCKS } from '../data/ducks';
 import { ENEMIES } from '../data/enemies';
 import { FOUNTAIN, NIGHT } from '../data/dayNight';
 import { PECKING_LOOP } from '../data/synergy';
-import { attackInterval, createBattle, damageTo, enemyPosition, isHidden, isRefreshed, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
+import { attackInterval, createBattle, topDuck, damageTo, enemyPosition, isHidden, isRefreshed, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
 import { statsAt } from './upgrades';
 import { makePath } from './path';
 
@@ -616,5 +616,77 @@ describe('targeting', () => {
     step(battle, 0);
     expect(near.hp).toBe(raccoon.maxHp - DUCKS.potato.damage);
     expect(far.hp).toBe(999);
+  });
+});
+
+describe('damage report', () => {
+  it('counts damage and who landed the last hit, without counting overkill', () => {
+    const battle = newBattle();
+    const enemy = spawnEnemy(battle, 'raccoon');
+    enemy.distance = 1000;
+    enemy.hp = 5;
+    const duck = placeDuck(battle, 'potato', { x: 1000, y: 20 });
+    step(battle, 0);
+    expect(duck.report).toEqual({ damage: 5, chasedOff: 1, special: 0 });
+    expect(battle.report.potato).toEqual({ placed: 1, damage: 5, chasedOff: 1, special: 0 });
+  });
+
+  it("counts Sunny's splash hits on predators other than her target", () => {
+    const battle = newBattle();
+    const target = spawnEnemy(battle, 'raccoon');
+    const nextTo = spawnEnemy(battle, 'raccoon');
+    target.distance = 1000;
+    nextTo.distance = 1000 - sunny.splashRadius / 2;
+    const duck = placeDuck(battle, 'sunny', { x: 1000, y: 20 });
+    step(battle, 0);
+    expect(duck.report).toEqual({ damage: 2 * sunny.damage, chasedOff: 0, special: 1 });
+  });
+
+  it("counts Chester's frozen predators and Potato's flaps", () => {
+    const battle = newBattle();
+    spawnEnemy(battle, 'raccoon').distance = 1000;
+    spawnEnemy(battle, 'raccoon').distance = 1030;
+    const chester = placeDuck(battle, 'chester', { x: 1000, y: 20 });
+    step(battle, 0);
+    expect(chester.report.special).toBe(2);
+
+    const flapBattle = newBattle();
+    const raccoon = spawnEnemy(flapBattle, 'raccoon');
+    raccoon.distance = 1000;
+    raccoon.hp = 10_000;
+    const potato = placeDuck(flapBattle, 'potato', { x: 1000, y: 20 });
+    for (let i = 0; i < DUCKS.potato.wingFlap!.everyNthAttack; i++) step(flapBattle, DUCKS.potato.attackInterval);
+    expect(potato.report.special).toBe(1);
+  });
+
+  it('counts each predator Curtis slows once', () => {
+    const battle = newBattle();
+    const enemy = spawnEnemy(battle, 'raccoon');
+    enemy.distance = 1000;
+    const curtis = placeDuck(battle, 'curtis', { x: 1000, y: 20 });
+    step(battle, 0.1);
+    step(battle, 0.1);
+    expect(curtis.report.special).toBe(1);
+  });
+
+  it("keeps a kind's totals after one is sold, and counts how many were placed", () => {
+    const battle = newBattle();
+    const enemy = spawnEnemy(battle, 'raccoon');
+    enemy.distance = 1000;
+    placeDuck(battle, 'sunny', { x: 1000, y: 20 });
+    step(battle, 0);
+    battle.ducks = [];
+    placeDuck(battle, 'sunny', { x: 0, y: 500 });
+    expect(battle.report.sunny).toEqual({ placed: 2, damage: sunny.damage, chasedOff: 0, special: 0 });
+  });
+});
+
+describe('top duck', () => {
+  it('is the kind that did the most damage, with ties going to more chased off', () => {
+    const row = (damage: number, chasedOff: number) => ({ placed: 1, damage, chasedOff, special: 0 });
+    expect(topDuck({ sunny: row(100, 2), potato: row(300, 1), chester: row(20, 0) })).toBe('potato');
+    expect(topDuck({ sunny: row(100, 2), potato: row(100, 5) })).toBe('potato');
+    expect(topDuck({ curtis: row(0, 0) })).toBeUndefined();
+    expect(topDuck({})).toBeUndefined();
   });
 });

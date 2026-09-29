@@ -30,6 +30,24 @@ export interface Enemy {
   summonTime: number;
   /** Seconds a sneaky predator stays spotted after an Alarm Quack flushes it out. */
   revealedTime: number;
+  /** Ducks that have slowed this predator (so each Curtis counts it once in the damage report). */
+  slowedBy: number[];
+}
+
+/**
+ * The damage report: what a duck (or every duck of a kind) has done this level.
+ * `special` counts its power: predators splashed (Sunny), flaps (Potato),
+ * predators frozen (Chester), or predators slowed (Curtis).
+ */
+export interface DuckReport {
+  damage: number; // health taken off predators (not counting overkill)
+  chasedOff: number; // predators it landed the last hit on
+  special: number;
+}
+
+/** A duck kind's report for the whole level: every one placed, including any that were sold. */
+export interface KindReport extends DuckReport {
+  placed: number;
 }
 
 export interface Duck {
@@ -48,6 +66,8 @@ export interface Duck {
   scaredTime: number;
   /** Which predator it goes after when more than one is in reach. */
   targeting: Targeting;
+  /** What this duck has done so far. */
+  report: DuckReport;
 }
 
 export interface Fountain {
@@ -72,6 +92,8 @@ export interface Battle {
   enemySpeed: number;
   /** Predators that arrive while this is true move faster. */
   night: boolean;
+  /** The damage report for each kind of duck placed this level. */
+  report: Partial<Record<DuckKind, KindReport>>;
 }
 
 /** Things that happened during a step, so the scene can animate them. */
@@ -103,6 +125,7 @@ export function createBattle(path: Path, options: BattleOptions = {}): Battle {
     flyersSpawned: 0,
     enemySpeed: options.enemySpeed ?? 1,
     night: false,
+    report: {},
   };
 }
 
@@ -138,6 +161,7 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind): Enemy {
     scared: [],
     summonTime: stats.summons?.every ?? 0,
     revealedTime: 0,
+    slowedBy: [],
   };
   battle.enemies.push(enemy);
   return enemy;
@@ -154,9 +178,21 @@ export function placeDuck(battle: Battle, kind: DuckKind, position: Point): Duck
     level: 0,
     scaredTime: 0,
     targeting: DEFAULT_TARGETING,
+    report: { damage: 0, chasedOff: 0, special: 0 },
   };
   battle.ducks.push(duck);
+  kindReport(battle, kind).placed++;
   return duck;
+}
+
+function kindReport(battle: Battle, kind: DuckKind): KindReport {
+  return (battle.report[kind] ??= { placed: 0, damage: 0, chasedOff: 0, special: 0 });
+}
+
+/** Adds to a duck's report, and to its kind's report for the level. */
+function credit(battle: Battle, duck: Duck, stat: keyof DuckReport, amount: number): void {
+  duck.report[stat] += amount;
+  kindReport(battle, duck.kind)[stat] += amount;
 }
 
 export function enemyPosition(enemy: Enemy): Point {
@@ -264,9 +300,18 @@ function slowFor(battle: Battle, enemy: Enemy): number {
   if (isFlying(enemy)) return 1;
   const at = enemyPosition(enemy);
   let factor = 1;
+  let slower: Duck | undefined;
   for (const duck of battle.ducks) {
     const stats = statsAt(duck.kind, duck.level);
-    if (stats.slowZone && distance(at, duck.position) <= stats.range) factor = Math.min(factor, stats.slowZone.slow);
+    if (stats.slowZone && distance(at, duck.position) <= stats.range && stats.slowZone.slow < factor) {
+      factor = stats.slowZone.slow;
+      slower = duck;
+    }
+  }
+  // The damage report counts each predator once for the Curtis doing the slowing.
+  if (slower && !enemy.slowedBy.includes(slower.id)) {
+    enemy.slowedBy.push(slower.id);
+    credit(battle, slower, 'special', 1);
   }
   return factor;
 }
@@ -373,6 +418,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
           if (enemyStats.sneaky) enemy.revealedTime = Math.max(enemy.revealedTime, enemyStats.sneaky.revealTime);
         }
         duck.abilityCooldown = stats.alarmQuack.cooldown;
+        credit(battle, duck, 'special', inRange.length);
         events.push({ type: 'alarmQuack', duckId: duck.id, stunnedIds: inRange.map((e) => e.id) });
       }
     }
@@ -395,7 +441,13 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
           ((stats.canHitFlying || !isFlying(e)) && distance(enemyPosition(e), targetPos) <= stats.splashRadius)),
     );
     const damage = stats.damage * (isRefreshed(battle, duck) ? 1 + FOUNTAIN.damageBoost : 1);
-    for (const enemy of hit) enemy.hp -= damageTo(enemy, damage);
+    for (const enemy of hit) {
+      const before = enemy.hp;
+      enemy.hp -= damageTo(enemy, damage);
+      credit(battle, duck, 'damage', before - Math.max(0, enemy.hp));
+      if (enemy.hp <= 0) credit(battle, duck, 'chasedOff', 1);
+    }
+    if (stats.splashRadius > 0) credit(battle, duck, 'special', hit.length - 1);
     duck.cooldown = attackInterval(battle, duck);
     duck.attacks++;
 
@@ -406,6 +458,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
       const push = stats.wingFlap.pushBack * (1 - (ENEMIES[target.kind].pushResistance ?? 0));
       target.distance = Math.max(0, target.distance - push);
       target.pushRecovery = WING_FLAP_RECOVERY;
+      credit(battle, duck, 'special', 1);
     }
 
     events.push({ type: 'attack', duckId: duck.id, target: targetPos, hitIds: hit.map((e) => e.id), wingFlap });
@@ -420,4 +473,15 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
   battle.enemies = battle.enemies.filter((e) => e.hp > 0);
 
   return events;
+}
+
+/** The duck kind that did the most damage this level (ties go to more predators chased off). */
+export function topDuck(report: Battle['report']): DuckKind | undefined {
+  let best: { kind: DuckKind; stats: KindReport } | undefined;
+  for (const [kind, stats] of Object.entries(report) as [DuckKind, KindReport][]) {
+    if (stats.damage <= 0) continue;
+    const better = !best || stats.damage > best.stats.damage || (stats.damage === best.stats.damage && stats.chasedOff > best.stats.chasedOff);
+    if (better) best = { kind, stats };
+  }
+  return best?.kind;
 }
