@@ -70,7 +70,7 @@ everywhere: dialogue, tooltips, code comments.
 - **Selling and moving:** Tap a placed duck to see its power and sell it (75% of its cost
   back) or move it to another empty nest (free, but it needs a second to settle). Both
   numbers are in `src/data/ducks.ts`.
-- **Lives:** The duck house has hearts. Each predator that reaches it costs one.
+- **Lives:** The duck house has hearts. Each predator that reaches it costs one (the Night Bandit costs five).
 - **Day/night cycle:** Night waves are harder. The **solar battery meter** powers the
   pond fountain tower, which slows enemies. It charges during day waves and drains at
   night, just like the real Victron setup.
