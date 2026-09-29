@@ -19,7 +19,7 @@
     {
       "binding": "DB",
       "database_name": "duckdefense",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "22c38714-fd92-48c6-be0f-43fcc05dd7d8",
       "migrations_dir": "migrations"
     }
   ],
