@@ -10,7 +10,12 @@ export interface EnemyStats {
   hearts: number; // hearts it costs if it reaches the duck house
   flying: boolean; // flyers skip the path and dive straight at the house
   boss?: boolean; // gets a big health bar and a dramatic entrance
-  tooBigToHold?: boolean; // Curtis can't hold it
+  // Scares ducks near it, so they stop attacking for a moment (Curtis is never scared).
+  scares?: {
+    radius: number; // how close a duck has to be
+    time: number; // seconds a duck stays scared
+    when: 'swooping' | 'whistling'; // as it flies past a duck, or when it whistles for minions
+  };
   summons?: {
     enemy: EnemyKind;
     count: number; // how many it calls each time
@@ -38,6 +43,7 @@ export const ENEMIES: Record<EnemyKind, EnemyStats> = {
     peas: 15,
     hearts: 1,
     flying: true,
+    scares: { radius: 70, time: 1.5, when: 'swooping' },
   },
 
   // Boss: a masked mega-raccoon who whistles for raccoon minions.
@@ -49,7 +55,7 @@ export const ENEMIES: Record<EnemyKind, EnemyStats> = {
     hearts: 5,
     flying: false,
     boss: true,
-    tooBigToHold: true,
+    scares: { radius: 150, time: 1.2, when: 'whistling' },
     summons: { enemy: 'raccoon', count: 2, every: 7 },
   },
 };

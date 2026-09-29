@@ -8,13 +8,13 @@ export const MAX_UPGRADE_LEVEL = 2;
 export function statsAt(kind: DuckKind, level: number): DuckStats {
   let stats = DUCKS[kind];
   for (const upgrade of stats.upgrades.slice(0, level)) {
-    const { wingFlap, alarmQuack, holdTheLine, ...simple } = upgrade.changes;
+    const { wingFlap, alarmQuack, slowZone, ...simple } = upgrade.changes;
     stats = {
       ...stats,
       ...simple,
       wingFlap: stats.wingFlap && { ...stats.wingFlap, ...wingFlap },
       alarmQuack: stats.alarmQuack && { ...stats.alarmQuack, ...alarmQuack },
-      holdTheLine: stats.holdTheLine && { ...stats.holdTheLine, ...holdTheLine },
+      slowZone: stats.slowZone && { ...stats.slowZone, ...slowZone },
     };
   }
   return stats;

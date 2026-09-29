@@ -40,7 +40,7 @@ for the kids to tweak numbers in one data file.
 | **Sunny** | Blue Swedish | The veteran | Steady all-rounder with a small splash-damage radius |
 | **Potato** | Black Swedish | The chaser | Fast attack. "Wing Flap" knockback, a nod to his signature untucked wing |
 | **Chester** | Magpie | The elder | "Alarm Quack" briefly stuns every enemy in range, on a cooldown |
-| **Curtis** | Magpie | The unbothered one | Immune to fear and slow debuffs. Tanky blocker that holds the line |
+| **Curtis** | Magpie | The unbothered one | Never scared (the others get scared by hawks and the Night Bandit). Predators near him slow to a trudge |
 
 ### Pecking Loop synergy
 In the real flock, Sunny chases Chester, Potato chases Sunny, and Curtis ignores everyone.
@@ -61,9 +61,9 @@ everywhere: dialogue, tooltips, code comments.
 | Raccoon | Ground path | Baseline enemy. Clever: occasionally dodges |
 | Fox | Ground path | Fast, low health |
 | Mink | Ground path | Small and slippery. Harder to hit |
-| Hawk | Flying | Ignores the path and dives straight at the house. Only some ducks can hit it |
+| Hawk | Flying | Ignores the path and dives straight at the house. Only some ducks can hit it. Scares ducks it swoops over |
 | Snapping Turtle | From the pond | Slow, huge health. Spawns out of the water |
-| **Boss: The Night Bandit** | Ground path | A masked mega-raccoon at the end of each world |
+| **Boss: The Night Bandit** | Ground path | A masked mega-raccoon at the end of each world. Whistles up raccoon minions, scaring nearby ducks |
 
 ## Economy and systems
 

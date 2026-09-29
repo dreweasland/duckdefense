@@ -17,12 +17,12 @@ export interface Enemy {
   path: Path;
   /** How far along its path it has walked (or flown), in pixels. */
   distance: number;
-  /** Seconds it stays frozen (stunned or held) before moving again. */
+  /** Seconds it stays frozen (stunned) before moving again. */
   stopTime: number;
-  /** Ducks that have already held this predator, so each only holds it once. */
-  heldBy: number[];
-  /** True while the fountain is slowing it (for drawing). */
-  slowed: boolean;
+  /** What's slowing it right now, if anything (for drawing). */
+  slowedBy?: 'fountain' | 'curtis';
+  /** Ducks this predator has already scared (swooping hawks scare each duck once). */
+  scared: number[];
   /** Seconds until it next calls for minions (only for predators that summon). */
   summonTime: number;
 }
@@ -39,6 +39,8 @@ export interface Duck {
   attacks: number;
   /** Upgrades bought: 0, 1, or 2. */
   level: number;
+  /** Seconds this duck stays scared (no attacks or powers). */
+  scaredTime: number;
 }
 
 export interface Fountain {
@@ -67,7 +69,8 @@ export interface Battle {
 export type BattleEvent =
   | { type: 'attack'; duckId: number; target: Point; hitIds: number[]; wingFlap: boolean }
   | { type: 'alarmQuack'; duckId: number; stunnedIds: number[] }
-  | { type: 'held'; duckId: number; enemyId: number }
+  /** A predator scared some ducks. Fearless ducks (Curtis) in range shrug it off. */
+  | { type: 'scared'; enemyId: number; duckIds: number[]; fearlessIds: number[] }
   | { type: 'summoned'; enemyId: number; minions: Enemy[] }
   | { type: 'defeated'; enemy: Enemy; position: Point }
   | { type: 'reachedHouse'; enemy: Enemy };
@@ -116,8 +119,7 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind): Enemy {
     path,
     distance: 0,
     stopTime: 0,
-    heldBy: [],
-    slowed: false,
+    scared: [],
     summonTime: stats.summons?.every ?? 0,
   };
   battle.enemies.push(enemy);
@@ -133,6 +135,7 @@ export function placeDuck(battle: Battle, kind: DuckKind, position: Point): Duck
     abilityCooldown: 0,
     attacks: 0,
     level: 0,
+    scaredTime: 0,
   };
   battle.ducks.push(duck);
   return duck;
@@ -185,26 +188,70 @@ export function attackInterval(battle: Battle, duck: Duck): number {
   return chasePartner(battle, duck) ? base / (1 + PECKING_LOOP.attackSpeedBonus) : base;
 }
 
-function inFountainSpray(battle: Battle, enemy: Enemy): boolean {
+export function isScared(duck: Duck): boolean {
+  return duck.scaredTime > 0;
+}
+
+/**
+ * How much a ground predator is slowed right now: by the fountain's spray or by Curtis.
+ * Slows don't stack; the strongest one wins. Hawks fly over both.
+ */
+function slowFor(battle: Battle, enemy: Enemy): { factor: number; by?: 'fountain' | 'curtis' } {
+  let best: { factor: number; by?: 'fountain' | 'curtis' } = { factor: 1 };
+  if (isFlying(enemy)) return best;
+  const at = enemyPosition(enemy);
   const { fountain } = battle;
-  return (
-    !!fountain?.on &&
-    !isFlying(enemy) && // the spray doesn't reach hawks up in the air
-    distance(enemyPosition(enemy), fountain.position) <= FOUNTAIN.range
-  );
+  if (fountain?.on && distance(at, fountain.position) <= FOUNTAIN.range && FOUNTAIN.slow < best.factor) {
+    best = { factor: FOUNTAIN.slow, by: 'fountain' };
+  }
+  for (const duck of battle.ducks) {
+    const stats = statsAt(duck.kind, duck.level);
+    if (stats.slowZone && distance(at, duck.position) <= stats.range && stats.slowZone.slow < best.factor) {
+      best = { factor: stats.slowZone.slow, by: 'curtis' };
+    }
+  }
+  return best;
+}
+
+/** Scares the ducks within `radius` of a point (fearless ducks just shrug). */
+function scareDucks(
+  battle: Battle,
+  enemy: Enemy,
+  at: Point,
+  radius: number,
+  time: number,
+  onlyOnce: boolean,
+): BattleEvent | undefined {
+  const duckIds: number[] = [];
+  const fearlessIds: number[] = [];
+  for (const duck of battle.ducks) {
+    if (distance(duck.position, at) > radius) continue;
+    if (onlyOnce && enemy.scared.includes(duck.id)) continue;
+    enemy.scared.push(duck.id);
+    if (statsAt(duck.kind, duck.level).fearless) {
+      fearlessIds.push(duck.id);
+    } else {
+      duck.scaredTime = Math.max(duck.scaredTime, time);
+      duckIds.push(duck.id);
+    }
+  }
+  return duckIds.length || fearlessIds.length ? { type: 'scared', enemyId: enemy.id, duckIds, fearlessIds } : undefined;
 }
 
 /** Advances the battle by `dt` seconds. */
 export function step(battle: Battle, dt: number): BattleEvent[] {
   const events: BattleEvent[] = [];
 
+  for (const duck of battle.ducks) duck.scaredTime = Math.max(0, duck.scaredTime - dt);
+
   // 1. Predators head for the house, unless something has frozen them.
   for (const enemy of battle.enemies) {
-    enemy.slowed = inFountainSpray(battle, enemy);
+    const slow = slowFor(battle, enemy);
+    enemy.slowedBy = slow.by;
     if (enemy.stopTime > 0) {
       enemy.stopTime = Math.max(0, enemy.stopTime - dt);
     } else {
-      enemy.distance += enemy.speed * (enemy.slowed ? FOUNTAIN.slow : 1) * dt;
+      enemy.distance += enemy.speed * slow.factor * dt;
     }
     if (enemy.distance >= enemy.path.length) {
       events.push({ type: 'reachedHouse', enemy });
@@ -212,7 +259,15 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
   }
   battle.enemies = battle.enemies.filter((e) => e.distance < e.path.length);
 
-  // 2. Bosses call for minions, which appear just behind them (not while stunned).
+  // 2. Swooping hawks scare the ducks they fly low over (each duck once per hawk).
+  for (const enemy of battle.enemies) {
+    const scares = ENEMIES[enemy.kind].scares;
+    if (scares?.when !== 'swooping') continue;
+    const event = scareDucks(battle, enemy, enemyPosition(enemy), scares.radius, scares.time, true);
+    if (event) events.push(event);
+  }
+
+  // 3. Bosses call for minions, which appear just behind them (not while stunned).
   for (const enemy of [...battle.enemies]) {
     const summons = ENEMIES[enemy.kind].summons;
     if (!summons || enemy.stopTime > 0) continue;
@@ -226,12 +281,18 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
       minions.push(minion);
     }
     events.push({ type: 'summoned', enemyId: enemy.id, minions });
+    // The whistle scares nearby ducks too.
+    const scares = ENEMIES[enemy.kind].scares;
+    if (scares?.when === 'whistling') {
+      const event = scareDucks(battle, enemy, enemyPosition(enemy), scares.radius, scares.time, false);
+      if (event) events.push(event);
+    }
   }
 
-  // 3. Special abilities.
+  // 4. Special abilities (scared ducks can't use them).
   for (const duck of battle.ducks) {
     duck.abilityCooldown = Math.max(0, duck.abilityCooldown - dt);
-    if (duck.abilityCooldown > 0) continue;
+    if (duck.abilityCooldown > 0 || isScared(duck)) continue;
     const stats = statsAt(duck.kind, duck.level);
 
     // Chester's Alarm Quack: freeze every predator in range, hawks included.
@@ -245,25 +306,12 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
         events.push({ type: 'alarmQuack', duckId: duck.id, stunnedIds: inRange.map((e) => e.id) });
       }
     }
-
-    // Curtis holds the line: stop the next ground predator that walks up, once each.
-    if (stats.holdTheLine) {
-      const target = enemiesInRange(battle, duck.position, stats.range)
-        .filter((e) => !isFlying(e) && !ENEMIES[e.kind].tooBigToHold && !e.heldBy.includes(duck.id))
-        .sort((a, b) => remaining(a) - remaining(b))[0];
-      if (target) {
-        target.stopTime = Math.max(target.stopTime, stats.holdTheLine.holdTime);
-        target.heldBy.push(duck.id);
-        duck.abilityCooldown = stats.holdTheLine.holdTime;
-        events.push({ type: 'held', duckId: duck.id, enemyId: target.id });
-      }
-    }
   }
 
-  // 4. Ducks that are ready attack the predator closest to the house.
+  // 5. Ducks that are ready attack the predator closest to the house (not while scared).
   for (const duck of battle.ducks) {
     duck.cooldown = Math.max(0, duck.cooldown - dt);
-    if (duck.cooldown > 0) continue;
+    if (duck.cooldown > 0 || isScared(duck)) continue;
 
     const stats = statsAt(duck.kind, duck.level);
     const target = pickTarget(battle, duck.position, stats.range, stats.canHitFlying);
@@ -289,7 +337,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     events.push({ type: 'attack', duckId: duck.id, target: targetPos, hitIds: hit.map((e) => e.id), wingFlap });
   }
 
-  // 5. Predators out of health run away.
+  // 6. Predators out of health run away.
   for (const enemy of battle.enemies) {
     if (enemy.hp <= 0) {
       events.push({ type: 'defeated', enemy, position: enemyPosition(enemy) });

@@ -186,6 +186,7 @@ export class GameScene extends Phaser.Scene {
     const events = update(this.state, Math.min(deltaMs / 1000, MAX_STEP));
     events.forEach((event) => this.handleEvent(event));
     this.syncEnemySprites(time);
+    this.syncDuckSprites();
 
     // These change smoothly, so update them every frame.
     const charge = this.state.battery / BATTERY.capacity;
@@ -938,7 +939,11 @@ export class GameScene extends Phaser.Scene {
       sprite.hpFill.fillColor = health > 0.5 ? 0x6ee06e : health > 0.25 ? 0xffd23f : 0xff6b5a;
       sprite.dizzy.setVisible(enemy.stopTime > 0);
 
-      sprite.ripple?.setVisible(enemy.slowed);
+      // A ring at its feet while slowed: blue for the fountain's spray, dusty brown for Curtis.
+      if (sprite.ripple) {
+        sprite.ripple.setVisible(!!enemy.slowedBy);
+        sprite.ripple.setStrokeStyle(sprite.ripple.lineWidth, enemy.slowedBy === 'curtis' ? 0xb08a58 : COLORS.water, 0.95);
+      }
       // A quick red "ouch" tint when hit (keeps the art readable even when hit constantly).
       if (time < sprite.flashUntil) sprite.art.setTint(0xff9a9a);
       else sprite.art.clearTint();
@@ -982,9 +987,8 @@ export class GameScene extends Phaser.Scene {
         playSound(this, 'quack');
         this.showAlarmQuack(event.duckId);
         break;
-      case 'held':
-        playSound(this, 'nope');
-        this.showHeld(event.duckId);
+      case 'scared':
+        this.showScared(event.duckIds, event.fearlessIds);
         break;
       case 'defeated':
         playSound(this, 'chasedOff');
@@ -1100,9 +1104,35 @@ export class GameScene extends Phaser.Scene {
     this.floatText({ x: position.x, y: position.y - 70 }, 'QUACK!', COLORS.goldCss);
   }
 
-  private showHeld(duckId: number): void {
-    const found = this.duckSprite(duckId);
-    if (found) popSpeechBubble(this, found.position.x, found.position.y - 70, 'Nope.', DEPTH.floatText);
+  /** Scared ducks shiver and say "Eek!"; Curtis doesn't care. */
+  private showScared(duckIds: number[], fearlessIds: number[]): void {
+    if (duckIds.length) playSound(this, 'eek');
+    // A few bubbles at most, so a big scare doesn't flood the screen.
+    duckIds.slice(0, 3).forEach((id) => {
+      const found = this.duckSprite(id);
+      if (found) popSpeechBubble(this, found.position.x, found.position.y - 70, 'Eek!', DEPTH.floatText);
+    });
+    for (const id of fearlessIds) {
+      const found = this.duckSprite(id);
+      if (!found) continue;
+      playSound(this, 'nope');
+      popSpeechBubble(this, found.position.x, found.position.y - 70, 'Meh.', DEPTH.floatText);
+    }
+  }
+
+  /** Scared ducks look pale and shiver until they calm down. */
+  private syncDuckSprites(): void {
+    for (const duck of this.state.battle.ducks) {
+      const sprite = this.duckSprites.get(duck.id);
+      if (!sprite) continue;
+      if (duck.scaredTime > 0) {
+        sprite.art.setTint(0xc6d4ec);
+        sprite.art.setAngle(Math.sin(this.time.now / 30) * 4);
+      } else if (sprite.art.isTinted) {
+        sprite.art.clearTint();
+        sprite.art.setAngle(0);
+      }
+    }
   }
 
   private showHouseRaid(): void {

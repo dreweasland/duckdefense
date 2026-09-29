@@ -160,6 +160,10 @@ const PLACEHOLDERS: Record<SoundKey, (ctx: AudioContext, volume: number) => void
     tone(ctx, { type: 'triangle', from: 220, to: 200, duration: 0.12, volume: 0.25 * v });
     tone(ctx, { type: 'triangle', from: 180, to: 150, start: 0.14, duration: 0.2, volume: 0.25 * v });
   },
+  eek: (ctx, v) => {
+    tone(ctx, { type: 'square', from: 900, to: 1700, duration: 0.12, volume: 0.07 * v });
+    tone(ctx, { type: 'square', from: 1100, to: 1900, start: 0.1, duration: 0.1, volume: 0.06 * v });
+  },
   chasedOff: (ctx, v) => {
     tone(ctx, { type: 'sine', from: 500, to: 1400, duration: 0.14, volume: 0.15 * v });
     noise(ctx, { filter: 'lowpass', from: 900, duration: 0.2, volume: 0.15 * v });

@@ -8,6 +8,7 @@ export type SoundKey =
   | 'flap'
   | 'quack'
   | 'nope'
+  | 'eek'
   | 'chasedOff'
   | 'pea'
   | 'heartLost'
@@ -37,7 +38,8 @@ export const SOUNDS: Record<SoundKey, SoundInfo> = {
   peck: { when: 'Potato, Chester, or Curtis pecks', volume: 0.4 },
   flap: { when: "Potato's Wing Flap", volume: 0.6 },
   quack: { when: "Chester's Alarm Quack", volume: 0.8 },
-  nope: { when: 'Curtis holds a predator ("Nope.")', volume: 0.6 },
+  nope: { when: 'Curtis shrugs off a scare ("Meh.")', volume: 0.6 },
+  eek: { when: 'Ducks get scared by a hawk or the Night Bandit ("Eek!")', volume: 0.6 },
   chasedOff: { when: 'A predator runs away', volume: 0.5 },
   pea: { when: 'A pea lands in the pea counter', volume: 0.4 },
   heartLost: { when: 'A predator gets into the duck house (should be funny!)', volume: 0.7 },
@@ -65,4 +67,5 @@ export const MIN_GAP_MS: Partial<Record<SoundKey, number>> = {
   chasedOff: 80,
   pea: 60,
   quack: 150,
+  eek: 250,
 };

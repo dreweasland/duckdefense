@@ -26,9 +26,10 @@ export interface DuckStats {
     cooldown: number; // seconds between quacks
     stunTime: number; // seconds every predator in range is frozen
   };
-  holdTheLine?: {
-    holdTime: number; // seconds a predator is stopped when it walks into range (once per predator)
+  slowZone?: {
+    slow: number; // ground predators in range walk at this fraction of their speed (0.5 = half)
   };
+  fearless?: boolean; // never scared by hawks or the Night Bandit
 
   // Two upgrades, bought in order from the duck's panel. Each lists only what changes.
   upgrades: [Upgrade, Upgrade];
@@ -45,7 +46,7 @@ export interface Upgrade {
     splashRadius?: number;
     wingFlap?: Partial<NonNullable<DuckStats['wingFlap']>>;
     alarmQuack?: Partial<NonNullable<DuckStats['alarmQuack']>>;
-    holdTheLine?: Partial<NonNullable<DuckStats['holdTheLine']>>;
+    slowZone?: Partial<NonNullable<DuckStats['slowZone']>>;
   };
 }
 
@@ -121,22 +122,23 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
     ],
   },
 
-  // Curtis, the unbothered Magpie: short reach and a light peck, but he holds
-  // the line, stopping each predator that walks up to him. (He'll also ignore
-  // fear and slow debuffs once predators can cause them.)
+  // Curtis, the unbothered Magpie: a light peck, but nothing scares him, and
+  // predators near him slow to a trudge. He's the duck that keeps working when
+  // hawks and the Night Bandit scare everyone else.
   curtis: {
     name: 'Curtis',
-    power: { name: 'Hold the Line', description: 'Stops each predator that walks up to him. Nope.', icon: 'hold' },
+    power: { name: 'Hold the Line', description: 'Never gets scared. Predators near him slow to a trudge.', icon: 'hold' },
     cost: 80,
-    range: 130, // most slots are 110 from the path, so this gives him a stretch to guard
+    range: 160, // his slow zone: big enough to cover a bend in the path
     damage: 4,
     attackInterval: 1,
     splashRadius: 0,
     canHitFlying: false,
-    holdTheLine: { holdTime: 2 },
+    slowZone: { slow: 0.35 },
+    fearless: true,
     upgrades: [
-      { name: 'Stubborn Curtis', cost: 70, description: 'Holds predators for longer.', changes: { holdTheLine: { holdTime: 3 } } },
-      { name: 'Unmovable Curtis', cost: 140, description: 'Reaches farther and pecks harder.', changes: { range: 150, damage: 8 } },
+      { name: 'Stubborn Curtis', cost: 70, description: 'Predators trudge even slower.', changes: { slowZone: { slow: 0.25 } } },
+      { name: 'Unmovable Curtis', cost: 140, description: 'Bigger slow zone, harder peck.', changes: { range: 190, damage: 8 } },
     ],
   },
 };

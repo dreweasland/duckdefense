@@ -9,7 +9,8 @@ automatically. Any sound without a recording plays a built-in placeholder.
 | `peck` | Potato, Chester, or Curtis pecks |
 | `flap` | Potato's Wing Flap |
 | `quack` | Chester's Alarm Quack |
-| `nope` | Curtis holds a predator ("Nope.") |
+| `nope` | Curtis shrugs off a scare ("Meh.") |
+| `eek` | Ducks get scared by a hawk or the Night Bandit ("Eek!") |
 | `chasedOff` | A predator runs away |
 | `pea` | A pea lands in the pea counter |
 | `heartLost` | A predator gets into the duck house (make it funny!) |
