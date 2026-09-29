@@ -175,6 +175,9 @@ export class GameScene extends Phaser.Scene {
   private nightLights: Phaser.GameObjects.Image[] = [];
   private peckingLoop!: Phaser.GameObjects.Container;
   private shownNight = false;
+  /** Banners waiting to be shown, so two never land on top of each other. */
+  private bannerQueue: { message: string; bonus: number }[] = [];
+  private bannerShowing = false;
   private preview!: Phaser.GameObjects.Container;
   /** Which wave the preview is showing, so it's only rebuilt when that changes. */
   private previewKey = '';
@@ -210,6 +213,8 @@ export class GameScene extends Phaser.Scene {
     this.nightLights = [];
     this.bossBar = undefined;
     this.previewKey = '';
+    this.bannerQueue = [];
+    this.bannerShowing = false;
 
     this.drawWorld();
     this.fx = this.createEffects();
@@ -1317,7 +1322,8 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'waveCleared':
         playSound(this, 'waveCleared');
-        this.showBanner(`Wave ${event.waveIndex + 1} cleared!`, event.bonus);
+        // After the last wave the win screen takes over, so no banner for it.
+        if (event.waveIndex + 1 < this.state.waves.length) this.showBanner(`Wave ${event.waveIndex + 1} cleared!`, event.bonus);
         break;
       case 'won':
       case 'lost': {
@@ -1491,7 +1497,17 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: text, y: at.y - 40, alpha: 0, duration: 900, ease: 'Cubic.Out', onComplete: () => text.destroy() });
   }
 
+  /** Shows a big banner in the middle of the screen. If one is already up, this one waits its turn. */
   private showBanner(message: string, bonus = 0): void {
+    this.bannerQueue.push({ message, bonus });
+    if (!this.bannerShowing) this.showNextBanner();
+  }
+
+  private showNextBanner(): void {
+    const next = this.bannerQueue.shift();
+    this.bannerShowing = !!next;
+    if (!next) return;
+    const { message, bonus } = next;
     const text = this.add.text(0, 0, message, textStyle(44, { weight: '700' })).setOrigin(0.5);
     const parts: Phaser.GameObjects.GameObject[] = [];
     let width = text.width + 70;
@@ -1525,6 +1541,8 @@ export class GameScene extends Phaser.Scene {
       ],
       onComplete: () => banner.destroy(),
     });
+    // The next banner (if any) pops in as this one starts to fade away.
+    this.time.delayedCall(1620, () => this.showNextBanner());
   }
 
   // --- The Night Bandit ------------------------------------------------------
