@@ -176,6 +176,10 @@ const PLACEHOLDERS: Record<SoundKey, (ctx: AudioContext, volume: number) => void
     tone(ctx, { type: 'sine', from: 560, to: 280, duration: 0.14, volume: 0.25 * v });
     notes(ctx, 'sine', [1320, 1760], 0.06, 0.1 * v);
   },
+  upgrade: (ctx, v) => {
+    notes(ctx, 'triangle', [523, 784, 1047], 0.07, 0.18 * v, 0.25);
+    tone(ctx, { type: 'sine', from: 1568, to: 2093, start: 0.2, duration: 0.25, volume: 0.08 * v });
+  },
   move: (ctx, v) => {
     tone(ctx, { type: 'sine', from: 300, to: 700, duration: 0.18, volume: 0.2 * v });
     tone(ctx, { type: 'sine', from: 400, to: 300, start: 0.3, duration: 0.08, volume: 0.2 * v });

@@ -11,6 +11,8 @@ import { chasePartner, enemyPosition, isFlying, type Enemy } from '../logic/batt
 import {
   buyDuck,
   canBuy,
+  canUpgrade,
+  upgradeDuck,
   moveDuck,
   sellDuck,
   sellValue,
@@ -26,6 +28,7 @@ import {
 } from '../logic/game';
 import { closestPointOnPolyline, type Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
+import { nameAt, nextUpgrade, statsAt } from '../logic/upgrades';
 import { recordWin, scoreFor, starsFor } from '../logic/progress';
 import { loadProgress, saveProgress } from '../save';
 import type { ResultSceneData } from './ResultScene';
@@ -62,6 +65,10 @@ interface DuckSprite {
   root: Phaser.GameObjects.Container;
   art: Phaser.GameObjects.Image;
   range: Phaser.GameObjects.Arc;
+  /** Gold chevrons showing how many upgrades the duck has. */
+  badge: Phaser.GameObjects.Graphics;
+  /** Display size before upgrades (ducks grow a little with each one). */
+  baseSize: number;
 }
 
 interface Nest {
@@ -509,8 +516,9 @@ export class GameScene extends Phaser.Scene {
     const size = kind === 'curtis' ? DUCK_SIZE * 1.12 : DUCK_SIZE;
     const art = this.add.image(0, -size * 0.28, `duck-${kind}`).setDisplaySize(size, size);
     art.setFlipX(this.facesLeft(at));
-    const root = this.add.container(at.x, at.y, [art]).setDepth(entityDepth(at.y));
-    this.duckSprites.set(id, { root, art, range });
+    const badge = this.add.graphics();
+    const root = this.add.container(at.x, at.y, [art, badge]).setDepth(entityDepth(at.y));
+    this.duckSprites.set(id, { root, art, range, badge, baseSize: size });
     // Tap a duck to see its power, or to move or sell it.
     const tex = art.frame;
     art
@@ -546,8 +554,8 @@ export class GameScene extends Phaser.Scene {
   // --- Duck info, selling, and moving --------------------------------------
 
   /** Lines about a duck's power, hawks, and the Pecking Loop, for info cards. */
-  private duckInfoLines(kind: DuckKind, partner?: DuckKind): Phaser.GameObjects.GameObject[] {
-    const stats = DUCKS[kind];
+  private duckInfoLines(kind: DuckKind, partner?: DuckKind, level = 0): Phaser.GameObjects.GameObject[] {
+    const stats = { ...statsAt(kind, level), name: nameAt(kind, level) };
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const lines: Phaser.GameObjects.GameObject[] = [
       this.add.image(-118, -58, `duck-${kind}`).setDisplaySize(64, 64),
@@ -628,29 +636,101 @@ export class GameScene extends Phaser.Scene {
     scrim.on('pointerdown', () => this.closePopup());
 
     const partner = chasePartner(this.state.battle, duck)?.kind;
-    const card = drawCard(this.add.graphics(), 310, 290, { radius: 18 });
-    card.y = 20;
-    const block = this.add.zone(0, 20, 310, 290).setInteractive(); // taps on the panel itself don't close it
-    const refund = sellValue(duck.kind);
-    const small = { width: 132, height: 54, fontSize: 26 };
-    const move = drawBigButton(this, -74, 118, 'Move', COLORS.blue, COLORS.blueDark, () => this.startMove(duckId), small);
-    // Sell shows how many peas you get back.
-    const sell = drawBigButton(this, 74, 118, `+${refund}`, COLORS.orange, COLORS.orangeDark, () => this.sell(duckId), {
-      ...small,
-      icon: 'icon-pea',
-    });
+    const H = 420; // panel height; content is laid out from its center
+    const card = drawCard(this.add.graphics(), 310, H, { radius: 18 });
+    const block = this.add.zone(0, 0, 310, H).setInteractive(); // taps on the panel itself don't close it
+    const info = this.add.container(0, -110, this.duckInfoLines(duck.kind, partner, duck.level));
+    const divider = this.add.rectangle(0, -10, 270, 3, COLORS.ink, 0.12);
+    const parts: Phaser.GameObjects.GameObject[] = [card, block, info, divider];
 
-    // Above the duck, unless that would go off the top of the screen.
+    // Upgrade section.
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    const next = nextUpgrade(duck.kind, duck.level);
+    if (next) {
+      const affordable = canUpgrade(this.state, duckId);
+      parts.push(
+        this.add.text(-138, 14, `Upgrade: ${next.name}`, textStyle(20, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-138, 40, next.description, { ...textStyle(16, ink), wordWrap: { width: 276 } }).setOrigin(0, 0.5),
+        drawBigButton(
+          this,
+          0,
+          92,
+          `${next.cost}`,
+          affordable ? COLORS.green : 0xb8b0a8,
+          affordable ? COLORS.greenDark : 0x8a8079,
+          () => this.upgrade(duckId),
+          { width: 276, height: 54, fontSize: 26, icon: 'icon-pea' },
+        ),
+      );
+    } else {
+      parts.push(this.add.text(0, 50, 'Fully upgraded!', textStyle(26, { color: COLORS.goldCss, weight: '700' })).setOrigin(0.5));
+    }
+
+    const small = { width: 132, height: 54, fontSize: 26 };
+    parts.push(drawBigButton(this, -74, 162, 'Move', COLORS.blue, COLORS.blueDark, () => this.startMove(duckId), small));
+    // Sell shows how many peas you get back (upgrades included).
+    parts.push(
+      drawBigButton(this, 74, 162, `+${sellValue(duck.kind, duck.level)}`, COLORS.orange, COLORS.orangeDark, () => this.sell(duckId), {
+        ...small,
+        icon: 'icon-pea',
+      }),
+    );
+
+    // Above the duck if it fits, else below, else beside it.
     const at = duck.position;
-    const y = at.y - 250 > 0 ? at.y - 210 : at.y + 180;
-    const x = Math.max(165, Math.min(WORLD.width - 165, at.x));
-    const panel = this.add
-      .container(x, y, [card, block, ...this.duckInfoLines(duck.kind, partner), move, sell])
-      .setDepth(DEPTH.hud + 5);
+    const margin = 6;
+    let x = Math.max(160, Math.min(WORLD.width - 160, at.x));
+    let y: number;
+    if (at.y - 70 - H >= margin) y = at.y - 70 - H / 2;
+    else if (at.y + 40 + H <= WORLD.height - margin) y = at.y + 40 + H / 2;
+    else {
+      x = at.x > WORLD.width / 2 ? at.x - 70 - 155 : at.x + 70 + 155;
+      y = Math.max(H / 2 + margin, Math.min(WORLD.height - H / 2 - margin, at.y));
+    }
+    const panel = this.add.container(x, y, parts).setDepth(DEPTH.hud + 5);
     panel.setScale(0.8).setAlpha(0);
     this.tweens.add({ targets: panel, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
     const container = this.add.container(0, 0, [scrim, panel]).setDepth(DEPTH.hud + 4);
     this.popup = container;
+  }
+
+  private upgrade(duckId: number): void {
+    const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+    const sprite = this.duckSprites.get(duckId);
+    if (!duck || !sprite) return;
+    if (!upgradeDuck(this.state, duckId)) {
+      // Not enough peas: wiggle the counter and show the panel again.
+      playSound(this, 'noPeas');
+      this.tweens.add({ targets: this.peasText, x: '+=6', duration: 50, yoyo: true, repeat: 3 });
+      this.openDuckPanel(duckId);
+      return;
+    }
+    playSound(this, 'upgrade');
+    this.showDuckLevel(sprite, duck.kind, duck.level);
+    const { x, y } = duck.position;
+    this.fx.sparkles.explode(24, x, y - 30);
+    this.ring(x, y - 30, 60, COLORS.gold, 400);
+    this.floatText({ x, y: y - 80 }, nameAt(duck.kind, duck.level), COLORS.goldCss);
+    this.drawPeckingLoop();
+    this.refreshHud();
+    this.openDuckPanel(duckId);
+  }
+
+  /** Upgraded ducks grow a little, wear gold chevrons, and reach as far as their new stats. */
+  private showDuckLevel(sprite: DuckSprite, kind: DuckKind, level: number): void {
+    // Stop any bounce first, or it would finish by snapping back to the old size.
+    this.tweens.killTweensOf(sprite.art);
+    const size = sprite.baseSize * (1 + 0.07 * level);
+    sprite.art.setDisplaySize(size, size).setY(-size * 0.28);
+    this.tweens.add({ targets: sprite.art, y: sprite.art.y - 3, duration: 1000, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+    sprite.range.setRadius(statsAt(kind, level).range);
+    const g = sprite.badge.clear();
+    for (let i = 0; i < level; i++) {
+      const cy = 16 - i * 9;
+      const points = [new Phaser.Math.Vector2(-10, cy + 5), new Phaser.Math.Vector2(0, cy - 4), new Phaser.Math.Vector2(10, cy + 5)];
+      g.lineStyle(7, COLORS.ink).strokePoints(points);
+      g.lineStyle(4, COLORS.gold).strokePoints(points);
+    }
   }
 
   private sell(duckId: number): void {
@@ -951,16 +1031,16 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private duckSprite(duckId: number): { sprite: DuckSprite; kind: DuckKind; position: Point } | undefined {
+  private duckSprite(duckId: number): { sprite: DuckSprite; kind: DuckKind; level: number; position: Point } | undefined {
     const duck = this.state.battle.ducks.find((d) => d.id === duckId);
     const sprite = this.duckSprites.get(duckId);
-    return duck && sprite ? { sprite, kind: duck.kind, position: duck.position } : undefined;
+    return duck && sprite ? { sprite, kind: duck.kind, level: duck.level, position: duck.position } : undefined;
   }
 
   private showAttack(duckId: number, target: Point, hitIds: number[], wingFlap: boolean): void {
     const found = this.duckSprite(duckId);
     if (!found) return;
-    const { sprite, kind, position } = found;
+    const { sprite, kind, level, position } = found;
     sprite.art.setFlipX(target.x < position.x);
 
     const flash = () => {
@@ -984,7 +1064,7 @@ export class GameScene extends Phaser.Scene {
           playSound(this, 'splash');
           flash();
           this.fx.splash.explode(12, target.x, target.y - 20);
-          this.ring(target.x, target.y - 20, DUCKS.sunny.splashRadius, COLORS.water, 250);
+          this.ring(target.x, target.y - 20, statsAt(kind, level).splashRadius, COLORS.water, 250);
         },
       });
     } else {
@@ -1011,9 +1091,9 @@ export class GameScene extends Phaser.Scene {
   private showAlarmQuack(duckId: number): void {
     const found = this.duckSprite(duckId);
     if (!found) return;
-    const { sprite, position } = found;
+    const { sprite, kind, level, position } = found;
     this.tweens.add({ targets: sprite.art, scale: sprite.art.scale * 1.2, duration: 100, yoyo: true });
-    const range = DUCKS.chester.range;
+    const range = statsAt(kind, level).range;
     this.ring(position.x, position.y - 30, range, COLORS.gold, 500);
     this.time.delayedCall(120, () => this.ring(position.x, position.y - 30, range * 0.7, COLORS.gold, 450));
     this.fx.stars.explode(10, position.x, position.y - 40);

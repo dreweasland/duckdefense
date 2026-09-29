@@ -16,6 +16,7 @@ automatically. Any sound without a recording plays a built-in placeholder.
 | `shoo` | Craig shoos a predator away |
 | `place` | A duck is placed in a nest |
 | `sell` | A duck is sold |
+| `upgrade` | A duck is upgraded |
 | `move` | A duck hops to a new nest |
 | `noPeas` | Tapping a nest without enough peas |
 | `waveStart` | The play button starts a wave |
