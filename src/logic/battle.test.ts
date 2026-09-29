@@ -558,3 +558,63 @@ describe('snapping turtles', () => {
     expect(turtle.hp).toBe(ENEMIES.turtle.maxHp - (sunny.damage - armor));
   });
 });
+
+describe('targeting', () => {
+  // Three raccoons in a row (too far apart to share a splash), all in Potato's reach.
+  // Potato sits right next to the one at the back.
+  function lineUp() {
+    const battle = newBattle();
+    const back = spawnEnemy(battle, 'raccoon');
+    const middle = spawnEnemy(battle, 'raccoon');
+    const front = spawnEnemy(battle, 'raccoon');
+    back.distance = 1000;
+    middle.distance = 1060;
+    front.distance = 1120;
+    middle.hp = raccoon.maxHp + 50; // the toughest
+    const duck = placeDuck(battle, 'potato', { x: 1000, y: 20 });
+    return { battle, back, middle, front, duck };
+  }
+
+  it('goes after the predator closest to the house by default', () => {
+    const { battle, front, duck } = lineUp();
+    expect(duck.targeting).toBe('first');
+    step(battle, 0);
+    expect(front.hp).toBeLessThan(raccoon.maxHp);
+  });
+
+  it('can go after the toughest predator', () => {
+    const { battle, middle, duck } = lineUp();
+    duck.targeting = 'strong';
+    step(battle, 0);
+    expect(middle.hp).toBe(raccoon.maxHp + 50 - DUCKS.potato.damage);
+  });
+
+  it('can go after the predator farthest back', () => {
+    const { battle, back, duck } = lineUp();
+    duck.targeting = 'last';
+    duck.position = { x: 1120, y: 20 }; // nearest the front, so it isn't also the closest
+    step(battle, 0);
+    expect(back.hp).toBe(raccoon.maxHp - DUCKS.potato.damage);
+  });
+
+  it('can go after the predator closest to the duck', () => {
+    const { battle, back, duck } = lineUp();
+    duck.targeting = 'close';
+    step(battle, 0);
+    expect(back.hp).toBe(raccoon.maxHp - DUCKS.potato.damage);
+  });
+
+  it('still only aims at predators it can reach and see', () => {
+    const battle = newBattle();
+    const near = spawnEnemy(battle, 'raccoon');
+    const far = spawnEnemy(battle, 'raccoon');
+    near.distance = 1000;
+    far.distance = 1500;
+    far.hp = 999;
+    const duck = placeDuck(battle, 'potato', { x: 1000, y: 20 });
+    duck.targeting = 'strong';
+    step(battle, 0);
+    expect(near.hp).toBe(raccoon.maxHp - DUCKS.potato.damage);
+    expect(far.hp).toBe(999);
+  });
+});

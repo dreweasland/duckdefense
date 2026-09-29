@@ -1,6 +1,7 @@
 import { FOUNTAIN, NIGHT } from '../data/dayNight';
 import { WING_FLAP_RECOVERY, type DuckKind } from '../data/ducks';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
+import { DEFAULT_TARGETING, type Targeting } from '../data/targeting';
 import { CHASES, PECKING_LOOP } from '../data/synergy';
 import { distance, type Point } from './geometry';
 import { joinPath, makePath, pointAt, type Path } from './path';
@@ -45,6 +46,8 @@ export interface Duck {
   level: number;
   /** Seconds this duck stays scared (no attacks or powers). */
   scaredTime: number;
+  /** Which predator it goes after when more than one is in reach. */
+  targeting: Targeting;
 }
 
 export interface Fountain {
@@ -150,6 +153,7 @@ export function placeDuck(battle: Battle, kind: DuckKind, position: Point): Duck
     attacks: 0,
     level: 0,
     scaredTime: 0,
+    targeting: DEFAULT_TARGETING,
   };
   battle.ducks.push(duck);
   return duck;
@@ -178,13 +182,41 @@ function canSpot(enemy: Enemy, from: Point, range: number): boolean {
   return !sneaky || !isHidden(enemy) || distance(enemyPosition(enemy), from) <= range * sneaky.spotRange;
 }
 
-/** The predator in range that is closest to the house, if any. */
-export function pickTarget(battle: Battle, from: Point, range: number, canHitFlying = true): Enemy | undefined {
+/**
+ * The predator in range a duck goes after, if any: closest to the house ('first'), most
+ * health ('strong'), farthest back ('last'), or closest to the duck ('close').
+ * Ties go to the one closest to the house.
+ */
+export function pickTarget(
+  battle: Battle,
+  from: Point,
+  range: number,
+  canHitFlying = true,
+  targeting: Targeting = DEFAULT_TARGETING,
+): Enemy | undefined {
+  // Smaller is better.
+  const score = (enemy: Enemy): number => {
+    switch (targeting) {
+      case 'first':
+        return remaining(enemy);
+      case 'strong':
+        return -enemy.hp;
+      case 'last':
+        return -remaining(enemy);
+      case 'close':
+        return distance(enemyPosition(enemy), from);
+    }
+  };
   let best: Enemy | undefined;
   for (const enemy of enemiesInRange(battle, from, range)) {
     if (!canHitFlying && isFlying(enemy)) continue;
     if (!canSpot(enemy, from, range)) continue;
-    if (!best || remaining(enemy) < remaining(best)) best = enemy;
+    if (!best) {
+      best = enemy;
+      continue;
+    }
+    const diff = score(enemy) - score(best);
+    if (diff < 0 || (diff === 0 && remaining(enemy) < remaining(best))) best = enemy;
   }
   return best;
 }
@@ -346,13 +378,13 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     }
   }
 
-  // 5. Ducks that are ready attack the predator closest to the house (not while scared).
+  // 5. Ducks that are ready attack the predator they're aiming for (not while scared).
   for (const duck of battle.ducks) {
     duck.cooldown = Math.max(0, duck.cooldown - dt);
     if (duck.cooldown > 0 || isScared(duck)) continue;
 
     const stats = statsAt(duck.kind, duck.level);
-    const target = pickTarget(battle, duck.position, stats.range, stats.canHitFlying);
+    const target = pickTarget(battle, duck.position, stats.range, stats.canHitFlying, duck.targeting);
     if (!target) continue;
 
     const targetPos = enemyPosition(target);

@@ -6,6 +6,7 @@ import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { CHASES } from '../data/synergy';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { GAME_SPEEDS } from '../data/gameSpeed';
+import { TARGETING, TARGETING_ORDER, type Targeting } from '../data/targeting';
 import { HUD_AREAS } from '../data/layout';
 import { LEVELS } from '../data/levels';
 import { chasePartner, enemyPosition, isFlying, isHidden, isRefreshed, type Enemy } from '../logic/battle';
@@ -13,6 +14,7 @@ import {
   buyDuck,
   canBuy,
   canUpgrade,
+  setTargeting,
   upgradeDuck,
   moveDuck,
   sellDuck,
@@ -22,6 +24,7 @@ import {
   isNight,
   isOver,
   mapFromLevel,
+  wavePreview,
   startWave,
   update,
   useBlessing,
@@ -57,6 +60,8 @@ const PEA_ICON = { x: 596, y: 38 };
 // Low enough that the raised (selected) card and its corner badges never go off the top of the screen.
 const CARD = { width: 84, height: 90, y: 54, spacing: 92, lift: 3 };
 const GO_BUTTON = { x: 1200, y: 70 };
+// "Coming next" chips, in a row that ends just left of the start button.
+const PREVIEW = { right: 1146, y: 112, chip: 58, gap: 4, maxWidth: 256 };
 const CRAIG_BUTTON = { x: 100, y: 640 };
 
 // How each walking predator looks: its picture's size, the shadow under it, and how it waddles.
@@ -156,6 +161,9 @@ export class GameScene extends Phaser.Scene {
   private nightLights: Phaser.GameObjects.Image[] = [];
   private peckingLoop!: Phaser.GameObjects.Container;
   private shownNight = false;
+  private preview!: Phaser.GameObjects.Container;
+  /** Which wave the preview is showing, so it's only rebuilt when that changes. */
+  private previewKey = '';
   private bossBar?: { container: Phaser.GameObjects.Container; fill: Phaser.GameObjects.Rectangle; enemyId: number };
 
   constructor() {
@@ -184,6 +192,7 @@ export class GameScene extends Phaser.Scene {
     this.moving = undefined;
     this.nightLights = [];
     this.bossBar = undefined;
+    this.previewKey = '';
 
     this.drawWorld();
     this.fx = this.createEffects();
@@ -194,6 +203,7 @@ export class GameScene extends Phaser.Scene {
 
     this.drawPicker();
     this.drawHud();
+    this.preview = this.add.container(0, 0).setDepth(DEPTH.hud);
     this.goButton = this.drawGoButton();
     this.speedButton = this.drawSpeedButton();
     this.craigButton = this.drawCraigButton();
@@ -445,10 +455,96 @@ export class GameScene extends Phaser.Scene {
       picker.container.y = selected ? CARD.y - CARD.lift : CARD.y;
     }
     this.goButton.setVisible(game.phase === 'building');
+    this.refreshPreview();
     this.speedButton.container.setVisible(game.phase === 'wave');
     const blessing = canUseBlessing(game);
     this.craigButton.setAlpha(blessing ? 1 : 0.35);
     this.craigGlow.setVisible(blessing);
+  }
+
+  /** Between waves, little chips beside the start button show what's coming next. Tap one to learn about it. */
+  private refreshPreview(): void {
+    const game = this.state;
+    const key = game.phase === 'building' ? `${game.waveIndex}` : '';
+    if (key === this.previewKey) return;
+    this.previewKey = key;
+    this.preview.removeAll(true);
+    if (!key) return;
+
+    const entries = wavePreview(game.waves, game.waveIndex);
+    const chip = Math.min(PREVIEW.chip, (PREVIEW.maxWidth + PREVIEW.gap) / entries.length - PREVIEW.gap);
+    const scale = chip / PREVIEW.chip;
+    entries.forEach((entry, i) => {
+      const x = PREVIEW.right - (entries.length - i) * (chip + PREVIEW.gap) + PREVIEW.gap + chip / 2;
+      const parts: Phaser.GameObjects.GameObject[] = [
+        drawPill(this, 0, 0, PREVIEW.chip, 48),
+        this.enemyIcon(entry.enemy, 0, -4, 40, 30),
+        this.add.text(PREVIEW.chip / 2 - 5, 13, `×${entry.count}`, textStyle(17, { weight: '700' })).setOrigin(1, 0.5),
+      ];
+      if (entry.isNew) {
+        const badge = this.add.container(PREVIEW.chip / 2 - 10, -26, [
+          this.add.graphics().fillStyle(COLORS.pink).fillRoundedRect(-19, -9, 38, 18, 9).lineStyle(2, COLORS.ink).strokeRoundedRect(-19, -9, 38, 18, 9),
+          this.add.text(0, 0, 'NEW', textStyle(12, { weight: '700', strokeThickness: 3 })).setOrigin(0.5),
+        ]);
+        this.tweens.add({ targets: badge, scale: 1.12, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+        parts.push(badge);
+      }
+      const hit = this.add.zone(0, 0, PREVIEW.chip, 52).setInteractive({ useHandCursor: true });
+      hit.on('pointerdown', () => this.showEnemyInfo(entry.enemy));
+      parts.push(hit);
+      const container = this.add.container(x, PREVIEW.y, parts).setScale(scale);
+      container.setAlpha(0);
+      this.tweens.add({ targets: container, alpha: 1, duration: 250, delay: i * 70 });
+      this.preview.add(container);
+    });
+
+    // Meeting a predator for the first time (after the first wave): explain it right away.
+    const firstNew = entries.find((e) => e.isNew);
+    if (firstNew && game.waveIndex > 0) {
+      this.time.delayedCall(1900, () => {
+        if (!this.popup && this.state.phase === 'building' && this.previewKey === key) this.showEnemyInfo(firstNew.enemy, false);
+      });
+    }
+  }
+
+  /** A predator's picture, fit inside a box (hawks look down from above, so they get a square). */
+  private enemyIcon(kind: EnemyKind, x: number, y: number, maxWidth: number, maxHeight: number): Phaser.GameObjects.Image {
+    const image = this.add.image(x, y, kind);
+    const fit = Math.min(maxWidth / image.width, maxHeight / image.height);
+    return image.setScale(fit);
+  }
+
+  /** What a predator does and which duck is best against it, shown when you tap it in the preview. */
+  private showEnemyInfo(kind: EnemyKind, tapped = true): void {
+    this.cancelMove();
+    this.closePopup();
+    if (tapped) playSound(this, 'tap');
+    const stats = ENEMIES[kind];
+    const best = DUCKS[stats.beatenBy];
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    const card = drawCard(this.add.graphics(), 330, 196, { radius: 18 });
+    const popup = this.add
+      .container(WORLD.width - 190, 270, [
+        card,
+        this.enemyIcon(kind, -118, -56, 70, 56),
+        this.add.text(-74, -62, stats.name, textStyle(stats.name.length > 12 ? 22 : 26, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        this.add.image(-66, -32, 'icon-heart').setDisplaySize(18, 18),
+        this.add.text(-52, -32, `${stats.hearts}`, textStyle(16, { ...ink, color: '#c0392b', weight: '700' })).setOrigin(0, 0.5),
+        this.add
+          .text(-148, -10, stats.description, { ...textStyle(16, ink), wordWrap: { width: 296 } })
+          .setOrigin(0, 0),
+        this.add.text(-148, 70, 'Best duck:', textStyle(17, { ...ink, color: '#2a8c44', weight: '700' })).setOrigin(0, 0.5),
+        this.add.image(-40, 66, `duck-${stats.beatenBy}`).setDisplaySize(40, 40),
+        this.add.text(-16, 70, best.name, textStyle(19, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+      ])
+      .setDepth(DEPTH.hud + 5);
+    popup.setScale(0.8).setAlpha(0);
+    this.tweens.add({ targets: popup, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
+    this.popup = popup;
+    this.popupTimer = this.time.delayedCall(6000, () => {
+      if (this.popup !== popup) return;
+      this.tweens.add({ targets: popup, alpha: 0, duration: 250, onComplete: () => this.popup === popup && this.closePopup() });
+    });
   }
 
   private drawPicker(): void {
@@ -713,12 +809,13 @@ export class GameScene extends Phaser.Scene {
     scrim.on('pointerdown', () => this.closePopup());
 
     const partner = chasePartner(this.state.battle, duck)?.kind;
-    const H = 420; // panel height; content is laid out from its center
+    const H = 500; // panel height; content is laid out from its center
     const card = drawCard(this.add.graphics(), 310, H, { radius: 18 });
     const block = this.add.zone(0, 0, 310, H).setInteractive(); // taps on the panel itself don't close it
-    const info = this.add.container(0, -110, this.duckInfoLines(duck.kind, partner, duck.level));
-    const divider = this.add.rectangle(0, -10, 270, 3, COLORS.ink, 0.12);
-    const parts: Phaser.GameObjects.GameObject[] = [card, block, info, divider];
+    const info = this.add.container(0, -150, this.duckInfoLines(duck.kind, partner, duck.level));
+    const aim = this.drawTargetingButtons(duckId, duck.kind, 0, -28);
+    const divider = this.add.rectangle(0, 14, 270, 3, COLORS.ink, 0.12);
+    const parts: Phaser.GameObjects.GameObject[] = [card, block, info, aim, divider];
 
     // Upgrade section.
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
@@ -726,12 +823,12 @@ export class GameScene extends Phaser.Scene {
     if (next) {
       const affordable = canUpgrade(this.state, duckId);
       parts.push(
-        this.add.text(-138, 14, `Upgrade: ${next.name}`, textStyle(20, { ...ink, weight: '700' })).setOrigin(0, 0.5),
-        this.add.text(-138, 40, next.description, { ...textStyle(16, ink), wordWrap: { width: 276 } }).setOrigin(0, 0.5),
+        this.add.text(-138, 38, `Upgrade: ${next.name}`, textStyle(20, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-138, 64, next.description, { ...textStyle(16, ink), wordWrap: { width: 276 } }).setOrigin(0, 0.5),
         drawBigButton(
           this,
           0,
-          92,
+          116,
           `${next.cost}`,
           affordable ? COLORS.green : 0xb8b0a8,
           affordable ? COLORS.greenDark : 0x8a8079,
@@ -740,14 +837,14 @@ export class GameScene extends Phaser.Scene {
         ),
       );
     } else {
-      parts.push(this.add.text(0, 50, 'Fully upgraded!', textStyle(26, { color: COLORS.goldCss, weight: '700' })).setOrigin(0.5));
+      parts.push(this.add.text(0, 80, 'Fully upgraded!', textStyle(26, { color: COLORS.goldCss, weight: '700' })).setOrigin(0.5));
     }
 
     const small = { width: 132, height: 54, fontSize: 26 };
-    parts.push(drawBigButton(this, -74, 162, 'Move', COLORS.blue, COLORS.blueDark, () => this.startMove(duckId), small));
+    parts.push(drawBigButton(this, -74, 192, 'Move', COLORS.blue, COLORS.blueDark, () => this.startMove(duckId), small));
     // Sell shows how many peas you get back (upgrades included).
     parts.push(
-      drawBigButton(this, 74, 162, `+${sellValue(duck.kind, duck.level)}`, COLORS.orange, COLORS.orangeDark, () => this.sell(duckId), {
+      drawBigButton(this, 74, 192, `+${sellValue(duck.kind, duck.level)}`, COLORS.orange, COLORS.orangeDark, () => this.sell(duckId), {
         ...small,
         icon: 'icon-pea',
       }),
@@ -769,6 +866,61 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: panel, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
     const container = this.add.container(0, 0, [scrim, panel]).setDepth(DEPTH.hud + 4);
     this.popup = container;
+  }
+
+  /** "Aim at" buttons: which predator this duck goes after. The chosen one is gold. */
+  private drawTargetingButtons(duckId: number, kind: DuckKind, x: number, y: number): Phaser.GameObjects.Container {
+    const W = 66;
+    const H = 58;
+    const row = this.add.container(x, y);
+    const cards: { targeting: Targeting; card: Phaser.GameObjects.Graphics }[] = [];
+    const refresh = () => {
+      const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+      for (const { targeting, card } of cards) {
+        const on = duck?.targeting === targeting;
+        drawCard(card, W, H, { radius: 12, fill: on ? 0xfff0b3 : COLORS.cream, border: on ? COLORS.gold : COLORS.ink, borderWidth: on ? 5 : 2 });
+      }
+    };
+    TARGETING_ORDER.forEach((targeting, i) => {
+      const bx = (i - (TARGETING_ORDER.length - 1) / 2) * (W + 6);
+      const card = this.add.graphics();
+      const label = this.add
+        .text(0, 16, TARGETING[targeting].name, textStyle(15, { color: COLORS.inkCss, strokeThickness: 0, weight: '700' }))
+        .setOrigin(0.5);
+      const hit = this.add.zone(0, 0, W, H).setInteractive({ useHandCursor: true });
+      const button = this.add.container(bx, 0, [card, this.targetingIcon(targeting, kind), label, hit]);
+      hit.on('pointerdown', () => {
+        if (!setTargeting(this.state, duckId, targeting)) return;
+        playSound(this, 'tap');
+        this.tweens.add({ targets: button, scale: 0.9, duration: 70, yoyo: true });
+        refresh();
+      });
+      cards.push({ targeting, card });
+      row.add(button);
+    });
+    refresh();
+    return row;
+  }
+
+  /** Little pictures for the aim buttons: the duck house, a big heart, the back of the line, the duck itself. */
+  private targetingIcon(targeting: Targeting, kind: DuckKind): Phaser.GameObjects.GameObject {
+    switch (targeting) {
+      case 'first':
+        return this.add.image(0, -8, 'house').setDisplaySize(36, 34);
+      case 'strong':
+        return this.add.image(0, -8, 'icon-heart').setDisplaySize(34, 34);
+      case 'last': {
+        // A line of three predators walking right; the one at the back has a gold ring.
+        const g = this.add.graphics();
+        [-16, 0, 16].forEach((dx, i) => {
+          g.fillStyle(0x8a8d94).fillCircle(dx, -8, 6).lineStyle(2, COLORS.ink).strokeCircle(dx, -8, 6);
+          if (i === 0) g.lineStyle(3, COLORS.gold).strokeCircle(dx, -8, 10);
+        });
+        return g;
+      }
+      case 'close':
+        return this.add.image(0, -8, `duck-${kind}`).setDisplaySize(36, 36);
+    }
   }
 
   private upgrade(duckId: number): void {

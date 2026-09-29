@@ -3,6 +3,7 @@ import { BATTERY, FOUNTAIN } from '../data/dayNight';
 import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
 import { DUCKS, MOVE_SETTLE_TIME, SELL_REFUND, type DuckKind } from '../data/ducks';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
+import type { Targeting } from '../data/targeting';
 import type { Wave } from '../data/waves';
 import { createBattle, placeDuck, spawnEnemy, step, type Battle, type BattleEvent, type Duck, type Enemy } from './battle';
 import { distance, type Point } from './geometry';
@@ -164,6 +165,35 @@ export function moveDuck(game: Game, duckId: number, to: Point): boolean {
   duck.cooldown = Math.max(duck.cooldown, MOVE_SETTLE_TIME);
   duck.abilityCooldown = Math.max(duck.abilityCooldown, MOVE_SETTLE_TIME);
   return true;
+}
+
+/** Changes which predator a duck goes after. Works during waves too. */
+export function setTargeting(game: Game, duckId: number, targeting: Targeting): boolean {
+  const duck = game.battle.ducks.find((d) => d.id === duckId);
+  if (isOver(game) || !duck) return false;
+  duck.targeting = targeting;
+  return true;
+}
+
+export interface PreviewEntry {
+  enemy: EnemyKind;
+  count: number;
+  /** True the first time this kind of predator shows up in the level. */
+  isNew: boolean;
+}
+
+/** What's coming in a wave: each kind of predator and how many, in the order they first appear. */
+export function wavePreview(waves: readonly Wave[], waveIndex: number): PreviewEntry[] {
+  const wave = waves[waveIndex];
+  if (!wave) return [];
+  const seenBefore = new Set(waves.slice(0, waveIndex).flatMap((w) => w.groups.map((g) => g.enemy)));
+  const entries: PreviewEntry[] = [];
+  for (const spawn of scheduleWave(wave)) {
+    const entry = entries.find((e) => e.enemy === spawn.enemy);
+    if (entry) entry.count++;
+    else entries.push({ enemy: spawn.enemy, count: 1, isNew: !seenBefore.has(spawn.enemy) });
+  }
+  return entries;
 }
 
 /** Lists every predator in a wave with the time it appears, soonest first. */

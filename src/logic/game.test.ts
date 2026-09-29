@@ -13,6 +13,8 @@ import {
   moveDuck,
   scheduleWave,
   sellDuck,
+  setTargeting,
+  wavePreview,
   sellValue,
   startWave,
   update,
@@ -243,5 +245,45 @@ describe('selling and moving ducks', () => {
     game.phase = 'won';
     expect(sellDuck(game, duck.id)).toBeUndefined();
     expect(moveDuck(game, duck.id, { x: 100, y: 50 })).toBe(false);
+  });
+});
+
+describe('targeting choices', () => {
+  it('lets you change which predator a duck goes after', () => {
+    const game = createGame({ path }, [oneRaccoon], 'easy');
+    const duck = buyDuck(game, 'sunny', { x: 100, y: 50 })!;
+    expect(setTargeting(game, duck.id, 'strong')).toBe(true);
+    expect(duck.targeting).toBe('strong');
+    expect(setTargeting(game, 999, 'last')).toBe(false);
+  });
+});
+
+describe('wave preview', () => {
+  const waves: Wave[] = [
+    { time: 'day', groups: [{ enemy: 'raccoon', count: 3, every: 1 }], bonusPeas: 0 },
+    {
+      time: 'day',
+      groups: [
+        { enemy: 'raccoon', count: 2, every: 1, after: 4 },
+        { enemy: 'fox', count: 2, every: 1 },
+        { enemy: 'raccoon', count: 1, every: 1 },
+      ],
+      bonusPeas: 0,
+    },
+  ];
+
+  it("counts each kind of predator in a wave, in the order they show up", () => {
+    expect(wavePreview(waves, 1)).toEqual([
+      { enemy: 'fox', count: 2, isNew: true },
+      { enemy: 'raccoon', count: 3, isNew: false },
+    ]);
+  });
+
+  it('marks predators new the first time they appear in the level', () => {
+    expect(wavePreview(waves, 0)).toEqual([{ enemy: 'raccoon', count: 3, isNew: true }]);
+  });
+
+  it('is empty past the last wave', () => {
+    expect(wavePreview(waves, 2)).toEqual([]);
   });
 });
