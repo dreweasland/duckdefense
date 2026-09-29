@@ -4,10 +4,13 @@ import { BATTERY, FOUNTAIN, NIGHT } from '../data/dayNight';
 import { DIFFICULTIES } from '../data/difficulty';
 import { DUCKS, MOVE_SETTLE_TIME, SELL_REFUND } from '../data/ducks';
 import { ENEMIES } from '../data/enemies';
-import type { Wave } from '../data/waves';
+import { EARLY_CALL, type Wave } from '../data/waves';
 import {
   buyDuck,
+  callNextWave,
+  canCallEarly,
   createGame,
+  earlyBonus,
   isNight,
   isSpotTaken,
   moveDuck,
@@ -285,5 +288,57 @@ describe('wave preview', () => {
 
   it('is empty past the last wave', () => {
     expect(wavePreview(waves, 2)).toEqual([]);
+  });
+});
+
+describe('calling the next wave early', () => {
+  const twoRaccoons: Wave = { time: 'day', groups: [{ enemy: 'raccoon', count: 2, every: 0.5 }], bonusPeas: 40 };
+  const nightWave: Wave = { time: 'night', groups: [{ enemy: 'raccoon', count: 1, every: 1 }], bonusPeas: 30 };
+  const longPath = makePath([{ x: 0, y: 0 }, { x: 5000, y: 0 }]);
+
+  it('only works once every predator in the wave has shown up, and there is a next wave', () => {
+    const game = createGame({ path: longPath }, [twoRaccoons, nightWave], 'easy');
+    expect(canCallEarly(game)).toBe(false); // still building
+    startWave(game);
+    update(game, 0.1);
+    expect(canCallEarly(game)).toBe(false); // one raccoon still to come
+    update(game, 0.5);
+    expect(canCallEarly(game)).toBe(true);
+    expect(earlyBonus(game)).toBe(2 * EARLY_CALL.peasPerPredator);
+  });
+
+  it("pays this wave's bonus plus the early bonus, and sends the next wave with the old one still out", () => {
+    const game = createGame({ path: longPath }, [twoRaccoons, nightWave], 'easy');
+    startWave(game);
+    update(game, 0.6);
+    const peas = game.peas;
+    expect(callNextWave(game)).toBe(40 + 2 * EARLY_CALL.peasPerPredator);
+    expect(game.peas).toBe(peas + 40 + 2 * EARLY_CALL.peasPerPredator);
+    expect(game.waveIndex).toBe(1);
+    expect(game.phase).toBe('wave');
+    expect(game.battle.night).toBe(true);
+    expect(game.battle.enemies).toHaveLength(2);
+    expect(game.pending).toHaveLength(1);
+  });
+
+  it("can't be called on the last wave", () => {
+    const game = createGame({ path: longPath }, [twoRaccoons], 'easy');
+    startWave(game);
+    update(game, 0.6);
+    expect(canCallEarly(game)).toBe(false);
+    expect(callNextWave(game)).toBeUndefined();
+  });
+
+  it('still wins once the last wave and everything left over are chased off', () => {
+    const game = createGame({ path }, [oneRaccoon, oneRaccoon], 'easy');
+    buyDuck(game, 'sunny', { x: 100, y: 30 });
+    buyDuck(game, 'sunny', { x: 60, y: 30 });
+    startWave(game);
+    update(game, 0.01);
+    callNextWave(game);
+    const events = runUntilIdle(game);
+    expect(game.phase).toBe('won');
+    // The first wave's bonus was paid when it was called, so only the last wave reports clearing.
+    expect(events.filter((e) => e.type === 'waveCleared')).toEqual([{ type: 'waveCleared', waveIndex: 1, bonus: 25 }]);
   });
 });

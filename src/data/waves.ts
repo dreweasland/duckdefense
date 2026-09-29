@@ -11,6 +11,13 @@ export interface SpawnGroup {
   after?: number;
 }
 
+// Calling the next wave early: once every predator in a wave has shown up, you can send the
+// next wave before this one is finished. You get this wave's bonus right away, plus extra
+// peas for every predator still out there (more risk, more reward).
+export const EARLY_CALL = {
+  peasPerPredator: 5,
+};
+
 export interface Wave {
   time: 'day' | 'night';
   groups: SpawnGroup[];

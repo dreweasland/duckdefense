@@ -12,7 +12,10 @@ import { LEVELS } from '../data/levels';
 import { chasePartner, enemyPosition, isFlying, isHidden, isRefreshed, type Enemy } from '../logic/battle';
 import {
   buyDuck,
+  callNextWave,
   canBuy,
+  canCallEarly,
+  earlyBonus,
   canUpgrade,
   setTargeting,
   upgradeDuck,
@@ -61,6 +64,8 @@ const PEA_ICON = { x: 596, y: 38 };
 const CARD = { width: 84, height: 90, y: 54, spacing: 92, lift: 3 };
 const GO_BUTTON = { x: 1200, y: 70 };
 // "Coming next" chips, in a row that ends just left of the start button.
+// Call the next wave early (during a wave, left of the fast-forward button).
+const CALL_EARLY = { x: 1110, y: 112 };
 const PREVIEW = { right: 1146, y: 112, chip: 58, gap: 4, maxWidth: 256 };
 const CRAIG_BUTTON = { x: 100, y: 640 };
 
@@ -149,6 +154,7 @@ export class GameScene extends Phaser.Scene {
   private shield!: Phaser.GameObjects.Container;
   private goButton!: Phaser.GameObjects.Container;
   private speedButton!: { container: Phaser.GameObjects.Container; draw: () => void };
+  private callEarlyButton!: { container: Phaser.GameObjects.Container; label: Phaser.GameObjects.Text };
   private craigButton!: Phaser.GameObjects.Container;
   private craigGlow!: Phaser.GameObjects.Image;
   private peasText!: Phaser.GameObjects.Text;
@@ -206,6 +212,7 @@ export class GameScene extends Phaser.Scene {
     this.preview = this.add.container(0, 0).setDepth(DEPTH.hud);
     this.goButton = this.drawGoButton();
     this.speedButton = this.drawSpeedButton();
+    this.callEarlyButton = this.drawCallEarlyButton();
     this.craigButton = this.drawCraigButton();
     drawSoundButton(this, 1245, 685, DEPTH.hud);
     this.refreshHud();
@@ -457,6 +464,13 @@ export class GameScene extends Phaser.Scene {
     this.goButton.setVisible(game.phase === 'building');
     this.refreshPreview();
     this.speedButton.container.setVisible(game.phase === 'wave');
+    const early = canCallEarly(game);
+    if (early && !this.callEarlyButton.container.visible) {
+      this.callEarlyButton.container.setScale(0);
+      this.tweens.add({ targets: this.callEarlyButton.container, scale: 1, duration: 250, ease: 'Back.Out' });
+    }
+    this.callEarlyButton.container.setVisible(early);
+    if (early) this.callEarlyButton.label.setText(`+${game.waves[game.waveIndex]!.bonusPeas + earlyBonus(game)}`);
     const blessing = canUseBlessing(game);
     this.craigButton.setAlpha(blessing ? 1 : 0.35);
     this.craigGlow.setVisible(blessing);
@@ -1546,6 +1560,33 @@ export class GameScene extends Phaser.Scene {
       draw();
     });
     return { container, draw };
+  }
+
+  /**
+   * Once every predator in a wave is out, this button sends the next wave now. You get this
+   * wave's bonus right away plus peas for every predator still out there (shown on the pill).
+   */
+  private drawCallEarlyButton(): { container: Phaser.GameObjects.Container; label: Phaser.GameObjects.Text } {
+    const arrows = this.add.graphics().fillStyle(0xffffff).lineStyle(3, COLORS.ink);
+    for (const x of [-14, 2]) arrows.fillTriangle(x, -13, x, 13, x + 16, 0).strokeTriangle(x, -13, x, 13, x + 16, 0);
+    const { container: button, hit } = drawRoundButton(this, 0, 0, 32, COLORS.orange, COLORS.orangeDark, [arrows]);
+    const label = this.add.text(-84, 0, '', textStyle(20, { weight: '700', color: '#c8f59a' })).setOrigin(0, 0.5);
+    const pill = this.add.container(0, 0, [
+      drawPill(this, -72, 0, 84, 36),
+      this.add.image(-98, 0, 'icon-pea').setDisplaySize(20, 20),
+      label,
+    ]);
+    const container = this.add.container(CALL_EARLY.x, CALL_EARLY.y, [pill, button]).setDepth(DEPTH.hud).setVisible(false);
+    this.tweens.add({ targets: arrows, x: 3, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+    hit.on('pointerdown', () => {
+      const earned = callNextWave(this.state);
+      if (earned === undefined) return;
+      playSound(this, 'waveStart');
+      this.flyPea({ x: CALL_EARLY.x, y: CALL_EARLY.y + 30 }, earned);
+      this.showBanner(`Wave ${this.state.waveIndex + 1} is coming early!`);
+      this.refreshHud();
+    });
+    return { container, label };
   }
 
   /** Craig's Guardian Blessing: tap her once per level to shield the duck house. */

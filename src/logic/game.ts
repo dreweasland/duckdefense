@@ -4,7 +4,7 @@ import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
 import { DUCKS, MOVE_SETTLE_TIME, SELL_REFUND, type DuckKind } from '../data/ducks';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import type { Targeting } from '../data/targeting';
-import type { Wave } from '../data/waves';
+import { EARLY_CALL, type Wave } from '../data/waves';
 import { createBattle, placeDuck, spawnEnemy, step, type Battle, type BattleEvent, type Duck, type Enemy } from './battle';
 import { distance, type Point } from './geometry';
 import { nextUpgrade, totalSpent } from './upgrades';
@@ -215,6 +215,31 @@ export function startWave(game: Game): boolean {
   game.pending = scheduleWave(game.waves[game.waveIndex]!);
   game.battle.night = isNight(game);
   return true;
+}
+
+/** Whether you can send the next wave now: every predator in this wave is out, and there's another wave. */
+export function canCallEarly(game: Game): boolean {
+  return game.phase === 'wave' && game.pending.length === 0 && game.waveIndex + 1 < game.waves.length;
+}
+
+/** Extra peas for calling the next wave now: some for every predator still out there. */
+export function earlyBonus(game: Game): number {
+  return EARLY_CALL.peasPerPredator * game.battle.enemies.length;
+}
+
+/**
+ * Sends the next wave while this one is still going. Pays this wave's bonus now, plus the
+ * early bonus. Returns the peas earned, or undefined if you can't call early right now.
+ */
+export function callNextWave(game: Game): number | undefined {
+  if (!canCallEarly(game)) return undefined;
+  const earned = game.waves[game.waveIndex]!.bonusPeas + earlyBonus(game);
+  game.peas += earned;
+  game.waveIndex++;
+  game.waveTime = 0;
+  game.pending = scheduleWave(game.waves[game.waveIndex]!);
+  game.battle.night = isNight(game);
+  return earned;
 }
 
 /** Advances the game by `dt` seconds. Nothing moves between waves. */
