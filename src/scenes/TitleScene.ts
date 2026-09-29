@@ -1,8 +1,13 @@
 import Phaser from 'phaser';
-import { drawBigButton, drawDuck } from '../art/placeholders';
-import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
+import { drawGrass, drawPond, scatterDecor } from '../art/terrain';
+import type { Difficulty } from '../data/difficulty';
+import { DIFFICULTIES } from '../data/difficulty';
 import { DUCK_ORDER } from '../data/ducks';
+import { COLORS, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
+import { drawBigButton } from '../ui/widgets';
 import type { GameSceneData } from './GameScene';
+
+const POND = { center: { x: WORLD.width / 2, y: 420 }, radiusX: 330, radiusY: 95 };
 
 export class TitleScene extends Phaser.Scene {
   constructor() {
@@ -10,39 +15,42 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create(): void {
-    const { width } = this.scale;
+    setupCamera(this);
+    const cx = WORLD.width / 2;
 
-    this.add
-      .text(width / 2, 150, 'Duck Defense', {
-        fontFamily: 'Arial Black, Arial, sans-serif',
-        fontSize: '96px',
-        color: '#ffe066',
-        stroke: '#3b2a00',
-        strokeThickness: 10,
-      })
-      .setOrigin(0.5);
-
-    this.add
-      .text(width / 2, 240, 'Protect the Nestera duck house!', {
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '32px',
-        color: '#ffffff',
-      })
-      .setOrigin(0.5);
+    drawGrass(this, 31);
+    drawPond(this, POND, 32);
+    scatterDecor(this, { ponds: [POND], blocked: [{ x: 260, y: 40, width: 760, height: 250 }, { x: 250, y: 540, width: 780, height: 150 }] }, 33);
 
     // The flock, bobbing on the pond.
-    this.add.ellipse(width / 2, 410, 700, 170, 0x4aa3df);
     DUCK_ORDER.forEach((kind, i) => {
-      const duck = drawDuck(this, kind, width / 2 - 225 + i * 150, 400);
-      this.tweens.add({ targets: duck, y: 392, duration: 700 + i * 90, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+      const x = cx - 240 + i * 160;
+      const duck = this.add.image(x, 400, `duck-${kind}`).setDisplaySize(110, 110).setDepth(entityDepth(430));
+      this.tweens.add({ targets: duck, y: 392, angle: 3, duration: 800 + i * 110, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
     });
+
+    // Logo.
+    const logo = this.add.text(cx, 150, 'Duck Defense', textStyle(118, { weight: '700', strokeThickness: 14 })).setOrigin(0.5);
+    const gradient = logo.context.createLinearGradient(0, 0, 0, logo.height);
+    gradient.addColorStop(0.2, '#fff3b0');
+    gradient.addColorStop(0.8, '#ffb020');
+    logo.setFill(gradient).setShadow(0, 8, 'rgba(0,0,0,0.3)', 0, true, true).setDepth(100);
+    this.tweens.add({ targets: logo, scale: 1.03, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+
+    this.add
+      .text(cx, 250, 'Protect the Nestera duck house!', textStyle(34, { strokeThickness: 7 }))
+      .setOrigin(0.5)
+      .setDepth(100);
 
     // Picking a difficulty starts the game. Easy is green and comes first.
     const start = (difficulty: Difficulty) => {
       const data: GameSceneData = { difficulty };
-      this.scene.start('GameScene', data);
+      this.cameras.main.fadeOut(250, 0, 0, 0);
+      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('GameScene', data));
     };
-    drawBigButton(this, width / 2 - 170, 610, DIFFICULTIES.easy.label, 0x2ecc71, () => start('easy'));
-    drawBigButton(this, width / 2 + 170, 610, DIFFICULTIES.normal.label, 0xe67e22, () => start('normal'));
+    drawBigButton(this, cx - 170, 610, DIFFICULTIES.easy.label, COLORS.green, COLORS.greenDark, () => start('easy')).setDepth(100);
+    drawBigButton(this, cx + 170, 610, DIFFICULTIES.normal.label, COLORS.orange, COLORS.orangeDark, () => start('normal')).setDepth(100);
+
+    this.cameras.main.fadeIn(300, 0, 0, 0);
   }
 }

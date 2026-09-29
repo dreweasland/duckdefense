@@ -22,7 +22,11 @@ game mechanics come from how they actually behave.
   pushes and PRs, but does not deploy.
 - **Backend (later):** When a leaderboard or cloud saves are needed, add a small Worker
   API in the same project, backed by D1 or KV. No separate infrastructure.
-- **Art:** Placeholder shapes and CC0 assets first. Swap in the kids' drawings later.
+- **Art:** Original vector-cartoon art: bold outlines, soft shading. Every sprite is an SVG
+  built in `src/art/sprites.ts` (the ducks share one silhouette in their real breed colors)
+  and loaded as textures by `BootScene`. Terrain and scenery are drawn in `src/art/terrain.ts`;
+  shared colors, fonts (Fredoka), and draw layers live in `src/ui/theme.ts`. The canvas
+  renders at 2x for sharp art on phones, so scenes lay out in 1280 x 720 world units.
 
 Keep game logic, meaning stats, wave definitions, and synergy rules, in plain TypeScript
 under `src/logic/`, separate from Phaser scenes. That keeps it testable and makes it easy
@@ -82,8 +86,8 @@ Two builders, ages 6 and 14, with different jobs.
 4. **Playtest lead**: runs test sessions and files the bugs.
 
 **The 6-year-old: art director and chief quack officer**
-1. **Character art**: crayon or marker drawings of the ducks and predators, photographed
-   and cut out as sprites. Keep his art as-is. The hand-drawn look is the style.
+1. **Art feedback**: looks over the game's art and calls out what should change (colors,
+   faces, which duck looks like which).
 2. **Sounds**: recorded quacks, raccoon noises, and a victory cheer.
 3. **Naming**: the boss, the levels, the upgrades.
 4. **Official playtester** of Easy Mode (see below).
@@ -104,8 +108,8 @@ When adding a feature, prefer a design where the tunable part lives in a data fi
   screens, and an Easy/Normal difficulty toggle.
 - **M3: Depth.** Pecking Loop synergy, flying hawks, day/night cycle with the solar
   battery, the fountain tower, Craig's blessing.
-- **M4: Make it ours.** The kids' art and sound pipeline, three or more kid-designed
-  levels, the boss fight.
+- **M4: Make it ours.** The kids' sound pipeline, three or more kid-designed levels, the
+  boss fight. (Art was overhauled into polished vector art instead of the kids' drawings.)
 - **M5: Polish.** Title screen, level select, save progress in localStorage, mobile touch
   support, and a family leaderboard on Workers + D1.
 

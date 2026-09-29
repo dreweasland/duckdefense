@@ -1,19 +1,22 @@
 import Phaser from 'phaser';
+import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
 import { ResultScene } from './scenes/ResultScene';
 import { TitleScene } from './scenes/TitleScene';
+import { RENDER_SCALE, WORLD } from './ui/theme';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  backgroundColor: '#3f7d4e',
+  backgroundColor: '#24452f',
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: 1280,
-    height: 720,
+    // Rendered at RENDER_SCALE x the world size for sharp art; each scene's camera zooms to match.
+    width: WORLD.width * RENDER_SCALE,
+    height: WORLD.height * RENDER_SCALE,
   },
-  scene: [TitleScene, GameScene, ResultScene],
+  scene: [BootScene, TitleScene, GameScene, ResultScene],
 });
 
 // Dev only: expose the game so playtests can fast-forward it from the browser
