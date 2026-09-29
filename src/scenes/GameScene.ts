@@ -556,11 +556,14 @@ export class GameScene extends Phaser.Scene {
         .text(-138, -12, stats.power.description, { ...textStyle(17, ink), wordWrap: { width: 276 } })
         .setOrigin(0, 0),
     ];
-    // Hawks.
-    lines.push(this.add.image(-126, 44, 'hawk').setDisplaySize(22, 22).setAlpha(stats.canHitFlying ? 1 : 0.4));
+    // Hawks. Chester can't peck them, but his Alarm Quack still freezes them.
+    const freezesHawks = !stats.canHitFlying && !!stats.alarmQuack;
+    const hawkText = stats.canHitFlying ? 'Hits hawks' : freezesHawks ? "Freezes hawks, can't peck them" : "Can't hit hawks";
+    const helpsWithHawks = stats.canHitFlying || freezesHawks;
+    lines.push(this.add.image(-126, 44, 'hawk').setDisplaySize(22, 22).setAlpha(helpsWithHawks ? 1 : 0.4));
     lines.push(
       this.add
-        .text(-108, 44, stats.canHitFlying ? 'Hits hawks' : "Can't hit hawks", textStyle(16, { ...ink, color: stats.canHitFlying ? '#2a8c44' : '#8a7f85' }))
+        .text(-108, 44, hawkText, textStyle(16, { ...ink, color: helpsWithHawks ? '#2a8c44' : '#8a7f85' }))
         .setOrigin(0, 0.5),
     );
     // Pecking Loop.
