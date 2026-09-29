@@ -20,8 +20,9 @@ game mechanics come from how they actually behave.
   domain to www. Cloudflare Workers Builds (connected to the GitHub repo) builds and
   deploys on push to `main`. A GitHub Actions CI workflow runs tests and the build on
   pushes and PRs, but does not deploy.
-- **Backend (later):** When a leaderboard or cloud saves are needed, add a small Worker
-  API in the same project, backed by D1 or KV. No separate infrastructure.
+- **Backend:** The same Worker (`worker/index.ts`) serves a small leaderboard API backed by
+  D1 (`migrations/`). Name and score rules shared with the game live in
+  `src/logic/leaderboard.ts`. Run it locally with `npm run dev:api` alongside `npm run dev`.
 - **Art:** Original vector-cartoon art: bold outlines, soft shading. Every sprite is an SVG
   built in `src/art/sprites.ts` (the ducks share one silhouette in their real breed colors)
   and loaded as textures by `BootScene`. Terrain and scenery are drawn in `src/art/terrain.ts`;
@@ -117,7 +118,8 @@ When adding a feature, prefer a design where the tunable part lives in a data fi
   can redesign them or add their own in Tiled. (Art was overhauled into polished vector art
   instead of the kids' drawings.)
 - **M5: Polish.** Title screen, level select, save progress in localStorage, mobile touch
-  support, and a family leaderboard on Workers + D1.
+  support, and a public leaderboard on Workers + D1 (typed names, profanity-filtered,
+  scores computed by the server, rate limited).
 
 ## Commands
 
@@ -125,6 +127,8 @@ When adding a feature, prefer a design where the tunable part lives in a data fi
 - `npm test`: run the Vitest logic tests (`src/logic/**/*.test.ts`)
 - `npm run build`: typecheck and build to `dist/`
 - `npm run deploy`: build and `wrangler deploy` by hand (Workers Builds does this on push to `main`)
+- `npm run dev:api`: run the Worker and a local D1 database on port 8787 (Vite proxies `/api` to it)
+- `npm run db:migrate`: apply database migrations to the real D1 database
 
 ## Conventions
 
