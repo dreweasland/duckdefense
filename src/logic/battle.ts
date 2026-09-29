@@ -1,5 +1,5 @@
 import { FOUNTAIN, NIGHT } from '../data/dayNight';
-import type { DuckKind } from '../data/ducks';
+import { WING_FLAP_RECOVERY, type DuckKind } from '../data/ducks';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { CHASES, PECKING_LOOP } from '../data/synergy';
 import { distance, type Point } from './geometry';
@@ -19,6 +19,8 @@ export interface Enemy {
   distance: number;
   /** Seconds it stays frozen (stunned) before moving again. */
   stopTime: number;
+  /** Seconds before a Wing Flap can knock it back again. */
+  pushRecovery: number;
   /** True while Curtis is slowing it (for drawing). */
   slowed: boolean;
   /** Ducks this predator has already scared (swooping hawks scare each duck once). */
@@ -119,6 +121,7 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind): Enemy {
     path,
     distance: 0,
     stopTime: 0,
+    pushRecovery: 0,
     slowed: false,
     scared: [],
     summonTime: stats.summons?.every ?? 0,
@@ -247,6 +250,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
 
   // 1. Predators head for the house, unless something has frozen them.
   for (const enemy of battle.enemies) {
+    enemy.pushRecovery = Math.max(0, enemy.pushRecovery - dt);
     const slow = slowFor(battle, enemy);
     enemy.slowed = slow < 1;
     if (enemy.stopTime > 0) {
@@ -330,10 +334,13 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     duck.cooldown = attackInterval(battle, duck);
     duck.attacks++;
 
-    // Potato's Wing Flap: every Nth hit knocks the target back.
-    const wingFlap = !!stats.wingFlap && duck.attacks % stats.wingFlap.everyNthAttack === 0;
+    // Potato's Wing Flap: every Nth hit knocks the target back, unless it was just knocked
+    // back (it needs a moment to recover). Heavy predators shrug off most of the push.
+    const wingFlap = !!stats.wingFlap && duck.attacks % stats.wingFlap.everyNthAttack === 0 && target.pushRecovery === 0;
     if (wingFlap && stats.wingFlap) {
-      target.distance = Math.max(0, target.distance - stats.wingFlap.pushBack);
+      const push = stats.wingFlap.pushBack * (1 - (ENEMIES[target.kind].pushResistance ?? 0));
+      target.distance = Math.max(0, target.distance - push);
+      target.pushRecovery = WING_FLAP_RECOVERY;
     }
 
     events.push({ type: 'attack', duckId: duck.id, target: targetPos, hitIds: hit.map((e) => e.id), wingFlap });

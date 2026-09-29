@@ -56,6 +56,10 @@ export const SELL_REFUND = 0.75;
 // After moving to a new nest, a duck needs this many seconds to settle before it attacks.
 export const MOVE_SETTLE_TIME = 1;
 
+// After a Wing Flap knocks a predator back, it can't be knocked back again for this many
+// seconds, so a row of Potatoes can't juggle a predator in place forever.
+export const WING_FLAP_RECOVERY = 1;
+
 // The order ducks appear in the duck picker.
 export const DUCK_ORDER: readonly DuckKind[] = ['sunny', 'potato', 'chester', 'curtis'];
 

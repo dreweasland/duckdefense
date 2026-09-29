@@ -10,6 +10,7 @@ export interface EnemyStats {
   hearts: number; // hearts it costs if it reaches the duck house
   flying: boolean; // flyers skip the path and dive straight at the house
   boss?: boolean; // gets a big health bar and a dramatic entrance
+  pushResistance?: number; // how much of a Wing Flap's knockback it shrugs off (0.8 = only moves 20%)
   // Scares ducks near it, so they stop attacking for a moment (Curtis is never scared).
   scares?: {
     radius: number; // how close a duck has to be
@@ -55,6 +56,7 @@ export const ENEMIES: Record<EnemyKind, EnemyStats> = {
     hearts: 5,
     flying: false,
     boss: true,
+    pushResistance: 0.8, // too heavy to push far, so Potato can't pin it in place
     scares: { radius: 150, time: 1.2, when: 'whistling' },
     summons: { enemy: 'raccoon', count: 2, every: 7 },
   },

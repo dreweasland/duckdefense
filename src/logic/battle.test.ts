@@ -409,3 +409,63 @@ describe('slows', () => {
     expect(enemy.distance).toBeCloseTo(100 + raccoon.speed * statsAt('curtis', 1).slowZone!.slow);
   });
 });
+
+describe('Wing Flap limits', () => {
+  it('only nudges the Night Bandit (too heavy to push far)', () => {
+    const battle = newBattle();
+    const boss = spawnEnemy(battle, 'bandit');
+    boss.distance = 500;
+    boss.speed = 0;
+    const potato = placeDuck(battle, 'potato', { x: 500, y: 0 });
+    potato.attacks = DUCKS.potato.wingFlap!.everyNthAttack - 1; // the next peck is a flap
+    const events = step(battle, 0);
+    expect(events.some((e) => e.type === 'attack' && e.wingFlap)).toBe(true);
+    const push = DUCKS.potato.wingFlap!.pushBack * (1 - ENEMIES.bandit.pushResistance!);
+    expect(boss.distance).toBeCloseTo(500 - push);
+  });
+
+  it("can't knock the same predator back again until it recovers", () => {
+    const battle = newBattle();
+    const enemy = spawnEnemy(battle, 'raccoon');
+    enemy.distance = 500;
+    enemy.speed = 0;
+    enemy.hp = 1_000_000; // keep it alive
+    const a = placeDuck(battle, 'potato', { x: 500, y: 20 });
+    const b = placeDuck(battle, 'potato', { x: 500, y: -20 });
+    a.attacks = b.attacks = DUCKS.potato.wingFlap!.everyNthAttack - 1; // both flap on their next peck
+    step(battle, 0);
+    expect(enemy.distance).toBe(500 - DUCKS.potato.wingFlap!.pushBack); // pushed once, not twice
+  });
+
+  // The bug: Potato's flaps used to pin the Night Bandit in place forever.
+  function banditProgress(setup: (battle: ReturnType<typeof newBattle>) => void): number {
+    // Easy, at night: the Bandit's slowest realistic speed.
+    const battle = createBattle(makePath([{ x: 0, y: 0 }, { x: 5000, y: 0 }]), { enemySpeed: 0.7 });
+    battle.night = true;
+    const boss = spawnEnemy(battle, 'bandit');
+    boss.distance = 1000;
+    boss.hp = boss.maxHp = 1_000_000_000; // never runs away, so we can watch it walk
+    boss.summonTime = Infinity; // no minions (or scares) getting in the way
+    setup(battle);
+    for (let i = 0; i < 30 * 30; i++) step(battle, 1 / 30);
+    return boss.distance - 1000;
+  }
+
+  it("can't be pinned by a fully upgraded Potato with his Pecking Loop bonus", () => {
+    const moved = banditProgress((battle) => {
+      placeDuck(battle, 'potato', { x: 1100, y: 60 }).level = 2;
+      placeDuck(battle, 'sunny', { x: 1100, y: -60 }); // Potato chases Sunny: +20% attack speed
+    });
+    expect(moved).toBeGreaterThan(300); // keeps walking (at least ~10 px/s over 30 seconds)
+  });
+
+  it('keeps moving forward even against a row of maxed Potatoes next to Curtis', () => {
+    // A huge investment (and Curtis's slow does most of the work), so slowing it to a
+    // crawl is fair; it just must never be pinned in place or pushed backwards.
+    const moved = banditProgress((battle) => {
+      for (const x of [1050, 1200, 1350]) placeDuck(battle, 'potato', { x, y: 60 }).level = 2;
+      placeDuck(battle, 'curtis', { x: 1200, y: -60 }).level = 1;
+    });
+    expect(moved).toBeGreaterThan(0);
+  });
+});
