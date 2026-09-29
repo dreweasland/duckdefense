@@ -172,6 +172,14 @@ const PLACEHOLDERS: Record<SoundKey, (ctx: AudioContext, volume: number) => void
     notes(ctx, 'sine', [2093, 2637], 0.05, 0.06 * v);
   },
   place: (ctx, v) => tone(ctx, { type: 'sine', from: 280, to: 560, duration: 0.12, volume: 0.3 * v }),
+  sell: (ctx, v) => {
+    tone(ctx, { type: 'sine', from: 560, to: 280, duration: 0.14, volume: 0.25 * v });
+    notes(ctx, 'sine', [1320, 1760], 0.06, 0.1 * v);
+  },
+  move: (ctx, v) => {
+    tone(ctx, { type: 'sine', from: 300, to: 700, duration: 0.18, volume: 0.2 * v });
+    tone(ctx, { type: 'sine', from: 400, to: 300, start: 0.3, duration: 0.08, volume: 0.2 * v });
+  },
   noPeas: (ctx, v) => tone(ctx, { type: 'square', from: 150, to: 130, duration: 0.15, volume: 0.08 * v }),
   waveStart: (ctx, v) => notes(ctx, 'square', [440, 660], 0.08, 0.08 * v),
   waveCleared: (ctx, v) => notes(ctx, 'triangle', [523, 659, 784, 1047], 0.09, 0.2 * v, 0.3),

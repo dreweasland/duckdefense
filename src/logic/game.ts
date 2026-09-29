@@ -1,11 +1,11 @@
 import { CRAIG } from '../data/craig';
 import { BATTERY, FOUNTAIN } from '../data/dayNight';
 import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
-import { DUCKS, type DuckKind } from '../data/ducks';
+import { DUCKS, MOVE_SETTLE_TIME, SELL_REFUND, type DuckKind } from '../data/ducks';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import type { Wave } from '../data/waves';
 import { createBattle, placeDuck, spawnEnemy, step, type Battle, type BattleEvent, type Duck, type Enemy } from './battle';
-import type { Point } from './geometry';
+import { distance, type Point } from './geometry';
 import type { Level } from './level';
 import { makePath, type Path } from './path';
 
@@ -113,6 +113,37 @@ export function buyDuck(game: Game, kind: DuckKind, at: Point): Duck | undefined
   if (!canBuy(game, kind)) return undefined;
   game.peas -= DUCKS[kind].cost;
   return placeDuck(game.battle, kind, at);
+}
+
+/** Peas you'd get back for selling this kind of duck. */
+export function sellValue(kind: DuckKind): number {
+  return Math.floor(DUCKS[kind].cost * SELL_REFUND);
+}
+
+/** Sells a duck for part of its cost. Returns the peas refunded, or undefined if it can't be sold. */
+export function sellDuck(game: Game, duckId: number): number | undefined {
+  if (isOver(game)) return undefined;
+  const duck = game.battle.ducks.find((d) => d.id === duckId);
+  if (!duck) return undefined;
+  game.battle.ducks = game.battle.ducks.filter((d) => d !== duck);
+  const refund = sellValue(duck.kind);
+  game.peas += refund;
+  return refund;
+}
+
+export function isSpotTaken(game: Game, at: Point): boolean {
+  return game.battle.ducks.some((d) => distance(d.position, at) < 1);
+}
+
+/** Moves a duck to an empty spot. It needs a moment to settle before it attacks again. */
+export function moveDuck(game: Game, duckId: number, to: Point): boolean {
+  if (isOver(game) || isSpotTaken(game, to)) return false;
+  const duck = game.battle.ducks.find((d) => d.id === duckId);
+  if (!duck) return false;
+  duck.position = { ...to };
+  duck.cooldown = Math.max(duck.cooldown, MOVE_SETTLE_TIME);
+  duck.abilityCooldown = Math.max(duck.abilityCooldown, MOVE_SETTLE_TIME);
+  return true;
 }
 
 /** Lists every predator in a wave with the time it appears, soonest first. */

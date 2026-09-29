@@ -3,6 +3,7 @@ import { drawGrass, drawOutskirts, drawPath, drawPathEntrance, drawPond, scatter
 import { BATTERY, FOUNTAIN } from '../data/dayNight';
 import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
+import { CHASES } from '../data/synergy';
 import { ENEMIES } from '../data/enemies';
 import { HUD_AREAS } from '../data/layout';
 import { LEVELS } from '../data/levels';
@@ -10,6 +11,9 @@ import { chasePartner, enemyPosition, isFlying, type Enemy } from '../logic/batt
 import {
   buyDuck,
   canBuy,
+  moveDuck,
+  sellDuck,
+  sellValue,
   canUseBlessing,
   createGame,
   isNight,
@@ -23,7 +27,7 @@ import {
 import { closestPointOnPolyline, type Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
 import { BACKDROP, COLORS, DEPTH, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
-import { drawCard, drawPill, drawRoundButton, drawSoundButton, popSpeechBubble } from '../ui/widgets';
+import { drawBigButton, drawCard, drawPill, drawRoundButton, drawSoundButton, popSpeechBubble } from '../ui/widgets';
 import { playSound } from '../audio/sfx';
 
 const DUCK_SIZE = 84;
@@ -53,6 +57,14 @@ export interface GameSceneData {
 interface DuckSprite {
   root: Phaser.GameObjects.Container;
   art: Phaser.GameObjects.Image;
+  range: Phaser.GameObjects.Arc;
+}
+
+interface Nest {
+  slot: Point;
+  image: Phaser.GameObjects.Image;
+  plus?: Phaser.GameObjects.Text;
+  duckId?: number;
 }
 
 interface EnemySprite {
@@ -91,6 +103,13 @@ export class GameScene extends Phaser.Scene {
   private duckSprites = new Map<number, DuckSprite>();
   private enemySprites = new Map<number, EnemySprite>();
   private pickerCards: PickerCard[] = [];
+  private nests: Nest[] = [];
+  /** The panel shown for a tapped duck (or the info card for a tapped picker card). */
+  private popup?: Phaser.GameObjects.Container;
+  private popupTimer?: Phaser.Time.TimerEvent;
+  private focusedDuckId?: number;
+  /** While moving a duck: its id, and the things drawn to show where it can go. */
+  private moving?: { duckId: number; marks: Phaser.GameObjects.GameObject[] };
   private fx!: Effects;
   private house!: Phaser.GameObjects.Image;
   private shield!: Phaser.GameObjects.Container;
@@ -128,6 +147,11 @@ export class GameScene extends Phaser.Scene {
     this.duckSprites.clear();
     this.enemySprites.clear();
     this.pickerCards = [];
+    this.nests = [];
+    this.popup = undefined;
+    this.popupTimer = undefined;
+    this.focusedDuckId = undefined;
+    this.moving = undefined;
     this.nightLights = [];
     this.bossBar = undefined;
 
@@ -389,6 +413,9 @@ export class GameScene extends Phaser.Scene {
         .text(-6, 30, String(DUCKS[kind].cost), textStyle(19, { color: COLORS.inkCss, strokeThickness: 0 }))
         .setOrigin(0, 0.5);
       const parts: Phaser.GameObjects.GameObject[] = [card, duck, pea, cost];
+      // Power badge: what's special about this duck.
+      parts.push(this.add.circle(-32, -36, 14, 0xffffff).setStrokeStyle(3, COLORS.ink));
+      parts.push(this.add.image(-32, -36, `power-${DUCKS[kind].power.icon}`).setDisplaySize(20, 20));
       if (DUCKS[kind].canHitFlying) {
         // Hawk badge: this duck can hit flyers.
         parts.push(this.add.circle(32, -36, 14, 0x87ceeb).setStrokeStyle(3, COLORS.ink));
@@ -398,9 +425,11 @@ export class GameScene extends Phaser.Scene {
       parts.push(hit);
       const container = this.add.container(50 + i * CARD.spacing, CARD.y, parts).setDepth(DEPTH.hud);
       hit.on('pointerdown', () => {
+        this.cancelMove();
         this.selected = kind;
         playSound(this, 'tap');
         this.tweens.add({ targets: duck, scale: duck.scale * 1.15, duration: 90, yoyo: true });
+        this.showPickerInfo(kind);
         this.refreshHud();
       });
       this.pickerCards.push({ kind, container, card });
@@ -410,28 +439,53 @@ export class GameScene extends Phaser.Scene {
   // --- Ducks -------------------------------------------------------------
 
   private drawNest(slot: Point): void {
-    const nest = this.add.image(slot.x, slot.y + 10, 'nest').setDisplaySize(NEST_SIZE, NEST_SIZE * 0.8);
-    nest.setDepth(entityDepth(slot.y - 20));
-    const plus = this.add.text(slot.x, slot.y + 8, '+', textStyle(38, { weight: '700' })).setOrigin(0.5);
-    plus.setDepth(entityDepth(slot.y - 19));
-    this.tweens.add({ targets: plus, scale: 1.15, alpha: 0.75, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+    const image = this.add.image(slot.x, slot.y + 10, 'nest').setDisplaySize(NEST_SIZE, NEST_SIZE * 0.8);
+    image.setDepth(entityDepth(slot.y - 20));
+    const nest: Nest = { slot, image };
+    this.nests.push(nest);
+    this.setNestEmpty(nest);
+    image.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.onNestTap(nest));
+  }
 
-    nest.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-      const duck = buyDuck(this.state, this.selected, slot);
-      if (!duck) {
-        // Not enough peas: wiggle the pea counter.
-        playSound(this, 'noPeas');
-        this.tweens.add({ targets: this.peasText, x: '+=6', duration: 50, yoyo: true, repeat: 3 });
-        return;
-      }
-      nest.disableInteractive();
-      playSound(this, 'place');
-      this.tweens.killTweensOf(plus);
-      plus.destroy();
-      this.drawPlacedDuck(duck.id, duck.kind, slot);
-      this.drawPeckingLoop();
-      this.refreshHud();
-    });
+  private setNestEmpty(nest: Nest): void {
+    nest.duckId = undefined;
+    const plus = this.add.text(nest.slot.x, nest.slot.y + 8, '+', textStyle(38, { weight: '700' })).setOrigin(0.5);
+    plus.setDepth(entityDepth(nest.slot.y - 19));
+    this.tweens.add({ targets: plus, scale: 1.15, alpha: 0.75, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+    nest.plus = plus;
+  }
+
+  private setNestTaken(nest: Nest, duckId: number): void {
+    nest.duckId = duckId;
+    if (nest.plus) {
+      this.tweens.killTweensOf(nest.plus);
+      nest.plus.destroy();
+      nest.plus = undefined;
+    }
+  }
+
+  private onNestTap(nest: Nest): void {
+    if (nest.duckId !== undefined) {
+      this.openDuckPanel(nest.duckId);
+      return;
+    }
+    if (this.moving) {
+      this.finishMove(nest);
+      return;
+    }
+    this.closePopup();
+    const duck = buyDuck(this.state, this.selected, nest.slot);
+    if (!duck) {
+      // Not enough peas: wiggle the pea counter.
+      playSound(this, 'noPeas');
+      this.tweens.add({ targets: this.peasText, x: '+=6', duration: 50, yoyo: true, repeat: 3 });
+      return;
+    }
+    playSound(this, 'place');
+    this.setNestTaken(nest, duck.id);
+    this.drawPlacedDuck(duck.id, duck.kind, nest.slot);
+    this.drawPeckingLoop();
+    this.refreshHud();
   }
 
   private drawPlacedDuck(id: number, kind: DuckKind, at: Point): void {
@@ -440,17 +494,251 @@ export class GameScene extends Phaser.Scene {
 
     const size = kind === 'curtis' ? DUCK_SIZE * 1.12 : DUCK_SIZE;
     const art = this.add.image(0, -size * 0.28, `duck-${kind}`).setDisplaySize(size, size);
-    // Face the path.
-    const nearest = closestPointOnPolyline(at, this.level.path);
-    art.setFlipX(nearest.x < at.x);
+    art.setFlipX(this.facesLeft(at));
     const root = this.add.container(at.x, at.y, [art]).setDepth(entityDepth(at.y));
-    this.duckSprites.set(id, { root, art });
+    this.duckSprites.set(id, { root, art, range });
+    // Tap a duck to see its power, or to move or sell it.
+    art.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.onDuckTap(id));
 
     // Plop in, then bob gently.
     root.setScale(0);
     this.tweens.add({ targets: root, scale: 1, duration: 280, ease: 'Back.Out' });
     this.tweens.add({ targets: art, y: art.y - 3, duration: 900 + Math.random() * 300, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
     this.fx.puff.explode(6, at.x, at.y);
+  }
+
+  /** Ducks face the nearest bit of path. */
+  private facesLeft(at: Point): boolean {
+    return closestPointOnPolyline(at, this.level.path).x < at.x;
+  }
+
+  private onDuckTap(duckId: number): void {
+    if (this.moving) {
+      // Tapping the duck you're moving cancels; tapping another duck switches to it.
+      const same = this.moving.duckId === duckId;
+      this.cancelMove();
+      if (same) return;
+    }
+    this.openDuckPanel(duckId);
+  }
+
+  // --- Duck info, selling, and moving --------------------------------------
+
+  /** Lines about a duck's power, hawks, and the Pecking Loop, for info cards. */
+  private duckInfoLines(kind: DuckKind, partner?: DuckKind): Phaser.GameObjects.GameObject[] {
+    const stats = DUCKS[kind];
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    const lines: Phaser.GameObjects.GameObject[] = [
+      this.add.image(-118, -58, `duck-${kind}`).setDisplaySize(64, 64),
+      this.add.text(-80, -74, stats.name, textStyle(28, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+      this.add.image(-68, -44, `power-${stats.power.icon}`).setDisplaySize(24, 24),
+      this.add.text(-50, -44, stats.power.name, textStyle(20, { ...ink, color: '#2a66a8', weight: '700' })).setOrigin(0, 0.5),
+      this.add
+        .text(-138, -12, stats.power.description, { ...textStyle(17, ink), wordWrap: { width: 276 } })
+        .setOrigin(0, 0),
+    ];
+    // Hawks.
+    lines.push(this.add.image(-126, 44, 'hawk').setDisplaySize(22, 22).setAlpha(stats.canHitFlying ? 1 : 0.4));
+    lines.push(
+      this.add
+        .text(-108, 44, stats.canHitFlying ? 'Hits hawks' : "Can't hit hawks", textStyle(16, { ...ink, color: stats.canHitFlying ? '#2a8c44' : '#8a7f85' }))
+        .setOrigin(0, 0.5),
+    );
+    // Pecking Loop.
+    const chases = CHASES[kind];
+    const chasedBy = (Object.keys(CHASES) as DuckKind[]).find((k) => CHASES[k] === kind);
+    const loopText = partner
+      ? `Faster! Next to ${DUCKS[partner].name}`
+      : chases
+        ? `Faster next to ${DUCKS[chases].name}`
+        : chasedBy
+          ? `Makes ${DUCKS[chasedBy].name} faster`
+          : 'Ignores everyone';
+    lines.push(this.add.text(-126, 70, '♥', textStyle(18, { color: '#ff7aa2', stroke: '#ffffff', strokeThickness: 3 })).setOrigin(0.5));
+    lines.push(this.add.text(-108, 70, loopText, textStyle(16, { ...ink, color: partner ? '#e0447a' : '#8a5a70' })).setOrigin(0, 0.5));
+    return lines;
+  }
+
+  private closePopup(): void {
+    this.popupTimer?.remove();
+    this.popupTimer = undefined;
+    this.popup?.destroy();
+    this.popup = undefined;
+    if (this.focusedDuckId !== undefined) {
+      this.duckSprites.get(this.focusedDuckId)?.range.setStrokeStyle(2, 0xffffff, 0.22);
+      this.focusedDuckId = undefined;
+    }
+  }
+
+  /** A card under the picker explaining the duck you just picked. Fades on its own. */
+  private showPickerInfo(kind: DuckKind): void {
+    this.closePopup();
+    const card = drawCard(this.add.graphics(), 310, 196, { radius: 18 });
+    const popup = this.add.container(196, 214, [card, ...this.duckInfoLines(kind)]).setDepth(DEPTH.hud + 5);
+    popup.setScale(0.8).setAlpha(0);
+    this.tweens.add({ targets: popup, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
+    this.popup = popup;
+    this.popupTimer = this.time.delayedCall(4000, () => {
+      if (this.popup !== popup) return;
+      this.tweens.add({ targets: popup, alpha: 0, duration: 250, onComplete: () => this.popup === popup && this.closePopup() });
+    });
+  }
+
+  /** The panel for a placed duck: its power, Pecking Loop status, and Move / Sell buttons. */
+  private openDuckPanel(duckId: number): void {
+    const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+    const sprite = this.duckSprites.get(duckId);
+    if (!duck || !sprite) return;
+    this.cancelMove();
+    this.closePopup();
+    playSound(this, 'tap');
+    this.focusedDuckId = duckId;
+    sprite.range.setStrokeStyle(4, 0xffffff, 0.8);
+    this.tweens.add({ targets: sprite.art, scale: sprite.art.scale * 1.12, duration: 90, yoyo: true });
+
+    // Taps anywhere outside the panel close it.
+    const scrim = this.add
+      .zone(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height)
+      .setInteractive()
+      .setDepth(DEPTH.hud + 4);
+    scrim.on('pointerdown', () => this.closePopup());
+
+    const partner = chasePartner(this.state.battle, duck)?.kind;
+    const card = drawCard(this.add.graphics(), 310, 290, { radius: 18 });
+    card.y = 20;
+    const block = this.add.zone(0, 20, 310, 290).setInteractive(); // taps on the panel itself don't close it
+    const refund = sellValue(duck.kind);
+    const small = { width: 132, height: 54, fontSize: 26 };
+    const move = drawBigButton(this, -74, 118, 'Move', COLORS.blue, COLORS.blueDark, () => this.startMove(duckId), small);
+    // Sell shows how many peas you get back.
+    const sell = drawBigButton(this, 74, 118, `+${refund}`, COLORS.orange, COLORS.orangeDark, () => this.sell(duckId), {
+      ...small,
+      icon: 'icon-pea',
+    });
+
+    // Above the duck, unless that would go off the top of the screen.
+    const at = duck.position;
+    const y = at.y - 250 > 0 ? at.y - 210 : at.y + 180;
+    const x = Math.max(165, Math.min(WORLD.width - 165, at.x));
+    const panel = this.add
+      .container(x, y, [card, block, ...this.duckInfoLines(duck.kind, partner), move, sell])
+      .setDepth(DEPTH.hud + 5);
+    panel.setScale(0.8).setAlpha(0);
+    this.tweens.add({ targets: panel, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
+    const container = this.add.container(0, 0, [scrim, panel]).setDepth(DEPTH.hud + 4);
+    this.popup = container;
+  }
+
+  private sell(duckId: number): void {
+    const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+    const sprite = this.duckSprites.get(duckId);
+    this.closePopup();
+    if (!duck || !sprite) return;
+    const at = { ...duck.position };
+    const refund = sellDuck(this.state, duckId);
+    if (refund === undefined) return;
+    playSound(this, 'sell');
+    this.duckSprites.delete(duckId);
+    sprite.range.destroy();
+    this.tweens.killTweensOf(sprite.art);
+    this.tweens.add({
+      targets: sprite.root,
+      scale: 0,
+      alpha: 0,
+      y: at.y - 30,
+      duration: 250,
+      onComplete: () => sprite.root.destroy(),
+    });
+    this.fx.puff.explode(10, at.x, at.y - 20);
+    this.flyPea(at, refund);
+    const nest = this.nests.find((n) => n.duckId === duckId);
+    if (nest) this.setNestEmpty(nest);
+    this.drawPeckingLoop();
+    this.refreshHud();
+  }
+
+  /** Move mode: empty nests light up; tap one to hop the duck there. */
+  private startMove(duckId: number): void {
+    this.closePopup();
+    const sprite = this.duckSprites.get(duckId);
+    if (!sprite) return;
+    const marks: Phaser.GameObjects.GameObject[] = [];
+    // Taps anywhere else cancel (this sits below the nests and ducks, so they still get taps).
+    const scrim = this.add
+      .zone(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height)
+      .setInteractive()
+      .setDepth(DEPTH.path + 0.8);
+    scrim.on('pointerdown', () => this.cancelMove());
+    marks.push(scrim);
+    for (const nest of this.nests) {
+      if (nest.duckId !== undefined) continue;
+      const ring = this.add
+        .circle(nest.slot.x, nest.slot.y + 8, 38)
+        .setStrokeStyle(5, COLORS.gold)
+        .setDepth(entityDepth(nest.slot.y - 18));
+      this.tweens.add({ targets: ring, scale: 1.15, alpha: 0.5, duration: 450, yoyo: true, repeat: -1 });
+      marks.push(ring);
+    }
+    // The duck being moved lifts up a little.
+    this.tweens.add({ targets: sprite.root, y: sprite.root.y - 8, duration: 150, ease: 'Back.Out' });
+    const hint = this.add
+      .text(WORLD.width / 2, 150, 'Tap a glowing nest to move there', textStyle(26))
+      .setOrigin(0.5)
+      .setDepth(DEPTH.hud);
+    marks.push(hint);
+    this.moving = { duckId, marks };
+  }
+
+  private cancelMove(): void {
+    if (!this.moving) return;
+    const { duckId, marks } = this.moving;
+    this.moving = undefined;
+    for (const mark of marks) {
+      this.tweens.killTweensOf(mark);
+      mark.destroy();
+    }
+    const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+    const sprite = this.duckSprites.get(duckId);
+    if (duck && sprite) this.tweens.add({ targets: sprite.root, y: duck.position.y, duration: 120 });
+  }
+
+  private finishMove(to: Nest): void {
+    const duckId = this.moving?.duckId;
+    this.cancelMove();
+    if (duckId === undefined) return;
+    const from = this.nests.find((n) => n.duckId === duckId);
+    const sprite = this.duckSprites.get(duckId);
+    if (!sprite || !moveDuck(this.state, duckId, to.slot)) return;
+    playSound(this, 'move');
+    if (from) this.setNestEmpty(from);
+    this.setNestTaken(to, duckId);
+
+    // Hop over: a quick arc, then a puff where it lands.
+    const { root, art, range } = sprite;
+    const target = to.slot;
+    this.tweens.killTweensOf([root, art]);
+    art.setFlipX(target.x < root.x);
+    this.tweens.add({
+      targets: root,
+      x: target.x,
+      y: target.y,
+      duration: 380,
+      ease: 'Sine.InOut',
+      onUpdate: (tween) => {
+        root.setDepth(DEPTH.effects - 0.5);
+        // Lift in the middle of the hop.
+        art.setY(-(art.displayHeight * 0.28) - Math.sin(tween.progress * Math.PI) * 40);
+      },
+      onComplete: () => {
+        root.setDepth(entityDepth(target.y));
+        art.setY(-art.displayHeight * 0.28);
+        art.setFlipX(this.facesLeft(target));
+        this.fx.puff.explode(6, target.x, target.y);
+        this.tweens.add({ targets: art, y: art.y - 3, duration: 1000, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+      },
+    });
+    range.setPosition(target.x, target.y);
+    this.drawPeckingLoop();
   }
 
   /** A pink line with a heart between each duck and the duck it chases (the Pecking Loop bonus). */

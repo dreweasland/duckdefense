@@ -13,6 +13,8 @@ export type SoundKey =
   | 'heartLost'
   | 'shoo'
   | 'place'
+  | 'sell'
+  | 'move'
   | 'noPeas'
   | 'waveStart'
   | 'waveCleared'
@@ -40,6 +42,8 @@ export const SOUNDS: Record<SoundKey, SoundInfo> = {
   heartLost: { when: 'A predator gets into the duck house (should be funny!)', volume: 0.7 },
   shoo: { when: 'Craig shoos a predator away', volume: 0.6 },
   place: { when: 'A duck is placed in a nest', volume: 0.6 },
+  sell: { when: 'A duck is sold', volume: 0.5 },
+  move: { when: 'A duck hops to a new nest', volume: 0.5 },
   noPeas: { when: "Tapping a nest without enough peas", volume: 0.5 },
   waveStart: { when: 'The play button starts a wave', volume: 0.5 },
   waveCleared: { when: 'A wave is cleared', volume: 0.6 },

@@ -42,7 +42,7 @@ export function drawBigButton(
   color: number,
   edgeColor: number,
   onTap: () => void,
-  options: { width?: number; height?: number; icon?: string } = {},
+  options: { width?: number; height?: number; icon?: string; fontSize?: number } = {},
 ): Phaser.GameObjects.Container {
   const width = options.width ?? 280;
   const height = options.height ?? 96;
@@ -66,10 +66,11 @@ export function drawBigButton(
   };
   draw(false);
 
-  const text = scene.add.text(options.icon ? 22 : 0, -2, label, textStyle(42, { weight: '700' })).setOrigin(0.5);
+  const fontSize = options.fontSize ?? 42;
+  const text = scene.add.text(options.icon ? fontSize / 2 : 0, -2, label, textStyle(fontSize, { weight: '700' })).setOrigin(0.5);
   face.add(text);
   if (options.icon) {
-    face.add(scene.add.image(-text.width / 2 - 8, -2, options.icon).setDisplaySize(44, 44));
+    face.add(scene.add.image(text.x - text.width / 2 - fontSize * 0.55, -2, options.icon).setDisplaySize(fontSize, fontSize));
   }
 
   const hit = scene.add.zone(0, edge / 2, width, height + edge).setInteractive({ useHandCursor: true });

@@ -496,6 +496,51 @@ function moonSvg(): string {
   return svg(64, 64, '', `<path d="M40 6 A26 26 0 1 0 58 44 A20 20 0 1 1 40 6 Z" fill="#fff2b3" ${stroke(4)}/><circle cx="24" cy="36" r="3" fill="#e6d38a"/><circle cx="32" cy="48" r="2" fill="#e6d38a"/>`);
 }
 
+// --- Duck power icons (shown on picker cards and info panels) ---
+
+function splashIconSvg(): string {
+  const defs = vGrad('drop', '#8fd3ff', '#2f7fc0');
+  return svg(
+    64,
+    64,
+    defs,
+    `<path d="M30 6 C38 20 48 30 48 42 C48 52 40 58 30 58 C20 58 12 52 12 42 C12 30 22 20 30 6 Z" fill="url(#drop)" ${stroke(4)}/>` +
+      `<ellipse cx="23" cy="40" rx="4" ry="7" fill="#ffffff" opacity="0.6"/>` +
+      `<circle cx="54" cy="16" r="5" fill="#8fd3ff" ${stroke(3)}/><circle cx="52" cy="54" r="4" fill="#8fd3ff" ${stroke(3)}/>`,
+  );
+}
+
+function flapIconSvg(): string {
+  return svg(
+    64,
+    64,
+    '',
+    `<path d="M50 8 C58 24 48 46 22 56 L14 58 C18 40 30 18 50 8 Z" fill="#454a53" ${stroke(4)}/>` +
+      `<path d="M14 58 L44 18 M24 44 L40 40 M30 34 L46 30 M20 52 L34 50" stroke="#9aa0a8" stroke-width="3" stroke-linecap="round"/>`,
+  );
+}
+
+function quackIconSvg(): string {
+  return svg(
+    64,
+    64,
+    '',
+    `<circle cx="20" cy="32" r="12" fill="#ffd23f" ${stroke(4)}/>` +
+      `<path d="M36 18 Q46 32 36 46 M44 10 Q58 32 44 54" fill="none" stroke="#ffd23f" stroke-width="6" stroke-linecap="round"/>` +
+      `<path d="M36 18 Q46 32 36 46 M44 10 Q58 32 44 54" fill="none" stroke="${INK}" stroke-width="2" stroke-linecap="round" opacity="0.6"/>`,
+  );
+}
+
+/** A stop sign: Curtis holds the line. */
+function holdIconSvg(): string {
+  const points: string[] = [];
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    points.push(`${(32 + Math.cos(a) * 26).toFixed(1)},${(32 + Math.sin(a) * 26).toFixed(1)}`);
+  }
+  return svg(64, 64, '', `<polygon points="${points.join(' ')}" fill="#e0334f" ${stroke(4)}/><rect x="16" y="28" width="32" height="8" rx="3" fill="#ffffff"/>`);
+}
+
 /** A soft white glow, tinted and blended for lights. */
 function glowSvg(): string {
   return svg(128, 128, rGrad('g', '#ffffff', '#ffffff', 1, 0), `<circle cx="64" cy="64" r="64" fill="url(#g)"/>`);
@@ -558,6 +603,10 @@ export function allSprites(): SpriteArt[] {
     { key: 'icon-bolt', svg: boltSvg(), width: 30, height: 30 },
     { key: 'icon-sun', svg: sunSvg(), width: 36, height: 36 },
     { key: 'icon-moon', svg: moonSvg(), width: 36, height: 36 },
+    { key: 'power-splash', svg: splashIconSvg(), width: 32, height: 32 },
+    { key: 'power-flap', svg: flapIconSvg(), width: 32, height: 32 },
+    { key: 'power-quack', svg: quackIconSvg(), width: 32, height: 32 },
+    { key: 'power-hold', svg: holdIconSvg(), width: 32, height: 32 },
     { key: 'glow', svg: glowSvg(), width: 128, height: 128 },
     { key: 'star', svg: starSvg(), width: 24, height: 24 },
     { key: 'feather', svg: featherSvg(), width: 12, height: 24 },

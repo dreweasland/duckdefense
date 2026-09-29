@@ -2,10 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { CRAIG } from '../data/craig';
 import { BATTERY, FOUNTAIN, NIGHT } from '../data/dayNight';
 import { DIFFICULTIES } from '../data/difficulty';
-import { DUCKS } from '../data/ducks';
+import { DUCKS, MOVE_SETTLE_TIME, SELL_REFUND } from '../data/ducks';
 import { ENEMIES } from '../data/enemies';
 import type { Wave } from '../data/waves';
-import { buyDuck, createGame, isNight, scheduleWave, startWave, update, useBlessing, type GameEvent } from './game';
+import {
+  buyDuck,
+  createGame,
+  isNight,
+  isSpotTaken,
+  moveDuck,
+  scheduleWave,
+  sellDuck,
+  sellValue,
+  startWave,
+  update,
+  useBlessing,
+  type GameEvent,
+} from './game';
 import { makePath } from './path';
 
 // A short straight path so predators arrive quickly.
@@ -177,5 +190,58 @@ describe('bosses', () => {
     expect(bosses).toBe(1);
     // 5 hearts for the Bandit, 1 for each minion that also got in.
     expect(game.hearts).toBe(DIFFICULTIES.normal.hearts - ENEMIES.bandit.hearts - (arrived.length - bosses));
+  });
+});
+
+describe('selling and moving ducks', () => {
+  it('sells a duck for part of what it cost', () => {
+    const game = createGame({ path }, [oneRaccoon], 'normal');
+    const duck = buyDuck(game, 'sunny', { x: 0, y: 50 })!;
+    const before = game.peas;
+    expect(sellDuck(game, duck.id)).toBe(sellValue('sunny'));
+    expect(sellValue('sunny')).toBe(Math.floor(DUCKS.sunny.cost * SELL_REFUND));
+    expect(game.peas).toBe(before + sellValue('sunny'));
+    expect(game.battle.ducks).toHaveLength(0);
+  });
+
+  it('frees the nest so another duck can go there', () => {
+    const game = createGame({ path }, [oneRaccoon], 'normal');
+    const at = { x: 0, y: 50 };
+    const duck = buyDuck(game, 'sunny', at)!;
+    expect(isSpotTaken(game, at)).toBe(true);
+    sellDuck(game, duck.id);
+    expect(isSpotTaken(game, at)).toBe(false);
+  });
+
+  it('moves a duck to an empty spot', () => {
+    const game = createGame({ path }, [oneRaccoon], 'normal');
+    const duck = buyDuck(game, 'sunny', { x: 0, y: 50 })!;
+    expect(moveDuck(game, duck.id, { x: 100, y: 50 })).toBe(true);
+    expect(duck.position).toEqual({ x: 100, y: 50 });
+  });
+
+  it("won't move a duck onto another duck", () => {
+    const game = createGame({ path }, [oneRaccoon], 'normal');
+    const a = buyDuck(game, 'sunny', { x: 0, y: 50 })!;
+    buyDuck(game, 'sunny', { x: 100, y: 50 });
+    expect(moveDuck(game, a.id, { x: 100, y: 50 })).toBe(false);
+    expect(a.position).toEqual({ x: 0, y: 50 });
+  });
+
+  it('makes a moved duck settle before it attacks again', () => {
+    const game = createGame({ path }, [oneRaccoon], 'normal');
+    const duck = buyDuck(game, 'sunny', { x: 0, y: 50 })!;
+    moveDuck(game, duck.id, { x: 100, y: 10 });
+    startWave(game);
+    const early = update(game, MOVE_SETTLE_TIME / 2);
+    expect(early.some((e) => e.type === 'attack')).toBe(false);
+  });
+
+  it("can't sell or move after the level is over", () => {
+    const game = createGame({ path }, [oneRaccoon], 'normal');
+    const duck = buyDuck(game, 'sunny', { x: 0, y: 50 })!;
+    game.phase = 'won';
+    expect(sellDuck(game, duck.id)).toBeUndefined();
+    expect(moveDuck(game, duck.id, { x: 100, y: 50 })).toBe(false);
   });
 });

@@ -4,6 +4,12 @@ export type DuckKind = 'sunny' | 'potato' | 'chester' | 'curtis';
 
 export interface DuckStats {
   name: string;
+  // Shown in the game when you tap a duck. Keep it short and fun!
+  power: {
+    name: string;
+    description: string;
+    icon: 'splash' | 'flap' | 'quack' | 'hold'; // picture on the duck's card
+  };
   cost: number; // peas to place this duck
   range: number; // how far away the duck can reach a predator
   damage: number; // how much health each hit takes off
@@ -25,6 +31,12 @@ export interface DuckStats {
   };
 }
 
+// Selling a duck gives back this share of what it cost (0.75 = 75%).
+export const SELL_REFUND = 0.75;
+
+// After moving to a new nest, a duck needs this many seconds to settle before it attacks.
+export const MOVE_SETTLE_TIME = 1;
+
 // The order ducks appear in the duck picker.
 export const DUCK_ORDER: readonly DuckKind[] = ['sunny', 'potato', 'chester', 'curtis'];
 
@@ -32,6 +44,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
   // Sunny, the Blue Swedish veteran: steady all-rounder with a small splash.
   sunny: {
     name: 'Sunny',
+    power: { name: 'Splash!', description: 'Throws water that splashes a whole group.', icon: 'splash' },
     cost: 100,
     range: 150,
     damage: 12,
@@ -44,6 +57,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
   // gives a Wing Flap that knocks predators back.
   potato: {
     name: 'Potato',
+    power: { name: 'Wing Flap', description: 'Super fast pecks. Every 5th one flaps predators backward.', icon: 'flap' },
     cost: 120,
     range: 120,
     damage: 6,
@@ -57,6 +71,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
   // every predator in range.
   chester: {
     name: 'Chester',
+    power: { name: 'Alarm Quack', description: 'QUACK! Freezes every predator nearby, even hawks.', icon: 'quack' },
     cost: 150,
     range: 160,
     damage: 5,
@@ -71,6 +86,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
   // fear and slow debuffs once predators can cause them.)
   curtis: {
     name: 'Curtis',
+    power: { name: 'Hold the Line', description: 'Stops each predator that walks up to him. Nope.', icon: 'hold' },
     cost: 80,
     range: 130, // most slots are 110 from the path, so this gives him a stretch to guard
     damage: 4,
