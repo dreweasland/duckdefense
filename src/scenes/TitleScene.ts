@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { drawGrass, drawPond, scatterDecor } from '../art/terrain';
+import { drawGrass, drawOutskirts, drawPond, scatterDecor } from '../art/terrain';
 import type { Difficulty } from '../data/difficulty';
 import { DIFFICULTIES } from '../data/difficulty';
 import { DUCK_ORDER } from '../data/ducks';
@@ -19,6 +19,7 @@ export class TitleScene extends Phaser.Scene {
     const cx = WORLD.width / 2;
 
     drawGrass(this, 31);
+    drawOutskirts(this, 34);
     drawPond(this, POND, 32);
     scatterDecor(this, { ponds: [POND], blocked: [{ x: 260, y: 40, width: 760, height: 250 }, { x: 250, y: 540, width: 780, height: 150 }] }, 33);
 

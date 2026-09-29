@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import level1 from '../../maps/level1.tmj?raw';
-import { drawGrass, drawPath, drawPond, scatterDecor, type Rect } from '../art/terrain';
+import { drawGrass, drawOutskirts, drawPath, drawPathEntrance, drawPond, scatterDecor, type Rect } from '../art/terrain';
 import { BATTERY, FOUNTAIN } from '../data/dayNight';
 import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
@@ -22,7 +22,7 @@ import {
 } from '../logic/game';
 import { closestPointOnPolyline, type Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
-import { COLORS, DEPTH, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
+import { BACKDROP, COLORS, DEPTH, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
 import { drawCard, drawPill, drawRoundButton, popSpeechBubble } from '../ui/widgets';
 
 const DUCK_SIZE = 84;
@@ -165,7 +165,9 @@ export class GameScene extends Phaser.Scene {
 
   private drawWorld(): void {
     drawGrass(this, 11);
+    drawOutskirts(this, 14);
     drawPath(this, this.level.path, 12);
+    drawPathEntrance(this, this.level.path, 15);
     this.level.ponds.forEach((pond, i) => drawPond(this, pond, 20 + i));
 
     const fountain = this.state.battle.fountain;
@@ -284,7 +286,7 @@ export class GameScene extends Phaser.Scene {
     this.shownNight = isNight(this.state);
     const alpha = this.shownNight ? 1 : 0;
     this.nightOverlay = this.add
-      .rectangle(WORLD.width / 2, WORLD.height / 2, WORLD.width, WORLD.height, COLORS.night, alpha * NIGHT_ALPHA)
+      .rectangle(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height, COLORS.night, alpha * NIGHT_ALPHA)
       .setDepth(DEPTH.night);
 
     // Warm glow from the duck house window, and a cool glow from the fountain.
@@ -503,6 +505,9 @@ export class GameScene extends Phaser.Scene {
       .setVisible(false);
     this.tweens.add({ targets: dizzy, angle: 360, duration: 900, repeat: -1 });
     root.add([hpBar, dizzy]);
+    // Fade in, so a predator entering near the edge of a wide screen doesn't pop into view.
+    root.setAlpha(0);
+    this.tweens.add({ targets: root, alpha: 1, duration: 300 });
     this.enemySprites.set(enemy.id, { root, art, ripple, hpBar, hpFill, dizzy, lastX: pos.x, flashUntil: 0 });
   }
 
@@ -533,7 +538,8 @@ export class GameScene extends Phaser.Scene {
     const sprite = this.enemySprites.get(id);
     if (!sprite) return;
     this.enemySprites.delete(id);
-    this.tweens.killTweensOf([sprite.art, ...(sprite.ripple ? [sprite.ripple] : [])]);
+    this.tweens.killTweensOf([sprite.root, sprite.art, ...(sprite.ripple ? [sprite.ripple] : [])]);
+    sprite.root.setAlpha(1);
     const { root } = sprite;
     const done = () => root.destroy();
     if (how === 'defeated') {

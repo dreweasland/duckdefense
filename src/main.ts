@@ -3,8 +3,16 @@ import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
 import { ResultScene } from './scenes/ResultScene';
 import { TitleScene } from './scenes/TitleScene';
-import { RENDER_SCALE, WORLD } from './ui/theme';
+import { RENDER_SCALE, viewSize } from './ui/theme';
 
+// Size the canvas to the window's shape (at RENDER_SCALE for sharp art), so it fills the screen.
+function canvasSize(): { width: number; height: number } {
+  const parent = document.getElementById('game');
+  const view = viewSize(parent?.clientWidth ?? window.innerWidth, parent?.clientHeight ?? window.innerHeight);
+  return { width: view.width * RENDER_SCALE, height: view.height * RENDER_SCALE };
+}
+
+const initialSize = canvasSize();
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
@@ -12,11 +20,21 @@ const game = new Phaser.Game({
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    // Rendered at RENDER_SCALE x the world size for sharp art; each scene's camera zooms to match.
-    width: WORLD.width * RENDER_SCALE,
-    height: WORLD.height * RENDER_SCALE,
+    // Each scene's camera zooms by RENDER_SCALE and centers the 1280 x 720 world.
+    width: initialSize.width,
+    height: initialSize.height,
   },
   scene: [BootScene, TitleScene, GameScene, ResultScene],
+});
+
+window.addEventListener('resize', () => {
+  // Re-measure the page first: this listener can run before Phaser has noticed the resize.
+  game.scale.getParentBounds();
+  const size = canvasSize();
+  if (size.width !== game.scale.width || size.height !== game.scale.height) {
+    game.scale.setGameSize(size.width, size.height);
+  }
+  game.scale.refresh();
 });
 
 // Dev only: expose the game so playtests can fast-forward it from the browser

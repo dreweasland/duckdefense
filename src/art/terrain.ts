@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { closestPointOnPolyline, distance, type Point } from '../logic/geometry';
 import type { Ellipse } from '../logic/level';
 import { makePath, pointAt } from '../logic/path';
-import { DEPTH, RENDER_SCALE, WORLD, entityDepth } from '../ui/theme';
+import { BACKDROP, DEPTH, RENDER_SCALE, WORLD, entityDepth } from '../ui/theme';
 
 /** Small seeded random number generator, so scenery lands in the same spots every time. */
 export function seededRandom(seed: number): () => number {
@@ -23,27 +23,67 @@ export interface Rect {
   height: number;
 }
 
+/** How far past the world's edges the forest ring and patches reach (wide or tall screens). */
+const OUTSKIRTS = 700;
+
 export function drawGrass(scene: Phaser.Scene, seed: number): void {
+  // Covers the whole backdrop so no edge ever shows, whatever the screen shape.
   scene.add
-    .tileSprite(WORLD.width / 2, WORLD.height / 2, WORLD.width, WORLD.height, 'grass')
+    .tileSprite(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height, 'grass')
     .setTileScale(1 / RENDER_SCALE)
+    // Line the tile pattern up with the world's corner, so it looks the same as before.
+    .setTilePosition(-BACKDROP.x * RENDER_SCALE, -BACKDROP.y * RENDER_SCALE)
     .setDepth(DEPTH.ground);
 
   // Soft light and shadow patches so the lawn isn't flat.
   const rng = seededRandom(seed);
   const g = scene.add.graphics().setDepth(DEPTH.ground);
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 40; i++) {
     const light = rng() < 0.5;
     g.fillStyle(light ? 0xfff6c0 : 0x1f4d1a, light ? 0.07 : 0.08).fillEllipse(
-      rng() * WORLD.width,
-      rng() * WORLD.height,
+      -OUTSKIRTS + rng() * (WORLD.width + OUTSKIRTS * 2),
+      -OUTSKIRTS + rng() * (WORLD.height + OUTSKIRTS * 2),
       160 + rng() * 260,
       110 + rng() * 180,
     );
   }
 }
 
+/**
+ * A ring of forest and meadow just outside the world, seen on screens wider or taller
+ * than 16:9. Nothing here is part of the level.
+ */
+export function drawOutskirts(scene: Phaser.Scene, seed: number): void {
+  const rng = seededRandom(seed);
+  const outside = (inset: number) => {
+    for (;;) {
+      const x = -OUTSKIRTS + rng() * (WORLD.width + OUTSKIRTS * 2);
+      const y = -OUTSKIRTS + rng() * (WORLD.height + OUTSKIRTS * 2);
+      if (x < -inset || x > WORLD.width + inset || y < -inset || y > WORLD.height + inset) return { x, y };
+    }
+  };
+  const place = (key: string, count: number, inset: number, w: number, h: number, spin: boolean) => {
+    for (let i = 0; i < count; i++) {
+      const p = outside(inset);
+      const scale = 0.85 + rng() * 0.35;
+      const image = scene.add.image(p.x, p.y, key).setDisplaySize(w * scale, h * scale).setDepth(entityDepth(p.y));
+      if (spin) image.setAngle(rng() * 360);
+      else image.setFlipX(rng() < 0.5);
+    }
+  };
+  place('tree', 70, 70, 160, 160, true);
+  place('bush', 40, 30, 84, 70, false);
+  place('rock', 16, 10, 44, 32, false);
+  for (const key of ['flower-white', 'flower-pink', 'flower-purple']) place(key, 30, 0, 22, 22, true);
+}
+
 export function drawPath(scene: Phaser.Scene, points: Point[], seed: number): void {
+  // Draw the path running on past its start, off into the forest, so it doesn't just end.
+  const [first, second] = points;
+  if (first && second) {
+    const dir = unit(first, second);
+    points = [{ x: first.x - dir.x * OUTSKIRTS, y: first.y - dir.y * OUTSKIRTS }, ...points];
+  }
   const g = scene.add.graphics().setDepth(DEPTH.path);
   const layer = (width: number, color: number) => {
     g.lineStyle(width, color).strokePoints(points);
@@ -173,5 +213,40 @@ export function scatterDecor(scene: Phaser.Scene, avoid: DecorAvoid, seed: numbe
   place('rock', 8, 14, { w: 44, h: 32 }, anywhere, { flip: true });
   for (const key of ['flower-white', 'flower-pink', 'flower-purple']) {
     place(key, 14, 4, { w: 22, h: 22 }, anywhere, { spin: true });
+  }
+}
+
+function unit(from: Point, to: Point): Point {
+  const length = distance(from, to) || 1;
+  return { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
+}
+
+/**
+ * Tree canopy over the spot where predators appear, so they walk out of the woods
+ * instead of popping into view on wide screens.
+ */
+export function drawPathEntrance(scene: Phaser.Scene, points: Point[], seed: number): void {
+  const [start, next] = points;
+  if (!start || !next) return;
+  const rng = seededRandom(seed);
+  const dir = unit(start, next);
+  const side = { x: -dir.y, y: dir.x };
+  // One tree right over the spawn point, with more around and behind it.
+  const spots = [
+    { back: 110, across: 0 },
+    { back: 150, across: -95 },
+    { back: 150, across: 95 },
+    { back: 40, across: -72 },
+    { back: 40, across: 72 },
+    { back: -5, across: 0 },
+  ];
+  for (const { back, across } of spots) {
+    const x = start.x - dir.x * back + side.x * across;
+    const y = start.y - dir.y * back + side.y * across;
+    scene.add
+      .image(x, y, 'tree')
+      .setDisplaySize(170, 170)
+      .setAngle(rng() * 360)
+      .setDepth(DEPTH.effects - 2); // above the predators walking underneath
   }
 }

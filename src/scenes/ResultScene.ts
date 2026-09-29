@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { drawGrass, drawPond, scatterDecor } from '../art/terrain';
+import { drawGrass, drawOutskirts, drawPond, scatterDecor } from '../art/terrain';
 import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER } from '../data/ducks';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
@@ -30,6 +30,7 @@ export class ResultScene extends Phaser.Scene {
     const { won, difficulty } = this.result;
 
     drawGrass(this, 41);
+    drawOutskirts(this, 44);
     drawPond(this, POND, 42);
     scatterDecor(this, { ponds: [POND], blocked: [{ x: 200, y: 40, width: 880, height: 420 }] }, 43);
 

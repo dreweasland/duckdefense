@@ -9,8 +9,33 @@ export const WORLD = { width: 1280, height: 720 };
  */
 export const RENDER_SCALE = 2;
 
+/**
+ * The canvas matches the window's shape, so screens wider (or taller) than 16:9 see extra
+ * scenery around the 1280 x 720 world instead of black bars. This is the world-unit size
+ * of the whole visible area for a given window.
+ */
+export function viewSize(windowWidth: number, windowHeight: number): { width: number; height: number } {
+  const aspect = windowWidth / Math.max(1, windowHeight);
+  const worldAspect = WORLD.width / WORLD.height;
+  return aspect >= worldAspect
+    ? { width: Math.round(WORLD.height * aspect), height: WORLD.height }
+    : { width: WORLD.width, height: Math.round(WORLD.width / aspect) };
+}
+
+/** Everything behind the world is drawn over this area, so no edge shows on any screen shape. */
+export const BACKDROP = { x: -1500, y: -1500, width: WORLD.width + 3000, height: WORLD.height + 3000 };
+
+/** Zooms the camera to the render scale and keeps the world centered when the window resizes. */
 export function setupCamera(scene: Phaser.Scene): void {
-  scene.cameras.main.setZoom(RENDER_SCALE).centerOn(WORLD.width / 2, WORLD.height / 2);
+  const camera = scene.cameras.main;
+  const center = () => camera.setZoom(RENDER_SCALE).centerOn(WORLD.width / 2, WORLD.height / 2);
+  const onResize = (gameSize: Phaser.Structs.Size) => {
+    camera.setSize(gameSize.width, gameSize.height);
+    center();
+  };
+  center();
+  scene.scale.on(Phaser.Scale.Events.RESIZE, onResize);
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => scene.scale.off(Phaser.Scale.Events.RESIZE, onResize));
 }
 
 export const FONT = 'Fredoka, "Arial Rounded MT Bold", Arial, sans-serif';
