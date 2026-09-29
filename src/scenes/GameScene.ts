@@ -447,7 +447,16 @@ export class GameScene extends Phaser.Scene {
     const nest: Nest = { slot, image };
     this.nests.push(nest);
     this.setNestEmpty(nest);
-    image.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.onNestTap(nest));
+    // A round tap area a bit bigger than the nest drawing, for small fingers on phones.
+    // (Hit areas are in the texture's own pixels.)
+    const tex = image.frame;
+    image
+      .setInteractive({
+        hitArea: new Phaser.Geom.Circle(tex.width / 2, tex.height / 2, tex.width * 0.58),
+        hitAreaCallback: Phaser.Geom.Circle.Contains,
+        useHandCursor: true,
+      })
+      .on('pointerdown', () => this.onNestTap(nest));
   }
 
   private setNestEmpty(nest: Nest): void {
@@ -501,7 +510,14 @@ export class GameScene extends Phaser.Scene {
     const root = this.add.container(at.x, at.y, [art]).setDepth(entityDepth(at.y));
     this.duckSprites.set(id, { root, art, range });
     // Tap a duck to see its power, or to move or sell it.
-    art.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.onDuckTap(id));
+    const tex = art.frame;
+    art
+      .setInteractive({
+        hitArea: new Phaser.Geom.Circle(tex.width / 2, tex.height * 0.55, tex.width * 0.45),
+        hitAreaCallback: Phaser.Geom.Circle.Contains,
+        useHandCursor: true,
+      })
+      .on('pointerdown', () => this.onDuckTap(id));
 
     // Plop in, then bob gently.
     root.setScale(0);

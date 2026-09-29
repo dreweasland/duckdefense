@@ -102,7 +102,14 @@ export function drawSoundButton(scene: Phaser.Scene, x: number, y: number, depth
   };
   draw();
   const back = scene.add.circle(0, 0, 26, COLORS.panel, 0.7).setStrokeStyle(3, 0xffffff, 0.35);
-  back.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+  // Tap area bigger than the drawing, for fingers.
+  back
+    .setInteractive({
+      hitArea: new Phaser.Geom.Circle(26, 26, 38),
+      hitAreaCallback: Phaser.Geom.Circle.Contains,
+      useHandCursor: true,
+    })
+    .on('pointerdown', () => {
     setMuted(scene, !isMuted());
     draw();
     playSound(scene, 'tap');

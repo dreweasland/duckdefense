@@ -2,18 +2,72 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Duck Defense</title>
+    <meta name="description" content="Place the flock around the pond and protect the Nestera duck house!" />
+    <meta name="theme-color" content="#24452f" />
+    <!-- Add to Home Screen: launches full screen like an app. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Duck Defense" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet" />
     <style>
-      html, body { margin: 0; height: 100%; background: #24452f; overflow: hidden; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #24452f;
+        overflow: hidden;
+        /* No scrolling, pinch-zoom, bounce, text selection, or tap flashes on touch screens. */
+        position: fixed;
+        inset: 0;
+        touch-action: none;
+        overscroll-behavior: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+      }
       #game { width: 100%; height: 100%; }
+      canvas { display: block; touch-action: none; }
+
+      /* Phones and tablets held upright: ask to turn sideways (the game pauses). */
+      #rotate {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        background: #24452f;
+        color: #fff;
+        font-family: Fredoka, "Arial Rounded MT Bold", Arial, sans-serif;
+        font-weight: 600;
+        text-align: center;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 24px;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      #rotate img { width: 45vw; max-width: 220px; animation: tilt 1.8s ease-in-out infinite; }
+      #rotate p { margin: 0; font-size: 28px; text-shadow: 0 3px 0 #2b2233; }
+      @keyframes tilt { 0%, 30% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
+      @media (orientation: portrait) and (max-width: 900px) {
+        #rotate { display: flex; }
+      }
     </style>
   </head>
   <body>
     <div id="game"></div>
+    <div id="rotate">
+      <img src="/icon.svg" alt="" />
+      <p>Turn me sideways!</p>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

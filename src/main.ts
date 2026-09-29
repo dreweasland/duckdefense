@@ -28,6 +28,13 @@ const game = new Phaser.Game({
   scene: [BootScene, TitleScene, LevelSelectScene, GameScene, ResultScene],
 });
 
+// Phones and tablets held upright see a "turn me sideways" screen (see index.html);
+// pause the game while it's showing.
+const portrait = window.matchMedia('(orientation: portrait) and (max-width: 900px)');
+const onOrientation = () => (portrait.matches ? game.pause() : game.resume());
+portrait.addEventListener('change', onOrientation);
+game.events.once(Phaser.Core.Events.READY, onOrientation);
+
 window.addEventListener('resize', () => {
   // Re-measure the page first: this listener can run before Phaser has noticed the resize.
   game.scale.getParentBounds();
