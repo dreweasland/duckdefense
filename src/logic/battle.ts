@@ -19,8 +19,8 @@ export interface Enemy {
   distance: number;
   /** Seconds it stays frozen (stunned) before moving again. */
   stopTime: number;
-  /** What's slowing it right now, if anything (for drawing). */
-  slowedBy?: 'fountain' | 'curtis';
+  /** True while Curtis is slowing it (for drawing). */
+  slowed: boolean;
   /** Ducks this predator has already scared (swooping hawks scare each duck once). */
   scared: number[];
   /** Seconds until it next calls for minions (only for predators that summon). */
@@ -119,6 +119,7 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind): Enemy {
     path,
     distance: 0,
     stopTime: 0,
+    slowed: false,
     scared: [],
     summonTime: stats.summons?.every ?? 0,
   };
@@ -193,24 +194,24 @@ export function isScared(duck: Duck): boolean {
 }
 
 /**
- * How much a ground predator is slowed right now: by the fountain's spray or by Curtis.
- * Slows don't stack; the strongest one wins. Hawks fly over both.
+ * How much a ground predator is slowed right now (1 = not at all). Only Curtis slows
+ * predators; if two Curtises overlap, the stronger slow wins. Hawks fly over it.
  */
-function slowFor(battle: Battle, enemy: Enemy): { factor: number; by?: 'fountain' | 'curtis' } {
-  let best: { factor: number; by?: 'fountain' | 'curtis' } = { factor: 1 };
-  if (isFlying(enemy)) return best;
+function slowFor(battle: Battle, enemy: Enemy): number {
+  if (isFlying(enemy)) return 1;
   const at = enemyPosition(enemy);
-  const { fountain } = battle;
-  if (fountain?.on && distance(at, fountain.position) <= FOUNTAIN.range && FOUNTAIN.slow < best.factor) {
-    best = { factor: FOUNTAIN.slow, by: 'fountain' };
-  }
+  let factor = 1;
   for (const duck of battle.ducks) {
     const stats = statsAt(duck.kind, duck.level);
-    if (stats.slowZone && distance(at, duck.position) <= stats.range && stats.slowZone.slow < best.factor) {
-      best = { factor: stats.slowZone.slow, by: 'curtis' };
-    }
+    if (stats.slowZone && distance(at, duck.position) <= stats.range) factor = Math.min(factor, stats.slowZone.slow);
   }
-  return best;
+  return factor;
+}
+
+/** Whether a duck is in the powered fountain's refreshing spray (it hits harder). */
+export function isRefreshed(battle: Battle, duck: Duck): boolean {
+  const { fountain } = battle;
+  return !!fountain?.on && distance(duck.position, fountain.position) <= FOUNTAIN.range;
 }
 
 /** Scares the ducks within `radius` of a point (fearless ducks just shrug). */
@@ -247,11 +248,11 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
   // 1. Predators head for the house, unless something has frozen them.
   for (const enemy of battle.enemies) {
     const slow = slowFor(battle, enemy);
-    enemy.slowedBy = slow.by;
+    enemy.slowed = slow < 1;
     if (enemy.stopTime > 0) {
       enemy.stopTime = Math.max(0, enemy.stopTime - dt);
     } else {
-      enemy.distance += enemy.speed * slow.factor * dt;
+      enemy.distance += enemy.speed * slow * dt;
     }
     if (enemy.distance >= enemy.path.length) {
       events.push({ type: 'reachedHouse', enemy });
@@ -324,7 +325,8 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
         (e === target ||
           ((stats.canHitFlying || !isFlying(e)) && distance(enemyPosition(e), targetPos) <= stats.splashRadius)),
     );
-    for (const enemy of hit) enemy.hp -= stats.damage;
+    const damage = stats.damage * (isRefreshed(battle, duck) ? 1 + FOUNTAIN.damageBoost : 1);
+    for (const enemy of hit) enemy.hp -= damage;
     duck.cooldown = attackInterval(battle, duck);
     duck.attacks++;
 

@@ -73,8 +73,8 @@ everywhere: dialogue, tooltips, code comments.
   numbers are in `src/data/ducks.ts`.
 - **Lives:** The duck house has hearts. Each predator that reaches it costs one (the Night Bandit costs five).
 - **Day/night cycle:** Night waves are harder. The **solar battery meter** powers the
-  pond fountain tower, which slows enemies. It charges during day waves and drains at
-  night, just like the real Victron setup.
+  pond fountain, whose refreshing spray makes nearby ducks hit harder. It charges during
+  day waves and drains at night, just like the real Victron setup.
 - **Upgrades:** Two tiers per duck (e.g. Sunny → "Seasoned Sunny" → "Legendary Sunny"),
   bought from the duck's panel. Names, prices, and what changes are in `src/data/ducks.ts`.
 

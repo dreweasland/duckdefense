@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FOUNTAIN } from '../data/dayNight';
 import { DUCKS } from '../data/ducks';
 import { HUD_AREAS, type Area } from '../data/layout';
 import { LEVELS } from '../data/levels';
@@ -57,6 +58,12 @@ for (const [index, info] of LEVELS.entries()) {
         const covering = level.slots.filter((slot) => points.some((p) => distance(slot, p) <= reach));
         expect(covering.length, `hawks from ${JSON.stringify(from)}`).toBeGreaterThanOrEqual(2);
       }
+    });
+
+    it("puts at least two nests inside the fountain's refreshing spray", () => {
+      const fountain = level.ponds[0]!.center;
+      const refreshed = level.slots.filter((slot) => distance(slot, fountain) <= FOUNTAIN.range);
+      expect(refreshed.length).toBeGreaterThanOrEqual(2);
     });
 
     it('keeps every nest off the path', () => {

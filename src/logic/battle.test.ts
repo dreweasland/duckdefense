@@ -3,7 +3,8 @@ import { DUCKS } from '../data/ducks';
 import { ENEMIES } from '../data/enemies';
 import { FOUNTAIN, NIGHT } from '../data/dayNight';
 import { PECKING_LOOP } from '../data/synergy';
-import { attackInterval, createBattle, enemyPosition, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
+import { attackInterval, createBattle, enemyPosition, isRefreshed, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
+import { statsAt } from './upgrades';
 import { makePath } from './path';
 
 const sunny = DUCKS.sunny;
@@ -150,7 +151,7 @@ describe('duck abilities', () => {
     far.distance = 1000;
     placeDuck(battle, 'curtis', { x: 100, y: 0 });
     step(battle, 1);
-    expect(near.slowedBy).toBe('curtis');
+    expect(near.slowed).toBe(true);
     expect(near.distance).toBeCloseTo(100 + raccoon.speed * slowZone!.slow);
     expect(far.distance).toBeCloseTo(1000 + raccoon.speed);
   });
@@ -209,37 +210,53 @@ describe('hawks', () => {
     expect(events).toContainEqual(expect.objectContaining({ type: 'alarmQuack', stunnedIds: [hawk.id] }));
   });
 
-  it('fly over the fountain spray', () => {
-    const battle = createBattle(makePath([{ x: 0, y: 0 }, { x: 2000, y: 0 }]), {
-      sky: [{ x: 2000, y: -500 }],
-      fountainAt: { x: 2000, y: -500 },
-    });
-    battle.fountain!.on = true;
+  it("fly over Curtis's slow zone", () => {
+    const battle = skyBattle();
     const hawk = spawnEnemy(battle, 'hawk');
+    placeDuck(battle, 'curtis', nearHawk);
     step(battle, 1);
-    expect(hawk.slowedBy).toBeUndefined();
+    expect(hawk.slowed).toBe(false);
     expect(hawk.distance).toBe(ENEMIES.hawk.speed);
   });
 });
 
 describe('fountain', () => {
-  function fountainBattle(on: boolean) {
-    const battle = createBattle(makePath([{ x: 0, y: 0 }, { x: 2000, y: 0 }]), { fountainAt: { x: 100, y: 0 } });
+  // A raccoon standing still next to a Sunny; the fountain is at (0, 0).
+  function fountainBattle(on: boolean, duckAt = { x: 100, y: 0 }) {
+    const battle = createBattle(makePath([{ x: 0, y: 0 }, { x: 2000, y: 0 }]), { fountainAt: { x: 0, y: 0 } });
     battle.fountain!.on = on;
     const enemy = spawnEnemy(battle, 'raccoon');
-    enemy.distance = 100;
-    return { battle, enemy };
+    enemy.distance = duckAt.x;
+    enemy.speed = 0;
+    const duck = placeDuck(battle, 'sunny', duckAt);
+    return { battle, enemy, duck };
   }
 
-  it('slows ground predators in its spray while it has power', () => {
-    const { battle, enemy } = fountainBattle(true);
-    step(battle, 1);
-    expect(enemy.distance).toBe(100 + raccoon.speed * FOUNTAIN.slow);
+  it('makes ducks in its spray hit harder while it has power', () => {
+    const { battle, enemy, duck } = fountainBattle(true);
+    expect(isRefreshed(battle, duck)).toBe(true);
+    step(battle, 0);
+    expect(enemy.hp).toBeCloseTo(raccoon.maxHp - sunny.damage * (1 + FOUNTAIN.damageBoost));
   });
 
   it('does nothing without power', () => {
     const { battle, enemy } = fountainBattle(false);
+    step(battle, 0);
+    expect(enemy.hp).toBe(raccoon.maxHp - sunny.damage);
+  });
+
+  it("doesn't reach ducks outside its spray", () => {
+    const { battle, enemy, duck } = fountainBattle(true, { x: FOUNTAIN.range + 50, y: 0 });
+    expect(isRefreshed(battle, duck)).toBe(false);
+    step(battle, 0);
+    expect(enemy.hp).toBe(raccoon.maxHp - sunny.damage);
+  });
+
+  it("doesn't slow predators (that's Curtis's job)", () => {
+    const { battle, enemy } = fountainBattle(true);
+    enemy.speed = raccoon.speed;
     step(battle, 1);
+    expect(enemy.slowed).toBe(false);
     expect(enemy.distance).toBe(100 + raccoon.speed);
   });
 });
@@ -382,14 +399,13 @@ describe('scared ducks', () => {
 });
 
 describe('slows', () => {
-  it("don't stack: the strongest one wins", () => {
-    const battle = createBattle(makePath([{ x: 0, y: 0 }, { x: 2000, y: 0 }]), { fountainAt: { x: 100, y: 0 } });
-    battle.fountain!.on = true;
+  it("don't stack: when two Curtises overlap, the stronger slow wins", () => {
+    const battle = newBattle();
     const enemy = spawnEnemy(battle, 'raccoon');
     enemy.distance = 100;
     placeDuck(battle, 'curtis', { x: 100, y: 50 });
+    placeDuck(battle, 'curtis', { x: 100, y: -50 }).level = 1; // Stubborn Curtis: a stronger slow
     step(battle, 1);
-    const strongest = Math.min(FOUNTAIN.slow, DUCKS.curtis.slowZone!.slow);
-    expect(enemy.distance).toBeCloseTo(100 + raccoon.speed * strongest);
+    expect(enemy.distance).toBeCloseTo(100 + raccoon.speed * statsAt('curtis', 1).slowZone!.slow);
   });
 });

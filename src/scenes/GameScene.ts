@@ -7,7 +7,7 @@ import { CHASES } from '../data/synergy';
 import { ENEMIES } from '../data/enemies';
 import { HUD_AREAS } from '../data/layout';
 import { LEVELS } from '../data/levels';
-import { chasePartner, enemyPosition, isFlying, type Enemy } from '../logic/battle';
+import { chasePartner, enemyPosition, isFlying, isRefreshed, type Enemy } from '../logic/battle';
 import {
   buyDuck,
   canBuy,
@@ -41,6 +41,7 @@ const NEST_SIZE = 72;
 const HP_BAR_WIDTH = 46;
 const BATTERY_BAR_WIDTH = 88;
 const BOSS_BAR_WIDTH = 360;
+const SLOW_RING = 0xb08a58; // dusty ring at the feet of predators Curtis is slowing
 const NIGHT_ALPHA = 0.45;
 const MAX_STEP = 0.1; // seconds; stops predators teleporting after a stalled frame
 
@@ -69,6 +70,8 @@ interface DuckSprite {
   badge: Phaser.GameObjects.Graphics;
   /** Display size before upgrades (ducks grow a little with each one). */
   baseSize: number;
+  /** Blue glow while the fountain's spray is refreshing this duck. */
+  refresh: Phaser.GameObjects.Image;
 }
 
 interface Nest {
@@ -218,7 +221,12 @@ export class GameScene extends Phaser.Scene {
         .circle(fountain.position.x, fountain.position.y, FOUNTAIN.range)
         .setStrokeStyle(3, COLORS.water, 0.3)
         .setDepth(DEPTH.pond);
-      this.add.image(fountain.position.x, fountain.position.y, 'fountain').setDisplaySize(58, 58).setDepth(DEPTH.pond);
+      this.add
+        .image(fountain.position.x, fountain.position.y, 'fountain')
+        .setDisplaySize(58, 58)
+        .setDepth(DEPTH.pond)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.showFountainInfo());
     }
 
     const door = this.level.path[this.level.path.length - 1]!;
@@ -518,8 +526,15 @@ export class GameScene extends Phaser.Scene {
     const art = this.add.image(0, -size * 0.28, `duck-${kind}`).setDisplaySize(size, size);
     art.setFlipX(this.facesLeft(at));
     const badge = this.add.graphics();
-    const root = this.add.container(at.x, at.y, [art, badge]).setDepth(entityDepth(at.y));
-    this.duckSprites.set(id, { root, art, range, badge, baseSize: size });
+    const refresh = this.add
+      .image(0, -size * 0.25, 'glow')
+      .setDisplaySize(size * 1.5, size * 1.5)
+      .setTint(0x7fd4ff)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setVisible(false);
+    this.tweens.add({ targets: refresh, alpha: 0.45, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+    const root = this.add.container(at.x, at.y, [refresh, art, badge]).setDepth(entityDepth(at.y));
+    this.duckSprites.set(id, { root, art, range, badge, baseSize: size, refresh });
     // Tap a duck to see its power, or to move or sell it.
     const tex = art.frame;
     art
@@ -612,6 +627,40 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: popup, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
     this.popup = popup;
     this.popupTimer = this.time.delayedCall(4000, () => {
+      if (this.popup !== popup) return;
+      this.tweens.add({ targets: popup, alpha: 0, duration: 250, onComplete: () => this.popup === popup && this.closePopup() });
+    });
+  }
+
+  /** What the solar fountain does, shown when you tap it. */
+  private showFountainInfo(): void {
+    const at = this.state.battle.fountain?.position;
+    if (!at) return;
+    this.cancelMove();
+    this.closePopup();
+    playSound(this, 'tap');
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    const boost = Math.round(FOUNTAIN.damageBoost * 100);
+    const card = drawCard(this.add.graphics(), 320, 170, { radius: 18 });
+    const popup = this.add
+      .container(Math.max(170, Math.min(WORLD.width - 170, at.x)), at.y + (at.y < 300 ? 150 : -150), [
+        card,
+        this.add.image(-118, -46, 'fountain').setDisplaySize(52, 52),
+        this.add.text(-84, -58, 'Solar Fountain', textStyle(26, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        this.add.image(-76, -30, 'icon-bolt').setDisplaySize(20, 20),
+        this.add.text(-62, -30, 'Runs on the battery', textStyle(17, { ...ink, color: '#2a66a8', weight: '700' })).setOrigin(0, 0.5),
+        this.add
+          .text(-142, 4, `Ducks in its spray hit ${boost}% harder while the battery has charge. The sun charges it by day; it runs down at night.`, {
+            ...textStyle(16, ink),
+            wordWrap: { width: 284 },
+          })
+          .setOrigin(0, 0),
+      ])
+      .setDepth(DEPTH.hud + 5);
+    popup.setScale(0.8).setAlpha(0);
+    this.tweens.add({ targets: popup, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
+    this.popup = popup;
+    this.popupTimer = this.time.delayedCall(5000, () => {
       if (this.popup !== popup) return;
       this.tweens.add({ targets: popup, alpha: 0, duration: 250, onComplete: () => this.popup === popup && this.closePopup() });
     });
@@ -886,14 +935,14 @@ export class GameScene extends Phaser.Scene {
       root.setDepth(DEPTH.effects - 1);
     } else if (enemy.kind === 'bandit') {
       root.add(this.add.ellipse(0, 6, 124, 26, 0x000000, 0.25));
-      ripple = this.add.ellipse(0, 6, 140, 34).setStrokeStyle(5, COLORS.water, 0.95).setVisible(false);
+      ripple = this.add.ellipse(0, 6, 140, 34).setStrokeStyle(5, SLOW_RING, 0.95).setVisible(false);
       root.add(ripple);
       art = this.add.image(0, 0, 'bandit').setDisplaySize(150, 112).setOrigin(0.5, 0.85);
       this.tweens.add({ targets: art, angle: { from: -3, to: 3 }, duration: 380, yoyo: true, repeat: -1 });
     } else {
       root.add(this.add.ellipse(0, 4, 64, 16, 0x000000, 0.2));
       // Water ripple at its feet while the fountain slows it.
-      ripple = this.add.ellipse(0, 4, 78, 24).setStrokeStyle(4, COLORS.water, 0.95).setVisible(false);
+      ripple = this.add.ellipse(0, 4, 78, 24).setStrokeStyle(4, SLOW_RING, 0.95).setVisible(false);
       this.tweens.add({ targets: ripple, scale: 1.15, alpha: 0.5, duration: 400, yoyo: true, repeat: -1 });
       root.add(ripple);
       art = this.add.image(0, 0, 'raccoon').setDisplaySize(92, 67).setOrigin(0.5, 0.85);
@@ -939,11 +988,8 @@ export class GameScene extends Phaser.Scene {
       sprite.hpFill.fillColor = health > 0.5 ? 0x6ee06e : health > 0.25 ? 0xffd23f : 0xff6b5a;
       sprite.dizzy.setVisible(enemy.stopTime > 0);
 
-      // A ring at its feet while slowed: blue for the fountain's spray, dusty brown for Curtis.
-      if (sprite.ripple) {
-        sprite.ripple.setVisible(!!enemy.slowedBy);
-        sprite.ripple.setStrokeStyle(sprite.ripple.lineWidth, enemy.slowedBy === 'curtis' ? 0xb08a58 : COLORS.water, 0.95);
-      }
+      // A dusty ring at its feet while Curtis slows it.
+      sprite.ripple?.setVisible(enemy.slowed);
       // A quick red "ouch" tint when hit (keeps the art readable even when hit constantly).
       if (time < sprite.flashUntil) sprite.art.setTint(0xff9a9a);
       else sprite.art.clearTint();
@@ -1120,11 +1166,13 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Scared ducks look pale and shiver until they calm down. */
+  /** Scared ducks look pale and shiver; refreshed ducks glow blue. */
   private syncDuckSprites(): void {
+    const waveOn = this.state.phase === 'wave';
     for (const duck of this.state.battle.ducks) {
       const sprite = this.duckSprites.get(duck.id);
       if (!sprite) continue;
+      sprite.refresh.setVisible(waveOn && isRefreshed(this.state.battle, duck));
       if (duck.scaredTime > 0) {
         sprite.art.setTint(0xc6d4ec);
         sprite.art.setAngle(Math.sin(this.time.now / 30) * 4);
