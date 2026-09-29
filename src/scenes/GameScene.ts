@@ -5,6 +5,7 @@ import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { CHASES } from '../data/synergy';
 import { ENEMIES } from '../data/enemies';
+import { GAME_SPEEDS } from '../data/gameSpeed';
 import { HUD_AREAS } from '../data/layout';
 import { LEVELS } from '../data/levels';
 import { chasePartner, enemyPosition, isFlying, isRefreshed, type Enemy } from '../logic/battle';
@@ -19,6 +20,7 @@ import {
   canUseBlessing,
   createGame,
   isNight,
+  isOver,
   mapFromLevel,
   startWave,
   update,
@@ -44,6 +46,10 @@ const BOSS_BAR_WIDTH = 360;
 const SLOW_RING = 0xb08a58; // dusty ring at the feet of predators Curtis is slowing
 const NIGHT_ALPHA = 0.45;
 const MAX_STEP = 0.1; // seconds; stops predators teleporting after a stalled frame
+const SIM_STEP = 1 / 60; // the rules always run in slices this small, so fast-forward plays out exactly the same
+
+// The chosen fast-forward speed, remembered between waves and levels (until the page reloads).
+let speedIndex = 0;
 
 // HUD positions.
 const PEA_ICON = { x: 596, y: 38 };
@@ -128,6 +134,7 @@ export class GameScene extends Phaser.Scene {
   private house!: Phaser.GameObjects.Image;
   private shield!: Phaser.GameObjects.Container;
   private goButton!: Phaser.GameObjects.Container;
+  private speedButton!: { container: Phaser.GameObjects.Container; draw: () => void };
   private craigButton!: Phaser.GameObjects.Container;
   private craigGlow!: Phaser.GameObjects.Image;
   private peasText!: Phaser.GameObjects.Text;
@@ -179,6 +186,7 @@ export class GameScene extends Phaser.Scene {
     this.drawPicker();
     this.drawHud();
     this.goButton = this.drawGoButton();
+    this.speedButton = this.drawSpeedButton();
     this.craigButton = this.drawCraigButton();
     drawSoundButton(this, 1245, 685, DEPTH.hud);
     this.refreshHud();
@@ -186,7 +194,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(time: number, deltaMs: number): void {
-    const events = update(this.state, Math.min(deltaMs / 1000, MAX_STEP));
+    // Fast-forward: run more small slices of the rules per frame (only during waves).
+    const speed = this.state.phase === 'wave' ? (GAME_SPEEDS[speedIndex] ?? 1) : 1;
+    this.setTimeScale(speed);
+    const events: GameEvent[] = [];
+    let remaining = Math.min(deltaMs / 1000, MAX_STEP) * speed;
+    while (remaining > 1e-6 && !isOver(this.state)) {
+      const dt = Math.min(remaining, SIM_STEP);
+      events.push(...update(this.state, dt));
+      remaining -= dt;
+    }
     events.forEach((event) => this.handleEvent(event));
     this.syncEnemySprites(time);
     this.syncDuckSprites();
@@ -419,6 +436,7 @@ export class GameScene extends Phaser.Scene {
       picker.container.y = selected ? CARD.y - CARD.lift : CARD.y;
     }
     this.goButton.setVisible(game.phase === 'building');
+    this.speedButton.container.setVisible(game.phase === 'wave');
     const blessing = canUseBlessing(game);
     this.craigButton.setAlpha(blessing ? 1 : 0.35);
     this.craigGlow.setVisible(blessing);
@@ -1326,6 +1344,42 @@ export class GameScene extends Phaser.Scene {
     });
     this.tweens.add({ targets: play, scale: 1.12, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
     return container;
+  }
+
+  /** Animations, particles, and timers keep pace with the game speed. */
+  private setTimeScale(speed: number): void {
+    if (this.tweens.timeScale === speed) return;
+    this.tweens.timeScale = speed;
+    this.time.timeScale = speed;
+    for (const emitter of Object.values(this.fx)) emitter.timeScale = speed;
+  }
+
+  /** Fast-forward during a wave (in the start button's spot): tap to cycle 1x, 2x, 3x. */
+  private drawSpeedButton(): { container: Phaser.GameObjects.Container; draw: () => void } {
+    const chevrons = this.add.graphics();
+    const label = this.add.text(0, 24, '', textStyle(18, { weight: '700' })).setOrigin(0.5);
+    const draw = () => {
+      const speed = GAME_SPEEDS[speedIndex] ?? 1;
+      const count = speedIndex + 1; // one chevron per step up
+      chevrons.clear().fillStyle(0xffffff).lineStyle(3, COLORS.ink);
+      const w = 16;
+      const start = (-(count * w) / 2) + 2;
+      for (let i = 0; i < count; i++) {
+        const x = start + i * w;
+        chevrons.fillTriangle(x, -18, x, 6, x + 16, -6).strokeTriangle(x, -18, x, 6, x + 16, -6);
+      }
+      label.setText(`${speed}×`);
+    };
+    draw();
+    const { container, hit } = drawRoundButton(this, GO_BUTTON.x, GO_BUTTON.y, 46, COLORS.blue, COLORS.blueDark, [chevrons, label]);
+    container.setDepth(DEPTH.hud).setVisible(false);
+    hit.on('pointerdown', () => {
+      speedIndex = (speedIndex + 1) % GAME_SPEEDS.length;
+      playSound(this, 'tap');
+      this.tweens.add({ targets: container, scale: 0.88, duration: 70, yoyo: true });
+      draw();
+    });
+    return { container, draw };
   }
 
   /** Craig's Guardian Blessing: tap her once per level to shield the duck house. */
