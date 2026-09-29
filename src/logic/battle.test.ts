@@ -302,3 +302,39 @@ describe('Pecking Loop', () => {
     expect(s.cooldown).toBeCloseTo(faster('sunny'));
   });
 });
+
+describe('the Night Bandit', () => {
+  const bandit = ENEMIES.bandit;
+
+  it('whistles up raccoon minions just behind it', () => {
+    const battle = newBattle();
+    const boss = spawnEnemy(battle, 'bandit');
+    boss.distance = 500;
+    boss.speed = 0;
+    const events = step(battle, bandit.summons!.every);
+    const summoned = events.find((e) => e.type === 'summoned');
+    expect(summoned).toMatchObject({ type: 'summoned', enemyId: boss.id });
+    const minions = summoned?.type === 'summoned' ? summoned.minions : [];
+    expect(minions).toHaveLength(bandit.summons!.count);
+    for (const minion of minions) {
+      expect(minion.kind).toBe(bandit.summons!.enemy);
+      expect(minion.distance).toBeLessThan(500);
+    }
+  });
+
+  it("can't whistle while it's stunned", () => {
+    const battle = newBattle();
+    const boss = spawnEnemy(battle, 'bandit');
+    boss.stopTime = bandit.summons!.every * 2;
+    const events = step(battle, bandit.summons!.every);
+    expect(events.some((e) => e.type === 'summoned')).toBe(false);
+  });
+
+  it('is too big for Curtis to hold', () => {
+    const battle = newBattle();
+    const boss = spawnEnemy(battle, 'bandit');
+    boss.distance = 100;
+    placeDuck(battle, 'curtis', { x: 100, y: 0 });
+    expect(step(battle, 0).some((e) => e.type === 'held')).toBe(false);
+  });
+});

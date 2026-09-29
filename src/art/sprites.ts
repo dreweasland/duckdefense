@@ -237,6 +237,57 @@ function raccoonSvg(): string {
   );
 }
 
+/** The Night Bandit: a big raccoon in a striped shirt and beanie with a sack of stolen snacks. 240 x 180. */
+function banditSvg(): string {
+  const body = 'M56 104 C56 72 94 60 134 62 C170 64 192 82 192 108 C192 136 164 148 126 148 C88 148 56 136 56 104 Z';
+  const defs =
+    vGrad('bfur', '#7b7e87', '#4a4c53') +
+    vGrad('sack', '#e2c48f', '#b8955c') +
+    `<clipPath id="shirt"><path d="${body}"/></clipPath>`;
+  const stripes: string[] = [];
+  for (let x = 60; x < 196; x += 22) stripes.push(`<rect x="${x}" y="60" width="11" height="90" fill="#1d1e22"/>`);
+  return svg(
+    240,
+    180,
+    defs,
+    [
+      // Loot sack slung over its back.
+      `<path d="M34 64 C18 40 36 14 64 18 C90 22 98 50 84 70 C70 88 46 86 34 64 Z" fill="url(#sack)" ${stroke()}/>`,
+      `<path d="M78 22 L96 10 M84 28 L100 22" stroke="${INK}" stroke-width="4" stroke-linecap="round"/>`,
+      `<circle cx="50" cy="44" r="6" fill="#7ccd4a" ${stroke(2)}/><circle cx="64" cy="54" r="5" fill="#7ccd4a" ${stroke(2)}/>`,
+      // Ringed tail.
+      `<path d="M60 104 C28 106 8 84 16 58 C28 72 42 80 66 86 Z" fill="#6f727a" ${stroke()}/>`,
+      `<path d="M22 66 L32 80 M36 76 L42 90 M16 84 L30 94" stroke="#1d1e22" stroke-width="8" stroke-linecap="round"/>`,
+      // Legs.
+      `<rect x="72" y="130" width="20" height="38" rx="9" fill="#2e3035" ${stroke(4)}/>`,
+      `<rect x="100" y="132" width="20" height="36" rx="9" fill="#2e3035" ${stroke(4)}/>`,
+      `<rect x="146" y="132" width="20" height="36" rx="9" fill="#2e3035" ${stroke(4)}/>`,
+      `<rect x="170" y="130" width="20" height="38" rx="9" fill="#2e3035" ${stroke(4)}/>`,
+      // Body in a striped burglar shirt.
+      `<path d="${body}" fill="#f2f2f2"/>`,
+      `<g clip-path="url(#shirt)">${stripes.join('')}</g>`,
+      `<path d="${body}" fill="none" ${stroke()}/>`,
+      // Ears.
+      `<path d="M178 58 L180 30 L200 48 Z" fill="#5e6168" ${stroke(4)}/>`,
+      `<path d="M196 50 L208 26 L218 52 Z" fill="#6a6d74" ${stroke(4)}/>`,
+      // Head.
+      `<path d="M168 80 C168 52 196 42 218 56 C234 66 238 82 228 96 C218 110 188 110 176 100 C170 96 168 88 168 80 Z" fill="url(#bfur)" ${stroke()}/>`,
+      `<path d="M184 66 C200 58 220 60 230 72 C218 64 200 64 184 70 Z" fill="#f4f4f4"/>`,
+      // Black beanie.
+      `<path d="M170 64 C172 34 214 26 226 54 C206 48 188 52 170 64 Z" fill="#22242a" ${stroke(4)}/>`,
+      `<path d="M168 66 C188 52 210 50 228 56" fill="none" stroke="#3d4048" stroke-width="7" stroke-linecap="round"/>`,
+      // The mask, with cheeky eyes.
+      `<path d="M178 74 C194 64 220 64 233 76 C220 88 196 90 178 82 Z" fill="#111214"/>`,
+      `<circle cx="202" cy="76" r="5" fill="#ffe066"/><circle cx="220" cy="76" r="4.5" fill="#ffe066"/>`,
+      `<circle cx="203" cy="76" r="2.4" fill="#111"/><circle cx="221" cy="76" r="2.2" fill="#111"/>`,
+      // Grinning snout.
+      `<path d="M222 86 C232 84 240 90 236 96 C228 102 218 98 216 92 Z" fill="#ececed" ${stroke(3)}/>`,
+      `<circle cx="236" cy="90" r="5" fill="#111214"/>`,
+      `<path d="M200 98 Q212 106 224 98" fill="none" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>`,
+    ].join(''),
+  );
+}
+
 /** A hawk seen from above, flying up (toward y = 0), 200 x 200. */
 function hawkSvg(): string {
   const defs = vGrad('wing', '#8f6038', '#5e3c20') + vGrad('hb', '#a3764a', '#6e4a2c');
@@ -489,6 +540,7 @@ export function allSprites(): SpriteArt[] {
     ...ducks,
     { key: 'raccoon', svg: raccoonSvg(), width: 92, height: 67 },
     { key: 'hawk', svg: hawkSvg(), width: 88, height: 88 },
+    { key: 'bandit', svg: banditSvg(), width: 150, height: 112 },
     { key: 'house', svg: houseSvg(), width: 150, height: 144 },
     { key: 'fountain', svg: fountainSvg(), width: 64, height: 64 },
     { key: 'nest', svg: nestSvg(), width: 72, height: 72 },

@@ -113,11 +113,13 @@ export const LEVEL3_WAVES: Wave[] = [
     ],
     bonusPeas: 110,
   },
+  // The Night Bandit arrives with a crowd.
   {
     time: 'night',
     groups: [
-      { enemy: 'raccoon', count: 24, every: 0.5 },
-      { enemy: 'hawk', count: 6, every: 1.6, after: 6 },
+      { enemy: 'raccoon', count: 14, every: 0.8 },
+      { enemy: 'hawk', count: 4, every: 2, after: 6 },
+      { enemy: 'bandit', count: 1, every: 1, after: 8 },
     ],
     bonusPeas: 0,
   },

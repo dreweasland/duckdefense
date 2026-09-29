@@ -166,3 +166,16 @@ describe("Craig's Guardian Blessing", () => {
     expect(game.hearts).toBe(DIFFICULTIES.normal.hearts - 1);
   });
 });
+
+describe('bosses', () => {
+  it('cost more hearts when they reach the house', () => {
+    const boss: Wave = { time: 'day', groups: [{ enemy: 'bandit', count: 1, every: 1 }], bonusPeas: 0 };
+    const game = createGame({ path }, [boss, boss], 'normal');
+    startWave(game);
+    const arrived = runUntilIdle(game).filter((e) => e.type === 'reachedHouse');
+    const bosses = arrived.filter((e) => e.type === 'reachedHouse' && e.enemy.kind === 'bandit').length;
+    expect(bosses).toBe(1);
+    // 5 hearts for the Bandit, 1 for each minion that also got in.
+    expect(game.hearts).toBe(DIFFICULTIES.normal.hearts - ENEMIES.bandit.hearts - (arrived.length - bosses));
+  });
+});

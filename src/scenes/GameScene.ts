@@ -29,6 +29,7 @@ const DUCK_SIZE = 84;
 const NEST_SIZE = 72;
 const HP_BAR_WIDTH = 46;
 const BATTERY_BAR_WIDTH = 88;
+const BOSS_BAR_WIDTH = 360;
 const NIGHT_ALPHA = 0.45;
 const MAX_STEP = 0.1; // seconds; stops predators teleporting after a stalled frame
 
@@ -105,6 +106,7 @@ export class GameScene extends Phaser.Scene {
   private nightLights: Phaser.GameObjects.Image[] = [];
   private peckingLoop!: Phaser.GameObjects.Container;
   private shownNight = false;
+  private bossBar?: { container: Phaser.GameObjects.Container; fill: Phaser.GameObjects.Rectangle; enemyId: number };
 
   constructor() {
     super('GameScene');
@@ -126,6 +128,7 @@ export class GameScene extends Phaser.Scene {
     this.enemySprites.clear();
     this.pickerCards = [];
     this.nightLights = [];
+    this.bossBar = undefined;
 
     this.drawWorld();
     this.fx = this.createEffects();
@@ -483,6 +486,12 @@ export class GameScene extends Phaser.Scene {
         .setRotation(Math.atan2(to!.y - from!.y, to!.x - from!.x) + Math.PI / 2);
       this.tweens.add({ targets: art, scaleX: art.scaleX * 0.8, duration: 170, yoyo: true, repeat: -1 });
       root.setDepth(DEPTH.effects - 1);
+    } else if (enemy.kind === 'bandit') {
+      root.add(this.add.ellipse(0, 6, 124, 26, 0x000000, 0.25));
+      ripple = this.add.ellipse(0, 6, 140, 34).setStrokeStyle(5, COLORS.water, 0.95).setVisible(false);
+      root.add(ripple);
+      art = this.add.image(0, 0, 'bandit').setDisplaySize(150, 112).setOrigin(0.5, 0.85);
+      this.tweens.add({ targets: art, angle: { from: -3, to: 3 }, duration: 380, yoyo: true, repeat: -1 });
     } else {
       root.add(this.add.ellipse(0, 4, 64, 16, 0x000000, 0.2));
       // Water ripple at its feet while the fountain slows it.
@@ -496,9 +505,10 @@ export class GameScene extends Phaser.Scene {
 
     const hpBack = this.add.rectangle(0, 0, HP_BAR_WIDTH + 4, 10, COLORS.ink).setOrigin(0.5);
     const hpFill = this.add.rectangle(-HP_BAR_WIDTH / 2, 0, HP_BAR_WIDTH, 6, 0x6ee06e).setOrigin(0, 0.5);
+    const boss = !!ENEMIES[enemy.kind].boss;
     const hpBar = this.add.container(0, flying ? -50 : -66, [hpBack, hpFill]).setVisible(false);
     const dizzy = this.add
-      .container(0, flying ? -40 : -60, [
+      .container(0, flying ? -40 : boss ? -104 : -60, [
         this.add.image(-12, 0, 'star').setDisplaySize(16, 16).setTint(0xffe066),
         this.add.image(12, 0, 'star').setDisplaySize(16, 16).setTint(0xffe066),
       ])
@@ -523,13 +533,17 @@ export class GameScene extends Phaser.Scene {
       if (!flying) sprite.root.setDepth(entityDepth(pos.y));
 
       const health = Math.max(0, enemy.hp / enemy.maxHp);
-      sprite.hpBar.setVisible(health < 1);
+      // Bosses use the big bar at the bottom of the screen instead.
+      const boss = this.bossBar?.enemyId === enemy.id;
+      sprite.hpBar.setVisible(health < 1 && !boss);
+      if (boss) this.bossBar!.fill.width = BOSS_BAR_WIDTH * health;
       sprite.hpFill.width = HP_BAR_WIDTH * health;
       sprite.hpFill.fillColor = health > 0.5 ? 0x6ee06e : health > 0.25 ? 0xffd23f : 0xff6b5a;
       sprite.dizzy.setVisible(enemy.stopTime > 0);
 
       sprite.ripple?.setVisible(enemy.slowed);
-      if (time < sprite.flashUntil) sprite.art.setTintFill(0xffffff);
+      // A quick red "ouch" tint when hit (keeps the art readable even when hit constantly).
+      if (time < sprite.flashUntil) sprite.art.setTint(0xff9a9a);
       else sprite.art.clearTint();
     }
   }
@@ -559,6 +573,10 @@ export class GameScene extends Phaser.Scene {
     switch (event.type) {
       case 'spawned':
         this.addEnemySprite(event.enemy);
+        if (ENEMIES[event.enemy.kind].boss) this.showBossEntrance(event.enemy);
+        break;
+      case 'summoned':
+        this.showSummon(event.enemyId, event.minions);
         break;
       case 'attack':
         this.showAttack(event.duckId, event.target, event.hitIds, event.wingFlap);
@@ -572,14 +590,17 @@ export class GameScene extends Phaser.Scene {
       case 'defeated':
         this.removeEnemySprite(event.enemy.id, 'defeated');
         this.flyPea(event.position, ENEMIES[event.enemy.kind].peas);
+        if (ENEMIES[event.enemy.kind].boss) this.showBossGone(event.position, 'The Night Bandit ran away!');
         break;
       case 'reachedHouse':
         this.removeEnemySprite(event.enemy.id, 'house');
         this.showHouseRaid();
+        if (ENEMIES[event.enemy.kind].boss) this.showBossGone(this.house, 'The Night Bandit raided the snacks!');
         break;
       case 'shooed':
         this.removeEnemySprite(event.enemy.id, 'shooed');
         popSpeechBubble(this, this.house.x, this.house.y - 150, 'Shoo!', DEPTH.floatText);
+        if (ENEMIES[event.enemy.kind].boss) this.showBossGone(this.house, 'Craig shooed the Night Bandit!');
         break;
       case 'waveCleared':
         this.showBanner(`Wave ${event.waveIndex + 1} cleared!`, event.bonus);
@@ -735,6 +756,54 @@ export class GameScene extends Phaser.Scene {
       ],
       onComplete: () => banner.destroy(),
     });
+  }
+
+  // --- The Night Bandit ------------------------------------------------------
+
+  private showBossEntrance(enemy: Enemy): void {
+    this.showBanner('The Night Bandit is here!');
+    this.cameras.main.shake(450, 0.004);
+
+    // Big health bar along the bottom of the screen.
+    const panel = this.add
+      .graphics()
+      .fillStyle(COLORS.panel, 0.8)
+      .fillRoundedRect(-240, -23, 480, 46, 23)
+      .lineStyle(3, 0xffffff, 0.3)
+      .strokeRoundedRect(-240, -23, 480, 46, 23);
+    const face = this.add.image(-208, -1, 'bandit').setDisplaySize(52, 39);
+    const name = this.add.text(-174, -10, ENEMIES.bandit.name, textStyle(16)).setOrigin(0, 0.5);
+    const back = this.add.rectangle(-174, 10, BOSS_BAR_WIDTH, 12, 0x000000, 0.5).setOrigin(0, 0.5);
+    const fill = this.add.rectangle(-174, 10, BOSS_BAR_WIDTH, 12, 0xff6b5a).setOrigin(0, 0.5);
+    // Sits along the very bottom edge, below where paths run.
+    const container = this.add
+      .container(WORLD.width / 2, WORLD.height - 20, [panel, face, name, back, fill])
+      .setDepth(DEPTH.hud)
+      .setAlpha(0);
+    this.tweens.add({ targets: container, alpha: 1, y: container.y - 6, duration: 400 });
+    this.bossBar = { container, fill, enemyId: enemy.id };
+
+    const pos = enemyPosition(enemy);
+    this.time.delayedCall(700, () => popSpeechBubble(this, pos.x, pos.y - 110, 'Snacks for me!', DEPTH.floatText));
+  }
+
+  private showSummon(bossId: number, minions: Enemy[]): void {
+    const boss = this.enemySprites.get(bossId);
+    if (boss) popSpeechBubble(this, boss.root.x, boss.root.y - 110, 'Tweet-tweet!', DEPTH.floatText);
+    for (const minion of minions) {
+      this.addEnemySprite(minion);
+      const pos = enemyPosition(minion);
+      this.fx.puff.explode(8, pos.x, pos.y - 20);
+    }
+  }
+
+  private showBossGone(at: Point, message: string): void {
+    this.fx.puff.explode(30, at.x, at.y - 40);
+    this.fx.stars.explode(20, at.x, at.y - 40);
+    this.showBanner(message);
+    const bar = this.bossBar;
+    this.bossBar = undefined;
+    if (bar) this.tweens.add({ targets: bar.container, alpha: 0, duration: 400, onComplete: () => bar.container.destroy() });
   }
 
   // --- Buttons ---------------------------------------------------------------

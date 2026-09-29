@@ -158,7 +158,7 @@ export function update(game: Game, dt: number): GameEvent[] {
     }
     events.push(event);
     if (event.type === 'defeated') game.peas += ENEMIES[event.enemy.kind].peas;
-    if (event.type === 'reachedHouse') game.hearts = Math.max(0, game.hearts - 1);
+    if (event.type === 'reachedHouse') game.hearts = Math.max(0, game.hearts - ENEMIES[event.enemy.kind].hearts);
   }
 
   if (game.hearts === 0) {

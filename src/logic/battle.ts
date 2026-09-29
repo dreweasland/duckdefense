@@ -22,6 +22,8 @@ export interface Enemy {
   heldBy: number[];
   /** True while the fountain is slowing it (for drawing). */
   slowed: boolean;
+  /** Seconds until it next calls for minions (only for predators that summon). */
+  summonTime: number;
 }
 
 export interface Duck {
@@ -63,6 +65,7 @@ export type BattleEvent =
   | { type: 'attack'; duckId: number; target: Point; hitIds: number[]; wingFlap: boolean }
   | { type: 'alarmQuack'; duckId: number; stunnedIds: number[] }
   | { type: 'held'; duckId: number; enemyId: number }
+  | { type: 'summoned'; enemyId: number; minions: Enemy[] }
   | { type: 'defeated'; enemy: Enemy; position: Point }
   | { type: 'reachedHouse'; enemy: Enemy };
 
@@ -112,6 +115,7 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind): Enemy {
     stopTime: 0,
     heldBy: [],
     slowed: false,
+    summonTime: stats.summons?.every ?? 0,
   };
   battle.enemies.push(enemy);
   return enemy;
@@ -204,7 +208,23 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
   }
   battle.enemies = battle.enemies.filter((e) => e.distance < e.path.length);
 
-  // 2. Special abilities.
+  // 2. Bosses call for minions, which appear just behind them (not while stunned).
+  for (const enemy of [...battle.enemies]) {
+    const summons = ENEMIES[enemy.kind].summons;
+    if (!summons || enemy.stopTime > 0) continue;
+    enemy.summonTime -= dt;
+    if (enemy.summonTime > 0) continue;
+    enemy.summonTime = summons.every;
+    const minions: Enemy[] = [];
+    for (let i = 0; i < summons.count; i++) {
+      const minion = spawnEnemy(battle, summons.enemy);
+      if (!isFlying(minion)) minion.distance = Math.max(0, enemy.distance - 50 - i * 40);
+      minions.push(minion);
+    }
+    events.push({ type: 'summoned', enemyId: enemy.id, minions });
+  }
+
+  // 3. Special abilities.
   for (const duck of battle.ducks) {
     duck.abilityCooldown = Math.max(0, duck.abilityCooldown - dt);
     if (duck.abilityCooldown > 0) continue;
@@ -225,7 +245,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     // Curtis holds the line: stop the next ground predator that walks up, once each.
     if (stats.holdTheLine) {
       const target = enemiesInRange(battle, duck.position, stats.range)
-        .filter((e) => !isFlying(e) && !e.heldBy.includes(duck.id))
+        .filter((e) => !isFlying(e) && !ENEMIES[e.kind].tooBigToHold && !e.heldBy.includes(duck.id))
         .sort((a, b) => remaining(a) - remaining(b))[0];
       if (target) {
         target.stopTime = Math.max(target.stopTime, stats.holdTheLine.holdTime);
@@ -236,7 +256,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     }
   }
 
-  // 3. Ducks that are ready attack the predator closest to the house.
+  // 4. Ducks that are ready attack the predator closest to the house.
   for (const duck of battle.ducks) {
     duck.cooldown = Math.max(0, duck.cooldown - dt);
     if (duck.cooldown > 0) continue;
@@ -265,7 +285,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     events.push({ type: 'attack', duckId: duck.id, target: targetPos, hitIds: hit.map((e) => e.id), wingFlap });
   }
 
-  // 4. Predators out of health run away.
+  // 5. Predators out of health run away.
   for (const enemy of battle.enemies) {
     if (enemy.hp <= 0) {
       events.push({ type: 'defeated', enemy, position: enemyPosition(enemy) });

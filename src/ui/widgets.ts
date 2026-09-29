@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, textStyle } from './theme';
+import { COLORS, WORLD, textStyle } from './theme';
 
 /** A dark rounded "pill" behind HUD counters. Returns the graphics so it can be layered. */
 export function drawPill(scene: Phaser.Scene, x: number, y: number, width: number, height: number): Phaser.GameObjects.Graphics {
@@ -104,6 +104,9 @@ export function popSpeechBubble(scene: Phaser.Scene, x: number, y: number, messa
   const text = scene.add.text(0, 0, message, textStyle(22, { color: COLORS.inkCss, strokeThickness: 0 })).setOrigin(0.5);
   const width = text.width + 24;
   const height = text.height + 12;
+  // Keep the bubble on screen (a speaker can be just off the edge).
+  x = Math.max(width / 2 + 10, Math.min(WORLD.width - width / 2 - 10, x));
+  y = Math.max(height + 20, y);
   const g = scene.add
     .graphics()
     .fillStyle(0xffffff)
