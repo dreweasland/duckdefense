@@ -4,11 +4,11 @@ import { BATTERY, FOUNTAIN } from '../data/dayNight';
 import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { CHASES } from '../data/synergy';
-import { ENEMIES } from '../data/enemies';
+import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { GAME_SPEEDS } from '../data/gameSpeed';
 import { HUD_AREAS } from '../data/layout';
 import { LEVELS } from '../data/levels';
-import { chasePartner, enemyPosition, isFlying, isRefreshed, type Enemy } from '../logic/battle';
+import { chasePartner, enemyPosition, isFlying, isHidden, isRefreshed, type Enemy } from '../logic/battle';
 import {
   buyDuck,
   canBuy,
@@ -58,6 +58,15 @@ const PEA_ICON = { x: 596, y: 38 };
 const CARD = { width: 84, height: 90, y: 54, spacing: 92, lift: 3 };
 const GO_BUTTON = { x: 1200, y: 70 };
 const CRAIG_BUTTON = { x: 100, y: 640 };
+
+// How each walking predator looks: its picture's size, the shadow under it, and how it waddles.
+const GROUND_LOOKS: Record<Exclude<EnemyKind, 'hawk' | 'bandit'>, { width: number; height: number; shadow: number; wobble: number; wobbleTime: number }> = {
+  raccoon: { width: 92, height: 67, shadow: 64, wobble: 4, wobbleTime: 220 },
+  fox: { width: 100, height: 68, shadow: 66, wobble: 5, wobbleTime: 140 },
+  mink: { width: 88, height: 44, shadow: 60, wobble: 3, wobbleTime: 160 },
+  turtle: { width: 110, height: 75, shadow: 90, wobble: 2, wobbleTime: 520 },
+};
+const HIDDEN_ALPHA = 0.45; // a mink hiding in the grass is see-through
 
 // Said by the raccoon when it gets into the duck house. Losing a heart should be funny.
 const RACCOON_QUIPS = ['Nom nom!', 'Yoink!', 'Snack time!', 'Crunch!', 'Mine now!'];
@@ -958,13 +967,16 @@ export class GameScene extends Phaser.Scene {
       art = this.add.image(0, 0, 'bandit').setDisplaySize(150, 112).setOrigin(0.5, 0.85);
       this.tweens.add({ targets: art, angle: { from: -3, to: 3 }, duration: 380, yoyo: true, repeat: -1 });
     } else {
-      root.add(this.add.ellipse(0, 4, 64, 16, 0x000000, 0.2));
-      // Water ripple at its feet while the fountain slows it.
-      ripple = this.add.ellipse(0, 4, 78, 24).setStrokeStyle(4, SLOW_RING, 0.95).setVisible(false);
+      const look = GROUND_LOOKS[enemy.kind as keyof typeof GROUND_LOOKS];
+      root.add(this.add.ellipse(0, 4, look.shadow, 16, 0x000000, 0.2));
+      // Dusty ring at its feet while Curtis slows it.
+      ripple = this.add.ellipse(0, 4, look.shadow + 14, 24).setStrokeStyle(4, SLOW_RING, 0.95).setVisible(false);
       this.tweens.add({ targets: ripple, scale: 1.15, alpha: 0.5, duration: 400, yoyo: true, repeat: -1 });
       root.add(ripple);
-      art = this.add.image(0, 0, 'raccoon').setDisplaySize(92, 67).setOrigin(0.5, 0.85);
-      this.tweens.add({ targets: art, angle: { from: -4, to: 4 }, duration: 220, yoyo: true, repeat: -1 });
+      art = this.add.image(0, 0, enemy.kind).setDisplaySize(look.width, look.height).setOrigin(0.5, 0.85);
+      this.tweens.add({ targets: art, angle: { from: -look.wobble, to: look.wobble }, duration: look.wobbleTime, yoyo: true, repeat: -1 });
+      // Turtles climb out of the pond with a splash.
+      if (ENEMIES[enemy.kind].fromPond) this.fx.splash.explode(16, pos.x, pos.y - 10);
     }
     root.add(art);
 
@@ -1008,6 +1020,8 @@ export class GameScene extends Phaser.Scene {
 
       // A dusty ring at its feet while Curtis slows it.
       sprite.ripple?.setVisible(enemy.slowed);
+      // Minks hiding in the grass are hard to see until Chester's quack flushes them out.
+      if (ENEMIES[enemy.kind].sneaky) sprite.art.setAlpha(isHidden(enemy) ? HIDDEN_ALPHA : 1);
       // A quick red "ouch" tint when hit (keeps the art readable even when hit constantly).
       if (time < sprite.flashUntil) sprite.art.setTint(0xff9a9a);
       else sprite.art.clearTint();

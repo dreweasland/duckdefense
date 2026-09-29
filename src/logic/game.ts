@@ -48,11 +48,14 @@ export interface GameMap {
   sky?: Point[];
   /** Where the solar fountain is (leave out for no fountain). */
   fountainAt?: Point;
+  /** Where predators from the pond climb out (leave out for no pond). */
+  pondAt?: Point;
 }
 
-/** The fountain sits in the middle of the level's first pond. */
+/** The fountain sits in the middle of the level's first pond, and turtles climb out of it. */
 export function mapFromLevel(level: Level): GameMap {
-  return { path: makePath(level.path), sky: level.sky, fountainAt: level.ponds[0]?.center };
+  const pond = level.ponds[0]?.center;
+  return { path: makePath(level.path), sky: level.sky, fountainAt: pond, pondAt: pond };
 }
 
 export type GameEvent =
@@ -69,7 +72,7 @@ export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Dif
   }
   const settings = DIFFICULTIES[difficulty];
   return {
-    battle: createBattle(map.path, { sky: map.sky, fountainAt: map.fountainAt, enemySpeed: settings.enemySpeed }),
+    battle: createBattle(map.path, { sky: map.sky, fountainAt: map.fountainAt, pondAt: map.pondAt, enemySpeed: settings.enemySpeed }),
     waves,
     peas: settings.startingPeas,
     hearts: settings.hearts,

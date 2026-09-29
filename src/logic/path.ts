@@ -1,4 +1,4 @@
-import { distance, type Point } from './geometry';
+import { closestPointOnSegment, distance, type Point } from './geometry';
 
 /** The route predators walk, from the first point to the last (the duck house). */
 export interface Path {
@@ -33,4 +33,20 @@ export function pointAt(path: Path, dist: number): Point {
   }
   const last = points[points.length - 1]!;
   return { x: last.x, y: last.y };
+}
+
+/**
+ * A route that starts at `from` (off the path, like the middle of the pond), cuts straight
+ * to the nearest spot on the path, then follows the path the rest of the way. When two
+ * spots are about as near, it picks the one closer to the house.
+ */
+export function joinPath(from: Point, path: Path): Path {
+  const { points } = path;
+  let join = { point: points[0]!, segment: 0, distance: distance(from, points[0]!) };
+  for (let i = 1; i < points.length; i++) {
+    const point = closestPointOnSegment(from, points[i - 1]!, points[i]!);
+    const d = distance(from, point);
+    if (d <= join.distance + 1) join = { point, segment: i, distance: Math.min(d, join.distance) };
+  }
+  return makePath([from, join.point, ...points.slice(join.segment)]);
 }

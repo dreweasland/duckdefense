@@ -3,7 +3,7 @@ import { WING_FLAP_RECOVERY, type DuckKind } from '../data/ducks';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { CHASES, PECKING_LOOP } from '../data/synergy';
 import { distance, type Point } from './geometry';
-import { makePath, pointAt, type Path } from './path';
+import { joinPath, makePath, pointAt, type Path } from './path';
 import { statsAt } from './upgrades';
 
 export interface Enemy {
@@ -27,6 +27,8 @@ export interface Enemy {
   scared: number[];
   /** Seconds until it next calls for minions (only for predators that summon). */
   summonTime: number;
+  /** Seconds a sneaky predator stays spotted after an Alarm Quack flushes it out. */
+  revealedTime: number;
 }
 
 export interface Duck {
@@ -56,6 +58,8 @@ export interface Battle {
   path: Path;
   /** Where flyers enter; they take turns. */
   sky: Point[];
+  /** Where predators that come from the pond climb out (the middle of the pond). */
+  pond?: Point;
   enemies: Enemy[];
   ducks: Duck[];
   fountain?: Fountain;
@@ -79,6 +83,7 @@ export type BattleEvent =
 
 export interface BattleOptions {
   sky?: Point[];
+  pondAt?: Point;
   fountainAt?: Point;
   enemySpeed?: number;
 }
@@ -87,6 +92,7 @@ export function createBattle(path: Path, options: BattleOptions = {}): Battle {
   return {
     path,
     sky: options.sky ?? [],
+    pond: options.pondAt,
     enemies: [],
     ducks: [],
     fountain: options.fountainAt ? { position: options.fountainAt, on: false } : undefined,
@@ -111,6 +117,9 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind): Enemy {
     }
     battle.flyersSpawned++;
     path = makePath([from, housePosition(battle)]);
+  } else if (stats.fromPond) {
+    if (!battle.pond) throw new Error(`A ${stats.name} needs a pond to climb out of: add a "pond" layer to the map`);
+    path = joinPath(battle.pond, battle.path);
   }
   const enemy: Enemy = {
     id: battle.nextId++,
@@ -125,6 +134,7 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind): Enemy {
     slowed: false,
     scared: [],
     summonTime: stats.summons?.every ?? 0,
+    revealedTime: 0,
   };
   battle.enemies.push(enemy);
   return enemy;
@@ -157,14 +167,32 @@ function enemiesInRange(battle: Battle, from: Point, range: number): Enemy[] {
   return battle.enemies.filter((e) => e.hp > 0 && distance(enemyPosition(e), from) <= range);
 }
 
+/** Whether a sneaky predator is hiding right now (an Alarm Quack flushes it out for a while). */
+export function isHidden(enemy: Enemy): boolean {
+  return !!ENEMIES[enemy.kind].sneaky && enemy.revealedTime <= 0;
+}
+
+/** Whether a duck at `from` with this reach can see a predator to aim at it. Hiding predators must be close. */
+function canSpot(enemy: Enemy, from: Point, range: number): boolean {
+  const sneaky = ENEMIES[enemy.kind].sneaky;
+  return !sneaky || !isHidden(enemy) || distance(enemyPosition(enemy), from) <= range * sneaky.spotRange;
+}
+
 /** The predator in range that is closest to the house, if any. */
 export function pickTarget(battle: Battle, from: Point, range: number, canHitFlying = true): Enemy | undefined {
   let best: Enemy | undefined;
   for (const enemy of enemiesInRange(battle, from, range)) {
     if (!canHitFlying && isFlying(enemy)) continue;
+    if (!canSpot(enemy, from, range)) continue;
     if (!best || remaining(enemy) < remaining(best)) best = enemy;
   }
   return best;
+}
+
+/** How much a hit takes off a predator: armor (the turtle's shell) blocks some, but every hit does at least 1. */
+export function damageTo(enemy: Enemy, damage: number): number {
+  const armor = ENEMIES[enemy.kind].armor ?? 0;
+  return armor > 0 ? Math.max(1, damage - armor) : damage;
 }
 
 /** Pixels left before a predator reaches the house. */
@@ -251,6 +279,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
   // 1. Predators head for the house, unless something has frozen them.
   for (const enemy of battle.enemies) {
     enemy.pushRecovery = Math.max(0, enemy.pushRecovery - dt);
+    enemy.revealedTime = Math.max(0, enemy.revealedTime - dt);
     const slow = slowFor(battle, enemy);
     enemy.slowed = slow < 1;
     if (enemy.stopTime > 0) {
@@ -300,12 +329,16 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     if (duck.abilityCooldown > 0 || isScared(duck)) continue;
     const stats = statsAt(duck.kind, duck.level);
 
-    // Chester's Alarm Quack: freeze every predator in range, hawks included.
+    // Chester's Alarm Quack: freeze every predator in range, hawks included, and flush
+    // hiding predators out of the grass. Quick ones (foxes) shake it off sooner.
     if (stats.alarmQuack) {
       const inRange = enemiesInRange(battle, duck.position, stats.range);
       if (inRange.length > 0) {
         for (const enemy of inRange) {
-          enemy.stopTime = Math.max(enemy.stopTime, stats.alarmQuack.stunTime);
+          const enemyStats = ENEMIES[enemy.kind];
+          const stun = stats.alarmQuack.stunTime * (1 - (enemyStats.stunResistance ?? 0));
+          enemy.stopTime = Math.max(enemy.stopTime, stun);
+          if (enemyStats.sneaky) enemy.revealedTime = Math.max(enemy.revealedTime, enemyStats.sneaky.revealTime);
         }
         duck.abilityCooldown = stats.alarmQuack.cooldown;
         events.push({ type: 'alarmQuack', duckId: duck.id, stunnedIds: inRange.map((e) => e.id) });
@@ -330,7 +363,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
           ((stats.canHitFlying || !isFlying(e)) && distance(enemyPosition(e), targetPos) <= stats.splashRadius)),
     );
     const damage = stats.damage * (isRefreshed(battle, duck) ? 1 + FOUNTAIN.damageBoost : 1);
-    for (const enemy of hit) enemy.hp -= damage;
+    for (const enemy of hit) enemy.hp -= damageTo(enemy, damage);
     duck.cooldown = attackInterval(battle, duck);
     duck.attacks++;
 

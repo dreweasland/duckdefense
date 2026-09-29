@@ -237,6 +237,101 @@ function raccoonSvg(): string {
   );
 }
 
+/** A red fox trotting right, 220 x 150. */
+function foxSvg(): string {
+  const defs = vGrad('foxfur', '#f29a4a', '#d96b24') + vGrad('foxtail', '#f0a055', '#cf6420');
+  return svg(
+    220,
+    150,
+    defs,
+    [
+      // Big bushy tail with a white tip.
+      `<path d="M56 78 C30 74 8 58 6 34 C22 44 40 50 60 60 Z" fill="url(#foxtail)" ${stroke()}/>`,
+      `<path d="M6 34 C10 44 16 48 24 50 C18 40 14 36 6 34 Z" fill="#ffffff" ${stroke(4)}/>`,
+      // Slim black-socked legs.
+      `<rect x="66" y="98" width="13" height="36" rx="6" fill="#2e2626" ${stroke(4)}/>`,
+      `<rect x="88" y="100" width="13" height="34" rx="6" fill="#2e2626" ${stroke(4)}/>`,
+      `<rect x="136" y="100" width="13" height="34" rx="6" fill="#2e2626" ${stroke(4)}/>`,
+      `<rect x="156" y="98" width="13" height="36" rx="6" fill="#2e2626" ${stroke(4)}/>`,
+      // Body, with a pale belly.
+      `<path d="M52 82 C52 60 86 54 118 56 C150 58 170 70 170 88 C170 108 146 114 112 114 C78 114 52 106 52 82 Z" fill="url(#foxfur)" ${stroke()}/>`,
+      `<path d="M84 104 C108 112 136 112 158 102 C144 114 104 116 84 104 Z" fill="#fff1e0"/>`,
+      // Tall pointy ears.
+      `<path d="M158 50 L160 16 L182 42 Z" fill="#d96b24" ${stroke(4)}/>`,
+      `<path d="M162 42 L163 26 L174 40 Z" fill="#2e2626"/>`,
+      `<path d="M178 44 L192 12 L200 46 Z" fill="#e57d33" ${stroke(4)}/>`,
+      `<path d="M183 42 L191 24 L195 44 Z" fill="#2e2626"/>`,
+      // Head with a long snout and white cheeks.
+      `<path d="M150 66 C150 44 178 36 198 48 C206 54 214 62 216 70 C206 78 186 84 170 84 C158 84 150 76 150 66 Z" fill="url(#foxfur)" ${stroke()}/>`,
+      `<path d="M168 74 C182 84 204 80 216 70 C210 84 184 90 168 74 Z" fill="#ffffff"/>`,
+      `<circle cx="214" cy="68" r="4.5" fill="#1f1a1a"/>`,
+      // Sly eye.
+      `<path d="M180 58 Q187 53 194 58 Q187 62 180 58 Z" fill="#ffd23f" ${stroke(2)}/>`,
+      `<circle cx="188" cy="58" r="2" fill="#111"/>`,
+    ].join(''),
+  );
+}
+
+/** A mink slinking right: long, low, and dark brown, 220 x 110. */
+function minkSvg(): string {
+  const defs = vGrad('mink', '#6b4a36', '#3e2a1e');
+  return svg(
+    220,
+    110,
+    defs,
+    [
+      // Fluffy tail.
+      `<path d="M40 66 C24 66 8 58 6 44 C18 50 30 54 46 56 Z" fill="#3a271c" ${stroke()}/>`,
+      // Short legs.
+      `<rect x="54" y="72" width="14" height="22" rx="6" fill="#2f2018" ${stroke(4)}/>`,
+      `<rect x="74" y="74" width="14" height="20" rx="6" fill="#2f2018" ${stroke(4)}/>`,
+      `<rect x="138" y="74" width="14" height="20" rx="6" fill="#2f2018" ${stroke(4)}/>`,
+      `<rect x="158" y="72" width="14" height="22" rx="6" fill="#2f2018" ${stroke(4)}/>`,
+      // Long slinky body with an arch in the middle.
+      `<path d="M38 64 C40 46 70 38 100 40 C120 30 150 32 168 44 C182 52 184 70 170 78 C140 88 70 88 46 80 C40 76 38 70 38 64 Z" fill="url(#mink)" ${stroke()}/>`,
+      `<path d="M70 50 C96 42 130 40 156 48" fill="none" stroke="#8a6a52" stroke-width="4" stroke-linecap="round" opacity="0.7"/>`,
+      // Little round ears.
+      `<circle cx="178" cy="36" r="8" fill="#4a3226" ${stroke(4)}/>`,
+      `<circle cx="194" cy="36" r="7" fill="#4a3226" ${stroke(4)}/>`,
+      // Head with a white chin.
+      `<path d="M166 54 C166 38 186 32 202 40 C212 46 216 56 212 62 C204 70 180 72 172 66 C168 62 166 58 166 54 Z" fill="url(#mink)" ${stroke()}/>`,
+      `<path d="M184 64 C194 70 206 68 212 62 C206 72 190 74 184 64 Z" fill="#f4efe8"/>`,
+      `<circle cx="212" cy="54" r="4" fill="#1a1210"/>`,
+      // Beady eye with a glint.
+      `<circle cx="194" cy="48" r="4.5" fill="#111"/><circle cx="195.5" cy="46.5" r="1.6" fill="#ffffff"/>`,
+    ].join(''),
+  );
+}
+
+/** A snapping turtle plodding right, with a ridged shell and a hooked beak, 220 x 150. */
+function turtleSvg(): string {
+  const defs = vGrad('shell', '#7c8a4a', '#4d5a2a') + vGrad('skin', '#9aa06a', '#6f7648');
+  return svg(
+    220,
+    150,
+    defs,
+    [
+      // Spiky tail.
+      `<path d="M44 104 C28 106 12 104 4 98 C16 94 30 92 46 92 Z" fill="url(#skin)" ${stroke(4)}/>`,
+      `<path d="M14 96 L18 88 L24 95 L28 87 L34 94" fill="none" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/>`,
+      // Stubby clawed legs.
+      `<path d="M54 106 C50 120 52 132 66 134 C76 134 80 124 76 108 Z" fill="url(#skin)" ${stroke(4)}/>`,
+      `<path d="M140 108 C138 122 142 134 156 134 C166 132 168 122 164 106 Z" fill="url(#skin)" ${stroke(4)}/>`,
+      // Belly plate.
+      `<path d="M40 100 C60 116 150 116 176 100 Z" fill="#d9c98a" ${stroke(4)}/>`,
+      // Big domed shell with ridges.
+      `<path d="M36 102 C34 60 70 30 110 30 C150 30 182 58 180 102 Z" fill="url(#shell)" ${stroke()}/>`,
+      `<path d="M72 44 L64 70 L82 96 M110 32 L110 60 M146 44 L156 70 L138 96 M64 70 L110 60 L156 70 M82 96 L110 60 L138 96" fill="none" stroke="#3a4420" stroke-width="4" stroke-linejoin="round"/>`,
+      `<path d="M90 34 L96 24 L102 32 M118 32 L124 22 L130 34" fill="#5d6b32" ${stroke(3)}/>`,
+      // Head with a hooked beak and a grumpy eye.
+      `<path d="M174 80 C176 62 196 56 210 64 C218 70 218 82 214 88 C206 96 188 98 180 94 C176 90 174 86 174 80 Z" fill="url(#skin)" ${stroke()}/>`,
+      `<path d="M206 78 C214 80 218 86 214 94 C208 90 204 86 202 82 Z" fill="#4a4a3a" ${stroke(3)}/>`,
+      `<circle cx="198" cy="72" r="4.5" fill="#f2d24a" ${stroke(2)}/><circle cx="199" cy="72" r="2" fill="#111"/>`,
+      `<path d="M190 66 L204 68" stroke="${INK}" stroke-width="3.5" stroke-linecap="round"/>`,
+    ].join(''),
+  );
+}
+
 /** The Night Bandit: a big raccoon in a striped shirt and beanie with a sack of stolen snacks. 240 x 180. */
 function banditSvg(): string {
   const body = 'M56 104 C56 72 94 60 134 62 C170 64 192 82 192 108 C192 136 164 148 126 148 C88 148 56 136 56 104 Z';
@@ -598,6 +693,9 @@ export function allSprites(): SpriteArt[] {
   return [
     ...ducks,
     { key: 'raccoon', svg: raccoonSvg(), width: 92, height: 67 },
+    { key: 'fox', svg: foxSvg(), width: 100, height: 68 },
+    { key: 'mink', svg: minkSvg(), width: 88, height: 44 },
+    { key: 'turtle', svg: turtleSvg(), width: 110, height: 75 },
     { key: 'hawk', svg: hawkSvg(), width: 88, height: 88 },
     { key: 'bandit', svg: banditSvg(), width: 150, height: 112 },
     { key: 'house', svg: houseSvg(), width: 150, height: 144 },

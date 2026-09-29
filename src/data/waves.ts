@@ -25,6 +25,7 @@ export const LEVEL1_WAVES: Wave[] = [
     time: 'day',
     groups: [
       { enemy: 'raccoon', count: 6, every: 1.2 },
+      { enemy: 'fox', count: 3, every: 2, after: 3 }, // the first foxes!
       { enemy: 'hawk', count: 3, every: 3, after: 4 },
     ],
     bonusPeas: 80,
@@ -33,6 +34,7 @@ export const LEVEL1_WAVES: Wave[] = [
     time: 'night',
     groups: [
       { enemy: 'raccoon', count: 10, every: 1 },
+      { enemy: 'fox', count: 4, every: 1.5, after: 2 },
       { enemy: 'hawk', count: 4, every: 2.5, after: 6 },
     ],
     bonusPeas: 90,
@@ -50,11 +52,19 @@ export const LEVEL1_WAVES: Wave[] = [
 export const LEVEL2_WAVES: Wave[] = [
   { time: 'day', groups: [{ enemy: 'raccoon', count: 3, every: 2.5 }], bonusPeas: 60 },
   { time: 'day', groups: [{ enemy: 'raccoon', count: 4, every: 2.2 }], bonusPeas: 70 },
-  { time: 'night', groups: [{ enemy: 'raccoon', count: 6, every: 1.6 }], bonusPeas: 80 },
+  {
+    time: 'night',
+    groups: [
+      { enemy: 'raccoon', count: 5, every: 1.6 },
+      { enemy: 'mink', count: 3, every: 2.5, after: 3 }, // the first minks!
+    ],
+    bonusPeas: 80,
+  },
   {
     time: 'day',
     groups: [
       { enemy: 'raccoon', count: 8, every: 1.1 },
+      { enemy: 'fox', count: 3, every: 1.5, after: 2 },
       { enemy: 'hawk', count: 4, every: 2.5, after: 4 },
     ],
     bonusPeas: 80,
@@ -62,7 +72,8 @@ export const LEVEL2_WAVES: Wave[] = [
   {
     time: 'night',
     groups: [
-      { enemy: 'raccoon', count: 12, every: 0.9 },
+      { enemy: 'raccoon', count: 10, every: 0.9 },
+      { enemy: 'mink', count: 4, every: 2, after: 4 },
       { enemy: 'hawk', count: 4, every: 2.2, after: 6 },
     ],
     bonusPeas: 90,
@@ -70,7 +81,8 @@ export const LEVEL2_WAVES: Wave[] = [
   {
     time: 'day',
     groups: [
-      { enemy: 'raccoon', count: 16, every: 0.7 },
+      { enemy: 'raccoon', count: 14, every: 0.7 },
+      { enemy: 'fox', count: 4, every: 1.2, after: 5 },
       { enemy: 'hawk', count: 5, every: 2, after: 3 },
     ],
     bonusPeas: 100,
@@ -78,7 +90,9 @@ export const LEVEL2_WAVES: Wave[] = [
   {
     time: 'night',
     groups: [
-      { enemy: 'raccoon', count: 20, every: 0.6 },
+      { enemy: 'raccoon', count: 16, every: 0.6 },
+      { enemy: 'mink', count: 5, every: 1.5, after: 3 },
+      { enemy: 'fox', count: 3, every: 1.2, after: 8 },
       { enemy: 'hawk', count: 5, every: 2, after: 5 },
     ],
     bonusPeas: 0,
@@ -95,7 +109,14 @@ export const LEVEL3_WAVES: Wave[] = [
     ],
     bonusPeas: 70,
   },
-  { time: 'night', groups: [{ enemy: 'raccoon', count: 12, every: 1 }], bonusPeas: 80 },
+  {
+    time: 'night',
+    groups: [
+      { enemy: 'raccoon', count: 10, every: 1 },
+      { enemy: 'turtle', count: 1, every: 1, after: 3 }, // the first snapping turtle!
+    ],
+    bonusPeas: 80,
+  },
   {
     time: 'night',
     groups: [
@@ -104,11 +125,20 @@ export const LEVEL3_WAVES: Wave[] = [
     ],
     bonusPeas: 90,
   },
-  { time: 'day', groups: [{ enemy: 'raccoon', count: 18, every: 0.6 }], bonusPeas: 100 },
+  {
+    time: 'day',
+    groups: [
+      { enemy: 'raccoon', count: 14, every: 0.6 },
+      { enemy: 'fox', count: 4, every: 1, after: 3 },
+      { enemy: 'turtle', count: 2, every: 6, after: 2 },
+    ],
+    bonusPeas: 100,
+  },
   {
     time: 'night',
     groups: [
-      { enemy: 'raccoon', count: 16, every: 0.7 },
+      { enemy: 'raccoon', count: 12, every: 0.7 },
+      { enemy: 'mink', count: 5, every: 1.4, after: 3 },
       { enemy: 'hawk', count: 6, every: 1.8, after: 4 },
     ],
     bonusPeas: 110,

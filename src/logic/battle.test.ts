@@ -3,7 +3,7 @@ import { DUCKS } from '../data/ducks';
 import { ENEMIES } from '../data/enemies';
 import { FOUNTAIN, NIGHT } from '../data/dayNight';
 import { PECKING_LOOP } from '../data/synergy';
-import { attackInterval, createBattle, enemyPosition, isRefreshed, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
+import { attackInterval, createBattle, damageTo, enemyPosition, isHidden, isRefreshed, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
 import { statsAt } from './upgrades';
 import { makePath } from './path';
 
@@ -467,5 +467,94 @@ describe('Wing Flap limits', () => {
       placeDuck(battle, 'curtis', { x: 1200, y: -60 }).level = 1;
     });
     expect(moved).toBeGreaterThan(0);
+  });
+});
+
+describe('foxes', () => {
+  it('shake off an Alarm Quack sooner than other predators', () => {
+    const { alarmQuack } = DUCKS.chester;
+    const battle = newBattle();
+    const fox = spawnEnemy(battle, 'fox');
+    const raccoon = spawnEnemy(battle, 'raccoon');
+    fox.distance = 100;
+    raccoon.distance = 100;
+    placeDuck(battle, 'chester', { x: 100, y: 0 });
+    step(battle, 0);
+    expect(raccoon.stopTime).toBe(alarmQuack!.stunTime);
+    expect(fox.stopTime).toBeCloseTo(alarmQuack!.stunTime * (1 - ENEMIES.fox.stunResistance!));
+  });
+});
+
+describe('minks', () => {
+  const { sneaky } = ENEMIES.mink;
+
+  it('hide from ducks until they come close', () => {
+    const battle = newBattle();
+    const mink = spawnEnemy(battle, 'mink');
+    mink.distance = 1000;
+    // In Sunny's reach, but farther than she can spot a hiding mink.
+    placeDuck(battle, 'sunny', { x: 1000, y: sunny.range * sneaky!.spotRange + 10 });
+    step(battle, 0);
+    expect(mink.hp).toBe(ENEMIES.mink.maxHp);
+
+    mink.distance = 1000;
+    battle.ducks[0]!.position.y = sunny.range * sneaky!.spotRange - 10;
+    step(battle, 0);
+    expect(mink.hp).toBeLessThan(ENEMIES.mink.maxHp);
+  });
+
+  it("are flushed out by Chester's Alarm Quack, so every duck in reach can hit them for a while", () => {
+    const battle = newBattle();
+    const mink = spawnEnemy(battle, 'mink');
+    mink.distance = 1000;
+    placeDuck(battle, 'chester', { x: 1000, y: 100 });
+    const events = step(battle, 0);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'alarmQuack', stunnedIds: [mink.id] }));
+    expect(isHidden(mink)).toBe(false);
+
+    // Now Sunny can hit it from her full reach.
+    placeDuck(battle, 'sunny', { x: 1000, y: sunny.range - 5 });
+    step(battle, 0);
+    expect(mink.hp).toBeLessThan(ENEMIES.mink.maxHp - sunny.damage + 1);
+
+    step(battle, sneaky!.revealTime + 0.1);
+    expect(isHidden(mink)).toBe(true);
+  });
+
+  it("still get splashed when they're next to something a duck can see", () => {
+    const battle = newBattle();
+    const raccoon = spawnEnemy(battle, 'raccoon');
+    const mink = spawnEnemy(battle, 'mink');
+    raccoon.distance = 1000;
+    mink.distance = 1000 - DUCKS.sunny.splashRadius / 2;
+    placeDuck(battle, 'sunny', { x: 1000, y: sunny.range - 5 });
+    step(battle, 0);
+    expect(mink.hp).toBe(ENEMIES.mink.maxHp - sunny.damage);
+  });
+});
+
+describe('snapping turtles', () => {
+  it('climb out of the pond and cut across to the nearest bit of path', () => {
+    const battle = createBattle(makePath([{ x: 0, y: 0 }, { x: 2000, y: 0 }]), { pondAt: { x: 1200, y: 300 } });
+    const turtle = spawnEnemy(battle, 'turtle');
+    expect(enemyPosition(turtle)).toEqual({ x: 1200, y: 300 });
+    expect(turtle.path.length).toBe(300 + 800);
+  });
+
+  it('need a pond on the map', () => {
+    expect(() => spawnEnemy(newBattle(), 'turtle')).toThrow('pond');
+  });
+
+  it("have a shell that blocks part of every hit (but never all of it)", () => {
+    const armor = ENEMIES.turtle.armor!;
+    const battle = createBattle(makePath([{ x: 0, y: 0 }, { x: 2000, y: 0 }]), { pondAt: { x: 500, y: 100 } });
+    const turtle = spawnEnemy(battle, 'turtle');
+    expect(damageTo(turtle, 12)).toBe(12 - armor);
+    expect(damageTo(turtle, 2)).toBe(1);
+    expect(damageTo(spawnEnemy(battle, 'raccoon'), 12)).toBe(12);
+
+    placeDuck(battle, 'sunny', enemyPosition(turtle));
+    step(battle, 0);
+    expect(turtle.hp).toBe(ENEMIES.turtle.maxHp - (sunny.damage - armor));
   });
 });
