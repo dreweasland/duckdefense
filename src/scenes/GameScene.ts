@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
-import level1 from '../../maps/level1.tmj?raw';
-import { drawGrass, drawOutskirts, drawPath, drawPathEntrance, drawPond, scatterDecor, type Rect } from '../art/terrain';
+import { drawGrass, drawOutskirts, drawPath, drawPathEntrance, drawPond, scatterDecor } from '../art/terrain';
 import { BATTERY, FOUNTAIN } from '../data/dayNight';
 import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { ENEMIES } from '../data/enemies';
-import { LEVEL1_WAVES } from '../data/waves';
+import { HUD_AREAS } from '../data/layout';
+import { LEVELS } from '../data/levels';
 import { chasePartner, enemyPosition, isFlying, type Enemy } from '../logic/battle';
 import {
   buyDuck,
@@ -39,19 +39,13 @@ const CARD = { width: 84, height: 90, y: 48, spacing: 92 };
 const GO_BUTTON = { x: 1200, y: 70 };
 const CRAIG_BUTTON = { x: 100, y: 640 };
 
-// Keep scenery out from under the buttons and counters.
-const UI_AREAS: Rect[] = [
-  { x: 0, y: 0, width: 390, height: 110 },
-  { x: 560, y: 0, width: 600, height: 80 },
-  { x: 1130, y: 0, width: 150, height: 140 },
-  { x: 30, y: 570, width: 150, height: 150 },
-];
-
 // Said by the raccoon when it gets into the duck house. Losing a heart should be funny.
 const RACCOON_QUIPS = ['Nom nom!', 'Yoink!', 'Snack time!', 'Crunch!', 'Mine now!'];
 
 export interface GameSceneData {
   difficulty: Difficulty;
+  /** Index into LEVELS (0 = the first level). */
+  level?: number;
 }
 
 interface DuckSprite {
@@ -88,6 +82,7 @@ interface Effects {
 
 export class GameScene extends Phaser.Scene {
   private difficulty: Difficulty = 'easy';
+  private levelIndex = 0;
   private level!: Level;
   private state!: Game;
   private selected: DuckKind = 'sunny';
@@ -117,13 +112,15 @@ export class GameScene extends Phaser.Scene {
 
   init(data: Partial<GameSceneData>): void {
     this.difficulty = data.difficulty ?? 'easy';
+    this.levelIndex = Math.min(data.level ?? 0, LEVELS.length - 1);
   }
 
   create(): void {
     setupCamera(this);
     // Scene restarts reuse this object, so reset everything here.
-    this.level = parseLevel(level1);
-    this.state = createGame(mapFromLevel(this.level), LEVEL1_WAVES, this.difficulty);
+    const info = LEVELS[this.levelIndex]!;
+    this.level = parseLevel(info.map);
+    this.state = createGame(mapFromLevel(this.level), info.waves, this.difficulty);
     this.selected = 'sunny';
     this.duckSprites.clear();
     this.enemySprites.clear();
@@ -142,6 +139,7 @@ export class GameScene extends Phaser.Scene {
     this.goButton = this.drawGoButton();
     this.craigButton = this.drawCraigButton();
     this.refreshHud();
+    this.time.delayedCall(350, () => this.showBanner(`Level ${this.levelIndex + 1}: ${info.name}`));
   }
 
   update(time: number, deltaMs: number): void {
@@ -164,11 +162,13 @@ export class GameScene extends Phaser.Scene {
   // --- World -------------------------------------------------------------
 
   private drawWorld(): void {
-    drawGrass(this, 11);
-    drawOutskirts(this, 14);
-    drawPath(this, this.level.path, 12);
-    drawPathEntrance(this, this.level.path, 15);
-    this.level.ponds.forEach((pond, i) => drawPond(this, pond, 20 + i));
+    // Different seeds per level, so each level's scenery is different (but always the same).
+    const seed = 11 + this.levelIndex * 100;
+    drawGrass(this, seed);
+    drawOutskirts(this, seed + 3);
+    drawPath(this, this.level.path, seed + 1);
+    drawPathEntrance(this, this.level.path, seed + 4);
+    this.level.ponds.forEach((pond, i) => drawPond(this, pond, seed + 9 + i));
 
     const fountain = this.state.battle.fountain;
     if (fountain) {
@@ -190,8 +190,8 @@ export class GameScene extends Phaser.Scene {
 
     scatterDecor(
       this,
-      { path: this.level.path, slots: this.level.slots, ponds: this.level.ponds, house: door, blocked: UI_AREAS },
-      13,
+      { path: this.level.path, slots: this.level.slots, ponds: this.level.ponds, house: door, blocked: HUD_AREAS },
+      seed + 2,
     );
   }
 
@@ -587,7 +587,7 @@ export class GameScene extends Phaser.Scene {
       case 'won':
       case 'lost':
         this.time.delayedCall(1000, () =>
-          this.scene.start('ResultScene', { won: event.type === 'won', difficulty: this.difficulty }),
+          this.scene.start('ResultScene', { won: event.type === 'won', difficulty: this.difficulty, level: this.levelIndex }),
         );
         break;
     }

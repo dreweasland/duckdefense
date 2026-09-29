@@ -46,3 +46,79 @@ export const LEVEL1_WAVES: Wave[] = [
     bonusPeas: 0,
   },
 ];
+
+export const LEVEL2_WAVES: Wave[] = [
+  { time: 'day', groups: [{ enemy: 'raccoon', count: 3, every: 2.5 }], bonusPeas: 60 },
+  { time: 'day', groups: [{ enemy: 'raccoon', count: 4, every: 2.2 }], bonusPeas: 70 },
+  { time: 'night', groups: [{ enemy: 'raccoon', count: 6, every: 1.6 }], bonusPeas: 80 },
+  {
+    time: 'day',
+    groups: [
+      { enemy: 'raccoon', count: 8, every: 1.1 },
+      { enemy: 'hawk', count: 4, every: 2.5, after: 4 },
+    ],
+    bonusPeas: 80,
+  },
+  {
+    time: 'night',
+    groups: [
+      { enemy: 'raccoon', count: 12, every: 0.9 },
+      { enemy: 'hawk', count: 4, every: 2.2, after: 6 },
+    ],
+    bonusPeas: 90,
+  },
+  {
+    time: 'day',
+    groups: [
+      { enemy: 'raccoon', count: 16, every: 0.7 },
+      { enemy: 'hawk', count: 5, every: 2, after: 3 },
+    ],
+    bonusPeas: 100,
+  },
+  {
+    time: 'night',
+    groups: [
+      { enemy: 'raccoon', count: 20, every: 0.6 },
+      { enemy: 'hawk', count: 5, every: 2, after: 5 },
+    ],
+    bonusPeas: 0,
+  },
+];
+
+export const LEVEL3_WAVES: Wave[] = [
+  { time: 'night', groups: [{ enemy: 'raccoon', count: 6, every: 1.8 }], bonusPeas: 60 },
+  {
+    time: 'day',
+    groups: [
+      { enemy: 'raccoon', count: 8, every: 1.4 },
+      { enemy: 'hawk', count: 2, every: 3, after: 3 },
+    ],
+    bonusPeas: 70,
+  },
+  { time: 'night', groups: [{ enemy: 'raccoon', count: 12, every: 1 }], bonusPeas: 80 },
+  {
+    time: 'night',
+    groups: [
+      { enemy: 'raccoon', count: 10, every: 0.9 },
+      { enemy: 'hawk', count: 5, every: 2, after: 4 },
+    ],
+    bonusPeas: 90,
+  },
+  { time: 'day', groups: [{ enemy: 'raccoon', count: 18, every: 0.6 }], bonusPeas: 100 },
+  {
+    time: 'night',
+    groups: [
+      { enemy: 'raccoon', count: 16, every: 0.7 },
+      { enemy: 'hawk', count: 6, every: 1.8, after: 4 },
+    ],
+    bonusPeas: 110,
+  },
+  {
+    time: 'night',
+    groups: [
+      { enemy: 'raccoon', count: 24, every: 0.5 },
+      { enemy: 'hawk', count: 6, every: 1.6, after: 6 },
+    ],
+    bonusPeas: 0,
+  },
+];

@@ -18,7 +18,7 @@ export const DIFFICULTIES: Record<Difficulty, DifficultySettings> = {
   },
   normal: {
     label: 'Normal',
-    startingPeas: 150,
+    startingPeas: 200, // enough for two ducks, since one can't stop a raccoon alone
     hearts: 10,
     enemySpeed: 1,
   },

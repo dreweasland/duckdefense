@@ -18,5 +18,25 @@ Each level needs these **object layers** (the names must match exactly):
 
 Rotating objects isn't supported, so leave rotation at 0.
 
+## Adding a new level
+
+1. Copy an existing `.tmj` file (for example `level3.tmj` to `level4.tmj`) and open it in Tiled.
+2. Write its waves in `src/data/waves.ts` (copy an existing list to start).
+3. Add it to the end of the list in `src/data/levels.ts` with a name.
+
+## Tips
+
+- **Put nests inside the path's bends.** A duck there can reach two stretches of path at
+  once. Nests beside a straight stretch are much weaker.
+- **Keep the top-left, top-middle, top-right, and bottom-left corners clear**: that's where
+  the duck picker, counters, start button, and Craig live. `src/data/layout.ts` has the exact
+  areas.
+- **Start the path off the edge of the map**, so predators walk in from the woods.
+- **Put hawk (`sky`) points far from the house**, so hawks fly past some nests on the way.
+
+## Checks
+
 If the map has a problem (like a missing layer), the game shows an error in the browser
-console telling you what's wrong. `npm test` also checks that every level loads.
+console telling you what's wrong. `npm test` also checks every level: nests clear of the
+path, the pond, each other, and the buttons; and that the level can be won on Easy and
+Normal but is lost with no ducks at all.

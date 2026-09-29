@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { drawGrass, drawOutskirts, drawPond, scatterDecor } from '../art/terrain';
 import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER } from '../data/ducks';
+import { LEVELS } from '../data/levels';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
 import { drawBigButton, drawCard } from '../ui/widgets';
 import type { GameSceneData } from './GameScene';
@@ -9,25 +10,28 @@ import type { GameSceneData } from './GameScene';
 export interface ResultSceneData {
   won: boolean;
   difficulty: Difficulty;
+  level: number;
 }
 
 const POND = { center: { x: WORLD.width / 2, y: 560 }, radiusX: 420, radiusY: 120 };
 
 export class ResultScene extends Phaser.Scene {
-  private result: ResultSceneData = { won: true, difficulty: 'easy' };
+  private result: ResultSceneData = { won: true, difficulty: 'easy', level: 0 };
 
   constructor() {
     super('ResultScene');
   }
 
   init(data: Partial<ResultSceneData>): void {
-    this.result = { won: data.won ?? true, difficulty: data.difficulty ?? 'easy' };
+    this.result = { won: data.won ?? true, difficulty: data.difficulty ?? 'easy', level: data.level ?? 0 };
   }
 
   create(): void {
     setupCamera(this);
     const cx = WORLD.width / 2;
-    const { won, difficulty } = this.result;
+    const { won, difficulty, level } = this.result;
+    const hasNext = won && level + 1 < LEVELS.length;
+    const beatEverything = won && !hasNext;
 
     drawGrass(this, 41);
     drawOutskirts(this, 44);
@@ -49,7 +53,12 @@ export class ResultScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(51);
     this.add
-      .text(cx, 205, won ? 'The flock is safe and proud.' : 'The ducks want a rematch!', textStyle(30, { color: COLORS.inkCss, strokeThickness: 0 }))
+      .text(
+        cx,
+        205,
+        beatEverything ? 'You beat every level! The flock is so proud.' : won ? 'The flock is safe and proud.' : 'The ducks want a rematch!',
+        textStyle(30, { color: COLORS.inkCss, strokeThickness: 0 }),
+      )
       .setOrigin(0.5)
       .setDepth(51);
 
@@ -79,13 +88,22 @@ export class ResultScene extends Phaser.Scene {
         .setDepth(60);
     }
 
-    const again: GameSceneData = { difficulty };
     const go = (scene: string, data?: object) => {
       this.cameras.main.fadeOut(250, 0, 0, 0);
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start(scene, data));
     };
-    drawBigButton(this, cx - 170, 510, '↻  Again', COLORS.green, COLORS.greenDark, () => go('GameScene', again)).setDepth(70);
-    drawBigButton(this, cx + 170, 510, '⌂  Home', COLORS.blue, COLORS.blueDark, () => go('TitleScene')).setDepth(70);
+    const again: GameSceneData = { difficulty, level };
+    if (hasNext) {
+      // Next level is the big, obvious choice.
+      const next: GameSceneData = { difficulty, level: level + 1 };
+      const small = { width: 230, height: 84 };
+      drawBigButton(this, cx - 290, 515, '↻  Again', COLORS.blue, COLORS.blueDark, () => go('GameScene', again), small).setDepth(70);
+      drawBigButton(this, cx, 510, 'Next  ▶', COLORS.green, COLORS.greenDark, () => go('GameScene', next)).setDepth(70);
+      drawBigButton(this, cx + 290, 515, '⌂  Home', COLORS.blue, COLORS.blueDark, () => go('TitleScene'), small).setDepth(70);
+    } else {
+      drawBigButton(this, cx - 170, 510, '↻  Again', COLORS.green, COLORS.greenDark, () => go('GameScene', again)).setDepth(70);
+      drawBigButton(this, cx + 170, 510, '⌂  Home', COLORS.blue, COLORS.blueDark, () => go('TitleScene')).setDepth(70);
+    }
 
     this.cameras.main.fadeIn(300, 0, 0, 0);
   }

@@ -45,7 +45,7 @@ export class TitleScene extends Phaser.Scene {
 
     // Picking a difficulty starts the game. Easy is green and comes first.
     const start = (difficulty: Difficulty) => {
-      const data: GameSceneData = { difficulty };
+      const data: GameSceneData = { difficulty, level: 0 };
       this.cameras.main.fadeOut(250, 0, 0, 0);
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('GameScene', data));
     };
