@@ -5,7 +5,7 @@ import { DIFFICULTIES } from '../data/difficulty';
 import { DUCK_ORDER } from '../data/ducks';
 import { COLORS, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
 import { drawBigButton, drawSoundButton } from '../ui/widgets';
-import type { GameSceneData } from './GameScene';
+import type { LevelSelectSceneData } from './LevelSelectScene';
 
 const POND = { center: { x: WORLD.width / 2, y: 420 }, radiusX: 330, radiusY: 95 };
 
@@ -45,9 +45,9 @@ export class TitleScene extends Phaser.Scene {
 
     // Picking a difficulty starts the game. Easy is green and comes first.
     const start = (difficulty: Difficulty) => {
-      const data: GameSceneData = { difficulty, level: 0 };
+      const data: LevelSelectSceneData = { difficulty };
       this.cameras.main.fadeOut(250, 0, 0, 0);
-      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('GameScene', data));
+      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('LevelSelectScene', data));
     };
     drawBigButton(this, cx - 170, 610, DIFFICULTIES.easy.label, COLORS.green, COLORS.greenDark, () => start('easy')).setDepth(100);
     drawBigButton(this, cx + 170, 610, DIFFICULTIES.normal.label, COLORS.orange, COLORS.orangeDark, () => start('normal')).setDepth(100);

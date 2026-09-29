@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { drawGrass, drawOutskirts, drawPath, drawPathEntrance, drawPond, scatterDecor } from '../art/terrain';
 import { BATTERY, FOUNTAIN } from '../data/dayNight';
-import type { Difficulty } from '../data/difficulty';
+import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { CHASES } from '../data/synergy';
 import { ENEMIES } from '../data/enemies';
@@ -26,6 +26,9 @@ import {
 } from '../logic/game';
 import { closestPointOnPolyline, type Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
+import { recordWin, scoreFor, starsFor } from '../logic/progress';
+import { loadProgress, saveProgress } from '../save';
+import type { ResultSceneData } from './ResultScene';
 import { BACKDROP, COLORS, DEPTH, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
 import { drawBigButton, drawCard, drawPill, drawRoundButton, drawSoundButton, popSpeechBubble } from '../ui/widgets';
 import { playSound } from '../audio/sfx';
@@ -908,11 +911,20 @@ export class GameScene extends Phaser.Scene {
         this.showBanner(`Wave ${event.waveIndex + 1} cleared!`, event.bonus);
         break;
       case 'won':
-      case 'lost':
-        this.time.delayedCall(1000, () =>
-          this.scene.start('ResultScene', { won: event.type === 'won', difficulty: this.difficulty, level: this.levelIndex }),
-        );
+      case 'lost': {
+        const result: ResultSceneData = { won: event.type === 'won', difficulty: this.difficulty, level: this.levelIndex };
+        if (result.won) {
+          // Save progress: this unlocks the next level and keeps the best stars and score.
+          result.stars = starsFor(this.state.hearts, DIFFICULTIES[this.difficulty].hearts);
+          result.score = scoreFor(this.state.hearts, this.state.peas, this.difficulty);
+          const progress = loadProgress();
+          const previousBest = progress.levels[this.difficulty][this.levelIndex]?.bestScore ?? 0;
+          result.newBest = previousBest > 0 && result.score > previousBest;
+          saveProgress(recordWin(progress, this.difficulty, this.levelIndex, result.stars, result.score));
+        }
+        this.time.delayedCall(1000, () => this.scene.start('ResultScene', result));
         break;
+      }
     }
   }
 

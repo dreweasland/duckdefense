@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
+import { LevelSelectScene } from './scenes/LevelSelectScene';
 import { ResultScene } from './scenes/ResultScene';
 import { TitleScene } from './scenes/TitleScene';
 import { RENDER_SCALE, viewSize } from './ui/theme';
@@ -24,7 +25,7 @@ const game = new Phaser.Game({
     width: initialSize.width,
     height: initialSize.height,
   },
-  scene: [BootScene, TitleScene, GameScene, ResultScene],
+  scene: [BootScene, TitleScene, LevelSelectScene, GameScene, ResultScene],
 });
 
 window.addEventListener('resize', () => {
