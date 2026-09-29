@@ -29,6 +29,24 @@ export interface DuckStats {
   holdTheLine?: {
     holdTime: number; // seconds a predator is stopped when it walks into range (once per predator)
   };
+
+  // Two upgrades, bought in order from the duck's panel. Each lists only what changes.
+  upgrades: [Upgrade, Upgrade];
+}
+
+export interface Upgrade {
+  name: string; // the duck's new name, e.g. "Seasoned Sunny"
+  cost: number; // peas
+  description: string; // what gets better, in a few words
+  changes: {
+    range?: number;
+    damage?: number;
+    attackInterval?: number;
+    splashRadius?: number;
+    wingFlap?: Partial<NonNullable<DuckStats['wingFlap']>>;
+    alarmQuack?: Partial<NonNullable<DuckStats['alarmQuack']>>;
+    holdTheLine?: Partial<NonNullable<DuckStats['holdTheLine']>>;
+  };
 }
 
 // Selling a duck gives back this share of what it cost (0.75 = 75%).
@@ -51,6 +69,10 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
     attackInterval: 0.75,
     splashRadius: 40,
     canHitFlying: true,
+    upgrades: [
+      { name: 'Seasoned Sunny', cost: 90, description: 'Hits harder, bigger splash.', changes: { damage: 16, splashRadius: 55 } },
+      { name: 'Legendary Sunny', cost: 160, description: 'Reaches farther, throws faster.', changes: { range: 175, attackInterval: 0.6 } },
+    ],
   },
 
   // Potato, the Black Swedish chaser: fast pecks, and his untucked wing
@@ -65,6 +87,15 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
     splashRadius: 0,
     canHitFlying: true,
     wingFlap: { everyNthAttack: 5, pushBack: 50 },
+    upgrades: [
+      { name: 'Speedy Potato', cost: 100, description: 'Pecks even faster.', changes: { attackInterval: 0.24 } },
+      {
+        name: 'Super Potato',
+        cost: 170,
+        description: 'Flaps every 4th peck and pushes harder.',
+        changes: { damage: 8, wingFlap: { everyNthAttack: 4, pushBack: 80 } },
+      },
+    ],
   },
 
   // Chester, the elder Magpie: a weak peck, but his Alarm Quack freezes
@@ -79,6 +110,15 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
     splashRadius: 0,
     canHitFlying: false, // but his Alarm Quack still stuns hawks
     alarmQuack: { cooldown: 6, stunTime: 1.5 },
+    upgrades: [
+      { name: 'Loud Chester', cost: 110, description: 'Freezes predators for longer.', changes: { alarmQuack: { stunTime: 2.2 } } },
+      {
+        name: 'Grand Old Chester',
+        cost: 180,
+        description: 'Quacks more often and reaches farther.',
+        changes: { range: 190, alarmQuack: { cooldown: 4 } },
+      },
+    ],
   },
 
   // Curtis, the unbothered Magpie: short reach and a light peck, but he holds
@@ -94,5 +134,9 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
     splashRadius: 0,
     canHitFlying: false,
     holdTheLine: { holdTime: 2 },
+    upgrades: [
+      { name: 'Stubborn Curtis', cost: 70, description: 'Holds predators for longer.', changes: { holdTheLine: { holdTime: 3 } } },
+      { name: 'Unmovable Curtis', cost: 140, description: 'Reaches farther and pecks harder.', changes: { range: 150, damage: 8 } },
+    ],
   },
 };

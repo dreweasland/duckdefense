@@ -1,9 +1,10 @@
 import { FOUNTAIN, NIGHT } from '../data/dayNight';
-import { DUCKS, type DuckKind } from '../data/ducks';
+import type { DuckKind } from '../data/ducks';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { CHASES, PECKING_LOOP } from '../data/synergy';
 import { distance, type Point } from './geometry';
 import { makePath, pointAt, type Path } from './path';
+import { statsAt } from './upgrades';
 
 export interface Enemy {
   id: number;
@@ -36,6 +37,8 @@ export interface Duck {
   abilityCooldown: number;
   /** Attacks made so far, for "every Nth attack" abilities. */
   attacks: number;
+  /** Upgrades bought: 0, 1, or 2. */
+  level: number;
 }
 
 export interface Fountain {
@@ -129,6 +132,7 @@ export function placeDuck(battle: Battle, kind: DuckKind, position: Point): Duck
     cooldown: 0,
     abilityCooldown: 0,
     attacks: 0,
+    level: 0,
   };
   battle.ducks.push(duck);
   return duck;
@@ -177,7 +181,7 @@ export function chasePartner(battle: Battle, duck: Duck): Duck | undefined {
 }
 
 export function attackInterval(battle: Battle, duck: Duck): number {
-  const base = DUCKS[duck.kind].attackInterval;
+  const base = statsAt(duck.kind, duck.level).attackInterval;
   return chasePartner(battle, duck) ? base / (1 + PECKING_LOOP.attackSpeedBonus) : base;
 }
 
@@ -228,7 +232,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
   for (const duck of battle.ducks) {
     duck.abilityCooldown = Math.max(0, duck.abilityCooldown - dt);
     if (duck.abilityCooldown > 0) continue;
-    const stats = DUCKS[duck.kind];
+    const stats = statsAt(duck.kind, duck.level);
 
     // Chester's Alarm Quack: freeze every predator in range, hawks included.
     if (stats.alarmQuack) {
@@ -261,7 +265,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     duck.cooldown = Math.max(0, duck.cooldown - dt);
     if (duck.cooldown > 0) continue;
 
-    const stats = DUCKS[duck.kind];
+    const stats = statsAt(duck.kind, duck.level);
     const target = pickTarget(battle, duck.position, stats.range, stats.canHitFlying);
     if (!target) continue;
 

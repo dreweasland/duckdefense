@@ -6,6 +6,7 @@ import { ENEMIES, type EnemyKind } from '../data/enemies';
 import type { Wave } from '../data/waves';
 import { createBattle, placeDuck, spawnEnemy, step, type Battle, type BattleEvent, type Duck, type Enemy } from './battle';
 import { distance, type Point } from './geometry';
+import { nextUpgrade, totalSpent } from './upgrades';
 import type { Level } from './level';
 import { makePath, type Path } from './path';
 
@@ -115,9 +116,25 @@ export function buyDuck(game: Game, kind: DuckKind, at: Point): Duck | undefined
   return placeDuck(game.battle, kind, at);
 }
 
-/** Peas you'd get back for selling this kind of duck. */
-export function sellValue(kind: DuckKind): number {
-  return Math.floor(DUCKS[kind].cost * SELL_REFUND);
+/** Peas you'd get back for selling a duck: part of everything spent on it, upgrades included. */
+export function sellValue(kind: DuckKind, level = 0): number {
+  return Math.floor(totalSpent(kind, level) * SELL_REFUND);
+}
+
+/** Whether a duck can be upgraded right now (not maxed out, and you have the peas). */
+export function canUpgrade(game: Game, duckId: number): boolean {
+  const duck = game.battle.ducks.find((d) => d.id === duckId);
+  const upgrade = duck && nextUpgrade(duck.kind, duck.level);
+  return !isOver(game) && !!upgrade && game.peas >= upgrade.cost;
+}
+
+/** Buys a duck's next upgrade. Returns false if it's maxed out or you can't afford it. */
+export function upgradeDuck(game: Game, duckId: number): boolean {
+  if (!canUpgrade(game, duckId)) return false;
+  const duck = game.battle.ducks.find((d) => d.id === duckId)!;
+  game.peas -= nextUpgrade(duck.kind, duck.level)!.cost;
+  duck.level++;
+  return true;
 }
 
 /** Sells a duck for part of its cost. Returns the peas refunded, or undefined if it can't be sold. */
@@ -126,7 +143,7 @@ export function sellDuck(game: Game, duckId: number): number | undefined {
   const duck = game.battle.ducks.find((d) => d.id === duckId);
   if (!duck) return undefined;
   game.battle.ducks = game.battle.ducks.filter((d) => d !== duck);
-  const refund = sellValue(duck.kind);
+  const refund = sellValue(duck.kind, duck.level);
   game.peas += refund;
   return refund;
 }
