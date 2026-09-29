@@ -36,6 +36,7 @@ import {
   useBlessing,
   type Game,
   type GameEvent,
+  type PreviewEntry,
 } from '../logic/game';
 import { closestPointOnPolyline, type Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
@@ -163,6 +164,8 @@ export class GameScene extends Phaser.Scene {
   private goButton!: Phaser.GameObjects.Container;
   private speedButton!: { container: Phaser.GameObjects.Container; draw: () => void };
   private callEarlyButton!: { container: Phaser.GameObjects.Container; label: Phaser.GameObjects.Text };
+  /** The open call-early card, if any, and its peas text (kept up to date as predators are chased off). */
+  private callEarlyCard?: { popup: Phaser.GameObjects.Container; bonus: Phaser.GameObjects.Text };
   private craigButton!: Phaser.GameObjects.Container;
   private craigGlow!: Phaser.GameObjects.Image;
   private peasText!: Phaser.GameObjects.Text;
@@ -214,6 +217,7 @@ export class GameScene extends Phaser.Scene {
     this.bossBar = undefined;
     this.previewKey = '';
     this.bannerQueue = [];
+    this.callEarlyCard = undefined;
     this.bannerShowing = false;
 
     this.drawWorld();
@@ -492,7 +496,14 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: this.callEarlyButton.container, scale: 1, duration: 250, ease: 'Back.Out' });
     }
     this.callEarlyButton.container.setVisible(early);
-    if (early) this.callEarlyButton.label.setText(`+${game.waves[game.waveIndex]!.bonusPeas + earlyBonus(game)}`);
+    const peas = early ? `+${game.waves[game.waveIndex]!.bonusPeas + earlyBonus(game)}` : '';
+    if (early) this.callEarlyButton.label.setText(peas);
+    // The call-early card keeps its peas up to date, and closes if the chance has passed.
+    const card = this.callEarlyCard;
+    if (card && this.popup === card.popup) {
+      if (early) card.bonus.setText(`${peas} peas`);
+      else this.closePopup();
+    }
     const blessing = canUseBlessing(game);
     this.craigButton.setVisible(!game.challenge?.noCraig);
     this.craigButton.setAlpha(blessing ? 1 : 0.35);
@@ -513,23 +524,10 @@ export class GameScene extends Phaser.Scene {
     const scale = chip / PREVIEW.chip;
     entries.forEach((entry, i) => {
       const x = PREVIEW.right - (entries.length - i) * (chip + PREVIEW.gap) + PREVIEW.gap + chip / 2;
-      const parts: Phaser.GameObjects.GameObject[] = [
-        drawPill(this, 0, 0, PREVIEW.chip, 48),
-        this.enemyIcon(entry.enemy, 0, -4, 40, 30),
-        this.add.text(PREVIEW.chip / 2 - 5, 13, `×${entry.count}`, textStyle(17, { weight: '700' })).setOrigin(1, 0.5),
-      ];
-      if (entry.isNew) {
-        const badge = this.add.container(PREVIEW.chip / 2 - 10, -26, [
-          this.add.graphics().fillStyle(COLORS.pink).fillRoundedRect(-19, -9, 38, 18, 9).lineStyle(2, COLORS.ink).strokeRoundedRect(-19, -9, 38, 18, 9),
-          this.add.text(0, 0, 'NEW', textStyle(12, { weight: '700', strokeThickness: 3 })).setOrigin(0.5),
-        ]);
-        this.tweens.add({ targets: badge, scale: 1.12, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
-        parts.push(badge);
-      }
+      const container = this.drawPreviewChip(entry, x, PREVIEW.y, scale);
       const hit = this.add.zone(0, 0, PREVIEW.chip, 52).setInteractive({ useHandCursor: true });
       hit.on('pointerdown', () => this.showEnemyInfo(entry.enemy));
-      parts.push(hit);
-      const container = this.add.container(x, PREVIEW.y, parts).setScale(scale);
+      container.add(hit);
       container.setAlpha(0);
       this.tweens.add({ targets: container, alpha: 1, duration: 250, delay: i * 70 });
       this.preview.add(container);
@@ -542,6 +540,24 @@ export class GameScene extends Phaser.Scene {
         if (!this.popup && this.state.phase === 'building' && this.previewKey === key) this.showEnemyInfo(firstNew.enemy, false);
       });
     }
+  }
+
+  /** One "coming next" chip: the predator, how many, and a NEW badge the first time it shows up. */
+  private drawPreviewChip(entry: PreviewEntry, x: number, y: number, scale = 1): Phaser.GameObjects.Container {
+    const parts: Phaser.GameObjects.GameObject[] = [
+      drawPill(this, 0, 0, PREVIEW.chip, 48),
+      this.enemyIcon(entry.enemy, 0, -4, 40, 30),
+      this.add.text(PREVIEW.chip / 2 - 5, 13, `×${entry.count}`, textStyle(17, { weight: '700' })).setOrigin(1, 0.5),
+    ];
+    if (entry.isNew) {
+      const badge = this.add.container(PREVIEW.chip / 2 - 10, -26, [
+        this.add.graphics().fillStyle(COLORS.pink).fillRoundedRect(-19, -9, 38, 18, 9).lineStyle(2, COLORS.ink).strokeRoundedRect(-19, -9, 38, 18, 9),
+        this.add.text(0, 0, 'NEW', textStyle(12, { weight: '700', strokeThickness: 3 })).setOrigin(0.5),
+      ]);
+      this.tweens.add({ targets: badge, scale: 1.12, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+      parts.push(badge);
+    }
+    return this.add.container(x, y, parts).setScale(scale);
   }
 
   /** A predator's picture, fit inside a box (hawks look down from above, so they get a square). */
@@ -1668,15 +1684,76 @@ export class GameScene extends Phaser.Scene {
     ]);
     const container = this.add.container(CALL_EARLY.x, CALL_EARLY.y, [pill, button]).setDepth(DEPTH.hud).setVisible(false);
     this.tweens.add({ targets: arrows, x: 3, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+    // First tap shows what's coming; the card's button sends it. Tapping again closes the card.
     hit.on('pointerdown', () => {
-      const earned = callNextWave(this.state);
-      if (earned === undefined) return;
-      playSound(this, 'waveStart');
-      this.flyPea({ x: CALL_EARLY.x, y: CALL_EARLY.y + 30 }, earned);
-      this.showBanner(`Wave ${this.state.waveIndex + 1} is coming early!`);
-      this.refreshHud();
+      if (this.callEarlyCard && this.popup === this.callEarlyCard.popup) {
+        playSound(this, 'tap');
+        this.closePopup();
+        return;
+      }
+      this.showCallEarlyCard();
     });
     return { container, label };
+  }
+
+  /** The next wave's predators, the peas for calling it now, and a "Send now" button. */
+  private showCallEarlyCard(): void {
+    const game = this.state;
+    if (!canCallEarly(game)) return;
+    this.cancelMove();
+    this.closePopup();
+    playSound(this, 'tap');
+    const nextIndex = game.waveIndex + 1;
+    const night = game.waves[nextIndex]!.time === 'night';
+    const W = 320;
+    const H = 250;
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+
+    // Taps anywhere outside the card close it.
+    const scrim = this.add
+      .zone(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height)
+      .setInteractive()
+      .setDepth(DEPTH.hud + 4);
+    scrim.on('pointerdown', () => this.closePopup());
+
+    const parts: Phaser.GameObjects.GameObject[] = [
+      drawCard(this.add.graphics(), W, H, { radius: 18 }),
+      this.add.zone(0, 0, W, H).setInteractive(), // taps on the card itself don't close it
+      this.add.image(-W / 2 + 34, -H / 2 + 30, night ? 'icon-moon' : 'icon-sun').setDisplaySize(30, 30),
+      this.add.text(-W / 2 + 56, -H / 2 + 30, `Wave ${nextIndex + 1} is next`, textStyle(24, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+    ];
+    const entries = wavePreview(game.waves, nextIndex);
+    const chip = Math.min(PREVIEW.chip, (W - 30 + PREVIEW.gap) / entries.length - PREVIEW.gap);
+    entries.forEach((entry, i) => {
+      const x = (i - (entries.length - 1) / 2) * (chip + PREVIEW.gap);
+      parts.push(this.drawPreviewChip(entry, x, -22, chip / PREVIEW.chip));
+    });
+    const bonus = this.add.text(-2, 32, '', textStyle(22, { ...ink, color: '#2a8c44', weight: '700' })).setOrigin(0, 0.5);
+    parts.push(this.add.image(-20, 32, 'icon-pea').setDisplaySize(24, 24), bonus);
+    parts.push(
+      drawBigButton(this, 0, 82, 'Send now!', COLORS.orange, COLORS.orangeDark, () => this.callEarly(), { width: 260, height: 54, fontSize: 26 }),
+    );
+
+    // Just below the button, kept on screen.
+    const x = Math.min(WORLD.width - W / 2 - 10, CALL_EARLY.x - 20);
+    const panel = this.add.container(x, CALL_EARLY.y + 50 + H / 2, parts).setDepth(DEPTH.hud + 5);
+    panel.setScale(0.8).setAlpha(0);
+    this.tweens.add({ targets: panel, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
+    const popup = this.add.container(0, 0, [scrim, panel]).setDepth(DEPTH.hud + 4);
+    this.popup = popup;
+    this.callEarlyCard = { popup, bonus };
+    this.refreshHud();
+  }
+
+  /** Sends the next wave now (from the call-early card). */
+  private callEarly(): void {
+    this.closePopup();
+    const earned = callNextWave(this.state);
+    if (earned === undefined) return;
+    playSound(this, 'waveStart');
+    this.flyPea({ x: CALL_EARLY.x, y: CALL_EARLY.y + 30 }, earned);
+    this.showBanner(`Wave ${this.state.waveIndex + 1} is coming early!`);
+    this.refreshHud();
   }
 
   /** Craig's Guardian Blessing: tap her once per level to shield the duck house. */
