@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { drawBrambles, drawGrass, drawMud, drawOutskirts, drawPath, drawPathEntrance, drawPond, scatterDecor } from '../art/terrain';
-import { TILES } from '../data/tiles';
+import { TILES, type NestKind } from '../data/tiles';
 import { BATTERY, FOUNTAIN } from '../data/dayNight';
 import type { Challenge } from '../data/challenges';
 import type { Difficulty } from '../data/difficulty';
@@ -12,7 +12,7 @@ import { TARGETING, TARGETING_ORDER, type Targeting } from '../data/targeting';
 import { ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, HUD_AREAS } from '../data/layout';
 import { PERKS, type PerkId } from '../data/perks';
 import { LEVELS } from '../data/levels';
-import { chasePartner, duckStats, enemyPosition, isFlying, isHidden, isRefreshed, nestAt, type Enemy } from '../logic/battle';
+import { chasePartner, duckStats, enemyPosition, inBrambles, inMud, isFlying, isHidden, isRefreshed, nestAt, type Enemy } from '../logic/battle';
 import {
   buyDuck,
   callNextWave,
@@ -45,7 +45,7 @@ import {
   type GameEvent,
   type PreviewEntry,
 } from '../logic/game';
-import { closestPointOnPolyline, type Point } from '../logic/geometry';
+import { closestPointOnPolyline, type Ellipse, type Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
 import { isFinalChoice, nameAt, nextUpgrade, statsAt, upgradeOptions } from '../logic/upgrades';
 import { challengeSettings, dailyFor } from '../logic/daily';
@@ -78,6 +78,11 @@ let speedIndex = 0;
 
 // Craig's hints already given this visit (each one only once, until the page reloads).
 const shownHints = new Set<HintId>();
+
+// Maps whose "On this map" key has been shown this visit (so it shows once per map).
+const shownMapKeys = new Set<string>();
+
+type TileKind = 'mud' | 'brambles' | NestKind;
 const HINT_SHOW_MS = 6500; // how long a hint stays up (real time, even on fast-forward)
 
 // HUD positions.
@@ -162,6 +167,8 @@ interface EnemySprite {
   dizzy: Phaser.GameObjects.Container;
   lastX: number;
   flashUntil: number;
+  /** When it next splashes in mud or gets prickled by brambles (so the effects come in little bursts). */
+  nextTileFx: number;
 }
 
 interface PickerCard {
@@ -178,6 +185,8 @@ interface Effects {
   sparkles: Phaser.GameObjects.Particles.ParticleEmitter;
   fountainSpray: Phaser.GameObjects.Particles.ParticleEmitter;
   fireflies: Phaser.GameObjects.Particles.ParticleEmitter;
+  mudSplash: Phaser.GameObjects.Particles.ParticleEmitter;
+  thorns: Phaser.GameObjects.Particles.ParticleEmitter;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -232,6 +241,9 @@ export class GameScene extends Phaser.Scene {
   private nightLights: Phaser.GameObjects.Image[] = [];
   private peckingLoop!: Phaser.GameObjects.Container;
   private shownNight = false;
+  /** When a predator in brambles can next yell "Ouch!" (so it isn't constant). */
+  private nextOuchAt = 0;
+  private nextSquelchAt = 0;
   /** Banners waiting to be shown, so two never land on top of each other. */
   private bannerQueue: { message: string; bonus: number }[] = [];
   private bannerShowing = false;
@@ -333,6 +345,13 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.time.delayedCall(350, () => this.showBanner(`Level ${this.levelIndex + 1}: ${info.name}`));
     }
+    // A map with special tiles gets a key explaining them (once per map, per visit).
+    const mapKey = this.endless ? 'endless' : String(this.levelIndex);
+    if (this.tilesOnMap().length > 0 && !shownMapKeys.has(mapKey)) {
+      shownMapKeys.add(mapKey);
+      // After the level banner (and after a Daily Challenge's twist card).
+      this.time.delayedCall(this.daily ? 9000 : 2400, () => this.showMapKey());
+    }
   }
 
   update(time: number, deltaMs: number): void {
@@ -378,6 +397,19 @@ export class GameScene extends Phaser.Scene {
     this.level.ponds.forEach((pond, i) => drawPond(this, pond, seed + 9 + i));
     this.level.mud.forEach((patch, i) => drawMud(this, patch, seed + 20 + i));
     this.level.brambles.forEach((patch, i) => drawBrambles(this, patch, seed + 30 + i));
+    // Tap a mud or bramble patch to learn what it does.
+    const tappable: [TileKind, Ellipse[]][] = [['mud', this.level.mud], ['brambles', this.level.brambles]];
+    for (const [kind, patches] of tappable) {
+      for (const p of patches) {
+        const w = p.radiusX * 2;
+        const h = p.radiusY * 2;
+        this.add
+          .zone(p.center.x, p.center.y, w, h)
+          .setInteractive({ hitArea: new Phaser.Geom.Ellipse(w / 2, h / 2, w, h), hitAreaCallback: Phaser.Geom.Ellipse.Contains })
+          .setDepth(DEPTH.path + 0.3)
+          .on('pointerdown', () => this.showTileInfo(kind, p.center));
+      }
+    }
 
     const fountain = this.state.battle.fountain;
     if (fountain) {
@@ -493,6 +525,16 @@ export class GameScene extends Phaser.Scene {
           blendMode: Phaser.BlendModes.ADD,
         })
         .setDepth(DEPTH.lights),
+      mudSplash: burst(
+        'dot',
+        { speed: { min: 30, max: 90 }, angle: { min: 200, max: 340 }, gravityY: 320, lifespan: 380, scale: { start: 0.45, end: 0 }, tint: [0x4a3322, 0x6b4a33] },
+        DEPTH.effects,
+      ),
+      thorns: burst(
+        'dot',
+        { speed: { min: 30, max: 80 }, lifespan: 320, scale: { start: 0.35, end: 0 }, tint: [0x6f8f3a, 0xf2e6c8, 0x6a2a5a] },
+        DEPTH.effects,
+      ),
     };
   }
 
@@ -812,7 +854,12 @@ export class GameScene extends Phaser.Scene {
     const under = this.add.graphics().setDepth(entityDepth(slot.y - 21));
     // The badge sits at the nest's front corner, above any duck in it, so it always shows.
     const badge = this.add.container(slot.x - 34, slot.y + 22).setDepth(entityDepth(slot.y + 30));
-    badge.add(this.add.circle(0, 0, 13, 0xffffff).setStrokeStyle(3, COLORS.ink));
+    // Tap the badge to learn what the nest does (a generous tap area for small fingers).
+    const hit = this.add.circle(0, 0, 13, 0xffffff).setStrokeStyle(3, COLORS.ink);
+    hit
+      .setInteractive({ hitArea: new Phaser.Geom.Circle(13, 13, 22), hitAreaCallback: Phaser.Geom.Circle.Contains, useHandCursor: true })
+      .on('pointerdown', () => this.showTileInfo(kind, slot));
+    badge.add(hit);
     if (kind === 'hill') {
       under.fillStyle(0x000000, 0.15).fillEllipse(slot.x, slot.y + 22, 110, 34);
       under.fillStyle(0x5f9e3c).fillEllipse(slot.x, slot.y + 14, 104, 44);
@@ -998,6 +1045,104 @@ export class GameScene extends Phaser.Scene {
     this.popupTimer = this.time.delayedCall(4000, () => {
       if (this.popup !== popup) return;
       this.tweens.add({ targets: popup, alpha: 0, duration: 250, onComplete: () => this.popup === popup && this.closePopup() });
+    });
+  }
+
+  /** The kinds of special tiles on this map, in a fixed order. */
+  private tilesOnMap(): TileKind[] {
+    const kinds: TileKind[] = [];
+    if (this.level.mud.length) kinds.push('mud');
+    if (this.level.brambles.length) kinds.push('brambles');
+    for (const nest of ['hill', 'water'] as const) if (this.level.specialNests.some((n) => n.kind === nest)) kinds.push(nest);
+    return kinds;
+  }
+
+  /** A tile's name and what it does, in words a kid can read. */
+  private tileWords(kind: TileKind): { name: string; text: string } {
+    if (kind === 'mud' || kind === 'brambles') return { name: TILES[kind].name, text: TILES[kind].description };
+    return { name: TILES.nests[kind].name, text: `A duck in this nest ${TILES.nests[kind].description}.` };
+  }
+
+  /** A little picture of a tile, for the map key and info cards. */
+  private tileIcon(kind: TileKind, x: number, y: number): Phaser.GameObjects.GameObject {
+    const g = this.add.graphics().setPosition(x, y);
+    switch (kind) {
+      case 'mud':
+        g.fillStyle(0x4a3322).fillEllipse(0, 2, 34, 18).fillStyle(0x5e4230).fillEllipse(0, 0, 26, 12);
+        g.fillStyle(0xffffff, 0.3).fillEllipse(-5, -2, 10, 3);
+        return g;
+      case 'brambles':
+        g.fillStyle(0x4f7a2e).fillCircle(0, 0, 13).lineStyle(3, COLORS.ink).strokeCircle(0, 0, 13);
+        for (const a of [0, 1.2, 2.4, 3.6, 4.8]) {
+          const cx = Math.cos(a) * 13;
+          const cy = Math.sin(a) * 13;
+          g.fillStyle(0xf2e6c8).fillTriangle(cx - 3, cy, cx + 3, cy, cx + Math.cos(a) * 7, cy + Math.sin(a) * 7);
+        }
+        g.fillStyle(0x6a2a5a).fillCircle(4, -3, 3.5);
+        return g;
+      case 'hill':
+        g.fillStyle(0x5f9e3c).fillEllipse(0, 6, 34, 14).fillStyle(0x5f9e3c).fillTriangle(-11, 6, 0, -10, 11, 6);
+        g.fillStyle(0xffffff).fillTriangle(-4, -4, 0, -10, 4, -4);
+        return g;
+      case 'water':
+        g.destroy();
+        return this.add.image(x, y, 'power-splash').setDisplaySize(28, 28);
+    }
+  }
+
+  /** What a tile does, shown when you tap it. */
+  private showTileInfo(kind: TileKind, at: Point): void {
+    this.cancelMove();
+    this.closePopup();
+    playSound(this, 'tap');
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    const { name, text } = this.tileWords(kind);
+    const card = drawCard(this.add.graphics(), 320, 130, { radius: 18 });
+    const popup = this.add
+      .container(Math.max(170, Math.min(WORLD.width - 170, at.x)), at.y + (at.y < 300 ? 120 : -120), [
+        card,
+        this.tileIcon(kind, -126, -34),
+        this.add.text(-100, -34, name, textStyle(24, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-142, -6, text, { ...textStyle(17, ink), wordWrap: { width: 284 } }).setOrigin(0, 0),
+      ])
+      .setDepth(DEPTH.hud + 5);
+    popup.setScale(0.8).setAlpha(0);
+    this.tweens.add({ targets: popup, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
+    this.popup = popup;
+    this.popupTimer = this.time.delayedCall(5000, () => {
+      if (this.popup !== popup) return;
+      this.tweens.add({ targets: popup, alpha: 0, duration: 250, onComplete: () => this.popup === popup && this.closePopup() });
+    });
+  }
+
+  /** "On this map": a key to the special tiles, shown when a level starts. Tap anywhere to close it. */
+  private showMapKey(): void {
+    if (this.popup || isOver(this.state)) return;
+    const kinds = this.tilesOnMap();
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    const W = 460;
+    const rowH = 50;
+    const H = 64 + kinds.length * rowH;
+    const parts: Phaser.GameObjects.GameObject[] = [
+      drawCard(this.add.graphics(), W, H, { radius: 20, border: COLORS.gold, borderWidth: 5 }),
+      this.add.text(0, -H / 2 + 30, 'On this map', textStyle(26, { ...ink, weight: '700' })).setOrigin(0.5),
+    ];
+    kinds.forEach((kind, i) => {
+      const y = -H / 2 + 76 + i * rowH;
+      const { name, text } = this.tileWords(kind);
+      parts.push(
+        this.tileIcon(kind, -W / 2 + 36, y),
+        this.add.text(-W / 2 + 64, y - 10, name, textStyle(18, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        this.fitWidth(this.add.text(-W / 2 + 64, y + 11, text, textStyle(14, ink)).setOrigin(0, 0.5), W - 84),
+      );
+    });
+    const popup = this.add.container(WORLD.width / 2, 250 + H / 2 - 60, parts).setDepth(DEPTH.hud + 5);
+    popup.setScale(0.8).setAlpha(0);
+    this.tweens.add({ targets: popup, scale: 1, alpha: 1, duration: 200, ease: 'Back.Out' });
+    this.popup = popup;
+    this.popupTimer = this.time.delayedCall(9000, () => {
+      if (this.popup !== popup) return;
+      this.tweens.add({ targets: popup, alpha: 0, duration: 300, onComplete: () => this.popup === popup && this.closePopup() });
     });
   }
 
@@ -1495,7 +1640,7 @@ export class GameScene extends Phaser.Scene {
     // Fade in, so a predator entering near the edge of a wide screen doesn't pop into view.
     root.setAlpha(0);
     this.tweens.add({ targets: root, alpha: 1, duration: 300 });
-    this.enemySprites.set(enemy.id, { root, art, ripple, hpBar, hpFill, dizzy, lastX: pos.x, flashUntil: 0 });
+    this.enemySprites.set(enemy.id, { root, art, ripple, hpBar, hpFill, dizzy, lastX: pos.x, flashUntil: 0, nextTileFx: 0 });
   }
 
   private syncEnemySprites(time: number): void {
@@ -1522,11 +1667,43 @@ export class GameScene extends Phaser.Scene {
       sprite.ripple?.setVisible(enemy.slowed);
       // Minks hiding in the grass are hard to see until Chester's quack flushes them out.
       if (ENEMIES[enemy.kind].sneaky) sprite.art.setAlpha(isHidden(enemy) ? HIDDEN_ALPHA : 1);
+      const muddy = this.showTileEffects(enemy, sprite, time);
       // A quick red "ouch" tint when hit (keeps the art readable even when hit constantly).
       if (time < sprite.flashUntil) sprite.art.setTint(0xff9a9a);
       else if (enemy.stopTime > 0 && enemy.weakness > 0) sprite.art.setTint(0xd2b4ff); // Wise Old Chester's weakness
+      else if (muddy) sprite.art.setTint(0xc4a07c); // splattered with mud
       else sprite.art.clearTint();
     }
+  }
+
+  /**
+   * Mud and brambles show what they're doing: predators in mud turn muddy, splash, waddle
+   * in slow motion, and sometimes say "Squelch!"; predators in brambles flash, shed thorny
+   * bits, and sometimes yell "Ouch!". Returns whether it's in mud.
+   */
+  private showTileEffects(enemy: Enemy, sprite: EnemySprite, time: number): boolean {
+    const muddy = inMud(this.state.battle, enemy);
+    const prickly = inBrambles(this.state.battle, enemy);
+    for (const tween of this.tweens.getTweensOf(sprite.art)) tween.timeScale = muddy ? 0.4 : 1;
+    if (!(muddy || prickly) || time < sprite.nextTileFx || this.state.phase !== 'wave') return muddy;
+    sprite.nextTileFx = time + (muddy ? 320 : 450);
+    const { x, y } = sprite.root;
+    if (muddy) {
+      this.fx.mudSplash.explode(5, x, y);
+      if (time > this.nextSquelchAt) {
+        this.nextSquelchAt = time + 3500;
+        popSpeechBubble(this, x, y - 60, 'Squelch!', DEPTH.floatText);
+      }
+    }
+    if (prickly) {
+      sprite.flashUntil = time + 100;
+      this.fx.thorns.explode(3, x, y - 20);
+      if (time > this.nextOuchAt) {
+        this.nextOuchAt = time + 3500;
+        popSpeechBubble(this, x, y - 60, 'Ouch!', DEPTH.floatText);
+      }
+    }
+    return muddy;
   }
 
   private removeEnemySprite(id: number, how: 'defeated' | 'house' | 'shooed'): void {

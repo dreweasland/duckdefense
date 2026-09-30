@@ -264,7 +264,7 @@ export function nestAt(battle: Battle, at: Point): NestKind | undefined {
 }
 
 /** Whether a ground predator is standing in mud (flyers skip it). */
-function inMud(battle: Battle, enemy: Enemy): boolean {
+export function inMud(battle: Battle, enemy: Enemy): boolean {
   if (isFlying(enemy)) return false;
   const at = enemyPosition(enemy);
   return battle.mud.some((patch) => inEllipse(at, patch));
