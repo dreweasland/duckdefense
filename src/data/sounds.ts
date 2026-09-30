@@ -21,6 +21,7 @@ export type SoundKey =
   | 'waveStart'
   | 'waveCleared'
   | 'craig'
+  | 'hint'
   | 'bossArrives'
   | 'whistle'
   | 'bossDefeated'
@@ -52,6 +53,7 @@ export const SOUNDS: Record<SoundKey, SoundInfo> = {
   waveStart: { when: 'The play button starts a wave', volume: 0.5 },
   waveCleared: { when: 'A wave is cleared', volume: 0.6 },
   craig: { when: "Craig's Guardian Blessing", volume: 0.7 },
+  hint: { when: 'Craig pops up with a tip (a friendly "psst!" or a soft quack)', volume: 0.6 },
   bossArrives: { when: 'The Night Bandit shows up', volume: 0.8 },
   whistle: { when: 'The Night Bandit whistles for minions', volume: 0.6 },
   bossDefeated: { when: 'The Night Bandit runs away', volume: 0.8 },

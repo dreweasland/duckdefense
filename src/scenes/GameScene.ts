@@ -45,6 +45,8 @@ import { challengeSettings, dailyFor } from '../logic/daily';
 import { dailyRecord, recordDailyWin, recordWin, scoreFor, starsFor } from '../logic/progress';
 import { loadProgress, saveProgress } from '../save';
 import type { HatKind } from '../data/hats';
+import { HINT_GAP, HINTS, type HintId } from '../data/hints';
+import { pickHint, type HintMoment } from '../logic/hints';
 import { hatFor, newlyUnlocked, totalStars } from '../logic/hats';
 import { duckWithHat, hatImage, placeHat } from '../ui/hats';
 import type { ResultSceneData } from './ResultScene';
@@ -64,6 +66,10 @@ const SIM_STEP = 1 / 60; // the rules always run in slices this small, so fast-f
 
 // The chosen fast-forward speed, remembered between waves and levels (until the page reloads).
 let speedIndex = 0;
+
+// Craig's hints already given this visit (each one only once, until the page reloads).
+const shownHints = new Set<HintId>();
+const HINT_SHOW_MS = 6500; // how long a hint stays up (real time, even on fast-forward)
 
 // HUD positions.
 const PEA_ICON = { x: 596, y: 38 };
@@ -173,6 +179,9 @@ export class GameScene extends Phaser.Scene {
   private callEarlyButton!: { container: Phaser.GameObjects.Container; label: Phaser.GameObjects.Text };
   /** The open call-early card, if any, and its peas text (kept up to date as predators are chased off). */
   /** The open duck panel's report numbers, refreshed as the battle goes on. */
+  /** Craig's hint bubble, and when (real time) she last gave one. */
+  private hintBubble?: Phaser.GameObjects.Container;
+  private lastHintAt = -Infinity;
   private panelReport?: { row: Phaser.GameObjects.Container; refresh: () => void };
   private callEarlyCard?: { popup: Phaser.GameObjects.Container; bonus: Phaser.GameObjects.Text };
   private craigButton!: Phaser.GameObjects.Container;
@@ -234,6 +243,8 @@ export class GameScene extends Phaser.Scene {
     this.bannerQueue = [];
     this.callEarlyCard = undefined;
     this.panelReport = undefined;
+    this.hintBubble = undefined;
+    this.lastHintAt = -Infinity;
     this.bannerShowing = false;
 
     this.drawWorld();
@@ -252,6 +263,10 @@ export class GameScene extends Phaser.Scene {
     this.craigButton = this.drawCraigButton();
     drawSoundButton(this, 1245, 685, DEPTH.hud);
     this.refreshHud();
+    // A new player who hasn't placed a duck gets a nudge from Craig.
+    this.time.delayedCall(7000, () => {
+      if (this.state.phase === 'building' && this.state.waveIndex === 0) this.maybeHint({ type: 'noDucksYet' });
+    });
     if (this.daily) {
       const { challenge } = this.daily;
       this.time.delayedCall(350, () => this.showBanner(`Daily Challenge: ${challenge.name}`));
@@ -1374,6 +1389,7 @@ export class GameScene extends Phaser.Scene {
         playSound(this, 'heartLost');
         this.removeEnemySprite(event.enemy.id, 'house');
         this.showHouseRaid();
+        this.maybeHint({ type: 'heartLost', enemy: event.enemy.kind });
         if (ENEMIES[event.enemy.kind].boss) this.showBossGone(this.house, 'The Night Bandit raided the snacks!');
         break;
       case 'shooed':
@@ -1803,6 +1819,54 @@ export class GameScene extends Phaser.Scene {
     this.flyPea({ x: CALL_EARLY.x, y: CALL_EARLY.y + 30 }, earned);
     this.showBanner(`Wave ${this.state.waveIndex + 1} is coming early!`);
     this.refreshHud();
+  }
+
+  /** Craig gives a tip if one fits what just happened (not too often, and each one only once). */
+  private maybeHint(moment: HintMoment): void {
+    if (isOver(this.state) || this.state.challenge?.noCraig) return; // she's napping in No Take-Backs
+    if (performance.now() - this.lastHintAt < HINT_GAP * 1000) return;
+    const emptyNests = this.nests.filter((n) => n.duckId === undefined).length;
+    const hint = pickHint(this.state, this.difficulty, moment, emptyNests, shownHints);
+    if (!hint) return;
+    shownHints.add(hint);
+    this.lastHintAt = performance.now();
+    this.showHint(HINTS[hint]);
+  }
+
+  /** A speech bubble from Craig, beside her button. Tap it to close it. */
+  private showHint(message: string): void {
+    this.hintBubble?.destroy();
+    const W = 340;
+    const text = this.add
+      .text(-W / 2 + 18, 0, message, { ...textStyle(19, { color: COLORS.inkCss, strokeThickness: 0 }), wordWrap: { width: W - 36 } })
+      .setOrigin(0, 0.5);
+    const H = Math.max(64, text.height + 26);
+    const bubble = this.add
+      .graphics()
+      .fillStyle(0x000000, 0.2)
+      .fillRoundedRect(-W / 2, -H / 2 + 4, W, H, 18)
+      .fillStyle(0xffffff)
+      .fillRoundedRect(-W / 2, -H / 2, W, H, 18)
+      .fillTriangle(-W / 2 + 2, -8, -W / 2 + 2, 12, -W / 2 - 16, 8)
+      .lineStyle(4, COLORS.gold)
+      .strokeRoundedRect(-W / 2, -H / 2, W, H, 18);
+    const hit = this.add.zone(0, 0, W, H).setInteractive({ useHandCursor: true });
+    const container = this.add
+      .container(CRAIG_BUTTON.x + 70 + W / 2, CRAIG_BUTTON.y - 10, [bubble, text, hit])
+      .setDepth(DEPTH.hud + 3)
+      .setScale(0);
+    this.hintBubble = container;
+    const close = () => {
+      if (!container.active || this.hintBubble !== container) return;
+      this.hintBubble = undefined;
+      this.tweens.add({ targets: container, alpha: 0, scale: 0.8, duration: 200, onComplete: () => container.destroy() });
+    };
+    hit.on('pointerdown', close);
+    this.tweens.add({ targets: container, scale: 1, duration: 260, ease: 'Back.Out' });
+    // Craig perks up to say it.
+    this.tweens.add({ targets: this.craigButton, y: CRAIG_BUTTON.y - 12, duration: 140, yoyo: true, repeat: 1, ease: 'Quad.Out' });
+    playSound(this, 'hint');
+    window.setTimeout(close, HINT_SHOW_MS);
   }
 
   /** Craig's Guardian Blessing: tap her once per level to shield the duck house. */

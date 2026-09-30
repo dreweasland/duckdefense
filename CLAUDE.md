@@ -89,6 +89,10 @@ everywhere: dialogue, tooltips, code comments.
 - **Hats:** Stars from winning levels unlock hats (`src/data/hats.ts`, drawn in
   `src/art/sprites.ts`). Pick one for each duck in the Wardrobe (hat button on the title
   screen); the ducks wear them everywhere. A great job for the art director.
+- **Craig's hints:** When a predator gets into the duck house (or nobody has placed a duck
+  yet), Craig pops up beside her button with a tip that fits: call her when hearts are low,
+  the duck that beats the predator that got in, then general tips. Each hint shows once per
+  visit. Words in `src/data/hints.ts`, rules in `src/logic/hints.ts`.
 - **Daily Challenge:** One level and one twist per UTC day, the same for everyone, with its
   own leaderboard. Twists live in `src/data/challenges.ts`; the rules shared with the server
   are in `src/logic/daily.ts`.

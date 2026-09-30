@@ -191,6 +191,7 @@ const PLACEHOLDERS: Record<SoundKey, (ctx: AudioContext, volume: number) => void
   noPeas: (ctx, v) => tone(ctx, { type: 'square', from: 150, to: 130, duration: 0.15, volume: 0.08 * v }),
   waveStart: (ctx, v) => notes(ctx, 'square', [440, 660], 0.08, 0.08 * v),
   waveCleared: (ctx, v) => notes(ctx, 'triangle', [523, 659, 784, 1047], 0.09, 0.2 * v, 0.3),
+  hint: (ctx, v) => notes(ctx, 'sine', [784, 1047], 0.09, 0.12 * v),
   craig: (ctx, v) => {
     [523, 659, 784, 1047].forEach((f, i) => tone(ctx, { type: 'sine', from: f, start: i * 0.05, duration: 0.8, volume: 0.08 * v }));
   },
