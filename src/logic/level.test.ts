@@ -4,7 +4,7 @@ import { DUCKS } from '../data/ducks';
 import { ENDLESS } from '../data/endless';
 import { ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, HUD_AREAS, type Area } from '../data/layout';
 import { LEVELS } from '../data/levels';
-import { distance, type Point } from './geometry';
+import { distance, inEllipse, type Point } from './geometry';
 import { parseLevel } from './level';
 import { makePath, pointAt } from './path';
 
@@ -98,6 +98,13 @@ for (const [index, info] of LEVELS.entries()) {
       }
     });
 
+    it('puts every mud and bramble patch on the path, and keeps nests out of them', () => {
+      for (const patch of [...level.mud, ...level.brambles]) {
+        expect(samples.some((p) => inEllipse(p, patch)), `patch at ${JSON.stringify(patch.center)}`).toBe(true);
+        for (const slot of level.slots) expect(inEllipse(slot, patch), JSON.stringify(slot)).toBe(false);
+      }
+    });
+
     it('keeps nests and the duck house out from under the buttons and counters', () => {
       for (const area of HUD_AREAS) {
         for (const slot of level.slots) expect(circleHitsArea(slot, NEST_RADIUS, area), JSON.stringify(slot)).toBe(false);
@@ -117,6 +124,28 @@ describe('the Endless Pond map', () => {
 });
 
 describe('parseLevel', () => {
+  const map = (slot: object) =>
+    JSON.stringify({
+      width: 32,
+      height: 18,
+      tilewidth: 40,
+      tileheight: 40,
+      layers: [
+        { name: 'path', type: 'objectgroup', objects: [{ x: 0, y: 0, width: 0, height: 0, polyline: [{ x: 0, y: 0 }, { x: 100, y: 0 }] }] },
+        { name: 'slots', type: 'objectgroup', objects: [{ x: 50, y: 80, width: 0, height: 0, point: true, ...slot }] },
+      ],
+    });
+
+  it('reads special nests from a nest point\'s class (or type, in older Tiled)', () => {
+    expect(parseLevel(map({ class: 'hill' })).specialNests).toEqual([{ at: { x: 50, y: 80 }, kind: 'hill' }]);
+    expect(parseLevel(map({ type: 'water' })).specialNests).toEqual([{ at: { x: 50, y: 80 }, kind: 'water' }]);
+    expect(parseLevel(map({})).specialNests).toEqual([]);
+  });
+
+  it('explains which nest classes exist when one is misspelled', () => {
+    expect(() => parseLevel(map({ class: 'hil' }))).toThrow('Nest classes can be: hill, water');
+  });
+
   it('explains what is missing when a layer is absent', () => {
     const map = JSON.stringify({ width: 1, height: 1, tilewidth: 40, tileheight: 40, layers: [] });
     expect(() => parseLevel(map)).toThrow('object layer named "path"');

@@ -155,7 +155,7 @@
      "name": "",
      "point": true,
      "rotation": 0,
-     "type": "",
+     "type": "hill",
      "visible": true,
      "width": 0,
      "x": 370,
@@ -287,10 +287,46 @@
    "visible": true,
    "x": 0,
    "y": 0
+  },
+  {
+   "draworder": "topdown",
+   "id": 5,
+   "name": "brambles",
+   "objects": [
+    {
+     "ellipse": true,
+     "height": 160,
+     "id": 18,
+     "name": "",
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 70,
+     "x": 225.0,
+     "y": 340.0
+    },
+    {
+     "ellipse": true,
+     "height": 64,
+     "id": 19,
+     "name": "",
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 160,
+     "x": 580.0,
+     "y": 148.0
+    }
+   ],
+   "opacity": 1,
+   "type": "objectgroup",
+   "visible": true,
+   "x": 0,
+   "y": 0
   }
  ],
- "nextlayerid": 5,
- "nextobjectid": 18,
+ "nextlayerid": 6,
+ "nextobjectid": 20,
  "orientation": "orthogonal",
  "renderorder": "right-down",
  "tiledversion": "1.11.2",

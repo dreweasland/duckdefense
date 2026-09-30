@@ -250,3 +250,70 @@ export function drawPathEntrance(scene: Phaser.Scene, points: Point[], seed: num
       .setDepth(DEPTH.effects - 2); // above the predators walking underneath
   }
 }
+
+/** A muddy puddle on the path: dark, wet, and glossy. */
+export function drawMud(scene: Phaser.Scene, patch: Ellipse, seed: number): void {
+  const { center: c, radiusX: rx, radiusY: ry } = patch;
+  const rng = seededRandom(seed);
+  const g = scene.add.graphics().setDepth(DEPTH.path + 0.1);
+  // A lumpy outline: a few overlapping blobs.
+  const blobs = Array.from({ length: 5 }, () => ({
+    x: c.x + (rng() - 0.5) * rx * 0.9,
+    y: c.y + (rng() - 0.5) * ry * 0.6,
+    w: rx * (1.1 + rng() * 0.5),
+    h: ry * (1.1 + rng() * 0.5),
+  }));
+  g.fillStyle(0x4a3322, 0.9);
+  blobs.forEach((b) => g.fillEllipse(b.x, b.y, b.w, b.h));
+  g.fillStyle(0x5e4230);
+  blobs.forEach((b) => g.fillEllipse(b.x, b.y - 2, b.w * 0.8, b.h * 0.7));
+  // Wet shine and a few splats.
+  g.fillStyle(0xffffff, 0.22);
+  g.fillEllipse(c.x - rx * 0.3, c.y - ry * 0.25, rx * 0.5, ry * 0.18);
+  g.fillEllipse(c.x + rx * 0.25, c.y + ry * 0.1, rx * 0.25, ry * 0.12);
+  // A few splats around the edge (kept inside the patch, so they stay on the path).
+  g.fillStyle(0x4a3322, 0.85);
+  for (let i = 0; i < 6; i++) {
+    const a = rng() * Math.PI * 2;
+    const r = 0.75 + rng() * 0.2;
+    g.fillCircle(c.x + Math.cos(a) * rx * r, c.y + Math.sin(a) * ry * r, 2.5 + rng() * 3);
+  }
+}
+
+/** A tangle of thorny brambles across the path. */
+export function drawBrambles(scene: Phaser.Scene, patch: Ellipse, seed: number): void {
+  const { center: c, radiusX: rx, radiusY: ry } = patch;
+  const rng = seededRandom(seed);
+  const g = scene.add.graphics().setDepth(DEPTH.path + 0.2);
+  g.fillStyle(0x2f4a22, 0.5).fillEllipse(c.x, c.y, rx * 2, ry * 2);
+  // Leafy clumps, then curly vines on top, each with little thorns.
+  for (let i = 0; i < 8; i++) {
+    const x = c.x + (rng() - 0.5) * rx * 1.4;
+    const y = c.y + (rng() - 0.5) * ry * 1.4;
+    g.fillStyle(0x2b2233).fillCircle(x, y, 10);
+    g.fillStyle(rng() < 0.5 ? 0x4f7a2e : 0x5f8f38).fillCircle(x, y - 1, 8);
+  }
+  const vines = Math.round(10 + (rx * ry) / 600);
+  for (let v = 0; v < vines; v++) {
+    const start = { x: c.x + (rng() - 0.5) * rx * 1.6, y: c.y + (rng() - 0.5) * ry * 1.6 };
+    const points: Phaser.Math.Vector2[] = [];
+    let angle = rng() * Math.PI * 2;
+    for (let i = 0; i < 7; i++) {
+      points.push(new Phaser.Math.Vector2(start.x + Math.cos(angle) * i * 9, start.y + Math.sin(angle) * i * 9 + Math.sin(i * 1.3) * 6));
+      angle += (rng() - 0.5) * 0.9;
+    }
+    const inside = points.filter((p) => ((p.x - c.x) / rx) ** 2 + ((p.y - c.y) / ry) ** 2 <= 1.1);
+    if (inside.length < 3) continue;
+    g.lineStyle(6, 0x2b2233).strokePoints(inside);
+    g.lineStyle(3.5, 0x6f8f3a).strokePoints(inside);
+    for (const p of inside.slice(1)) {
+      g.fillStyle(0xf2e6c8).fillTriangle(p.x, p.y - 2, p.x + 3, p.y - 9, p.x + 5, p.y - 1);
+    }
+  }
+  // A few berries.
+  for (let i = 0; i < 5; i++) {
+    const a = rng() * Math.PI * 2;
+    const r = rng() * 0.8;
+    g.fillStyle(0x6a2a5a).fillCircle(c.x + Math.cos(a) * rx * r, c.y + Math.sin(a) * ry * r, 3.5);
+  }
+}

@@ -7,7 +7,8 @@ import { ENEMIES, type EnemyKind } from '../data/enemies';
 import type { Targeting } from '../data/targeting';
 import { EARLY_CALL, type Wave } from '../data/waves';
 import { createBattle, placeDuck, spawnEnemy, step, type Battle, type BattleEvent, type Duck, type Enemy } from './battle';
-import { distance, type Point } from './geometry';
+import type { NestKind } from '../data/tiles';
+import { distance, type Ellipse, type Point } from './geometry';
 import { ENDLESS } from '../data/endless';
 import { PERKS, type PerkId } from '../data/perks';
 import { offerPerks, perkMods, type PerksTaken } from './perks';
@@ -68,12 +69,24 @@ export interface GameMap {
   fountainAt?: Point;
   /** Where predators from the pond climb out (leave out for no pond). */
   pondAt?: Point;
+  /** Special map tiles (see src/data/tiles.ts). */
+  mud?: Ellipse[];
+  brambles?: Ellipse[];
+  specialNests?: { at: Point; kind: NestKind }[];
 }
 
 /** The fountain sits in the middle of the level's first pond, and turtles climb out of it. */
 export function mapFromLevel(level: Level): GameMap {
   const pond = level.ponds[0]?.center;
-  return { path: makePath(level.path), sky: level.sky, fountainAt: pond, pondAt: pond };
+  return {
+    path: makePath(level.path),
+    sky: level.sky,
+    fountainAt: pond,
+    pondAt: pond,
+    mud: level.mud,
+    brambles: level.brambles,
+    specialNests: level.specialNests,
+  };
 }
 
 export type GameEvent =
@@ -95,7 +108,15 @@ export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Dif
   }
   const settings = challengeSettings(difficulty, challenge);
   return {
-    battle: createBattle(map.path, { sky: map.sky, fountainAt: map.fountainAt, pondAt: map.pondAt, enemySpeed: settings.enemySpeed }),
+    battle: createBattle(map.path, {
+      sky: map.sky,
+      fountainAt: map.fountainAt,
+      pondAt: map.pondAt,
+      enemySpeed: settings.enemySpeed,
+      mud: map.mud,
+      brambles: map.brambles,
+      specialNests: map.specialNests,
+    }),
     waves: challengeWaves(waves, challenge),
     peas: settings.startingPeas,
     hearts: settings.hearts,

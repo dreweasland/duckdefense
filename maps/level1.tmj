@@ -111,7 +111,7 @@
      "name": "",
      "point": true,
      "rotation": 0,
-     "type": "",
+     "type": "water",
      "visible": true,
      "width": 0,
      "x": 920,
@@ -159,7 +159,7 @@
      "name": "",
      "point": true,
      "rotation": 0,
-     "type": "",
+     "type": "hill",
      "visible": true,
      "width": 0,
      "x": 720,
@@ -255,10 +255,34 @@
    "visible": true,
    "x": 0,
    "y": 0
+  },
+  {
+   "draworder": "topdown",
+   "id": 5,
+   "name": "mud",
+   "objects": [
+    {
+     "ellipse": true,
+     "height": 70,
+     "id": 16,
+     "name": "",
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 160,
+     "x": 740.0,
+     "y": 545.0
+    }
+   ],
+   "opacity": 1,
+   "type": "objectgroup",
+   "visible": true,
+   "x": 0,
+   "y": 0
   }
  ],
- "nextlayerid": 5,
- "nextobjectid": 16,
+ "nextlayerid": 6,
+ "nextobjectid": 17,
  "orientation": "orthogonal",
  "renderorder": "right-down",
  "tiledversion": "1.11.2",

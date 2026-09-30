@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { drawGrass, drawOutskirts, drawPath, drawPathEntrance, drawPond, scatterDecor } from '../art/terrain';
+import { drawBrambles, drawGrass, drawMud, drawOutskirts, drawPath, drawPathEntrance, drawPond, scatterDecor } from '../art/terrain';
+import { TILES } from '../data/tiles';
 import { BATTERY, FOUNTAIN } from '../data/dayNight';
 import type { Challenge } from '../data/challenges';
 import type { Difficulty } from '../data/difficulty';
@@ -11,7 +12,7 @@ import { TARGETING, TARGETING_ORDER, type Targeting } from '../data/targeting';
 import { ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, HUD_AREAS } from '../data/layout';
 import { PERKS, type PerkId } from '../data/perks';
 import { LEVELS } from '../data/levels';
-import { chasePartner, duckStats, enemyPosition, isFlying, isHidden, isRefreshed, type Enemy } from '../logic/battle';
+import { chasePartner, duckStats, enemyPosition, isFlying, isHidden, isRefreshed, nestAt, type Enemy } from '../logic/battle';
 import {
   buyDuck,
   callNextWave,
@@ -375,6 +376,8 @@ export class GameScene extends Phaser.Scene {
     drawPath(this, this.level.path, seed + 1);
     drawPathEntrance(this, this.level.path, seed + 4);
     this.level.ponds.forEach((pond, i) => drawPond(this, pond, seed + 9 + i));
+    this.level.mud.forEach((patch, i) => drawMud(this, patch, seed + 20 + i));
+    this.level.brambles.forEach((patch, i) => drawBrambles(this, patch, seed + 30 + i));
 
     const fountain = this.state.battle.fountain;
     if (fountain) {
@@ -784,6 +787,7 @@ export class GameScene extends Phaser.Scene {
   // --- Ducks -------------------------------------------------------------
 
   private drawNest(slot: Point): void {
+    this.drawSpecialNest(slot);
     const image = this.add.image(slot.x, slot.y + 10, 'nest').setDisplaySize(NEST_SIZE, NEST_SIZE * 0.8);
     image.setDepth(entityDepth(slot.y - 20));
     const nest: Nest = { slot, image };
@@ -799,6 +803,29 @@ export class GameScene extends Phaser.Scene {
         useHandCursor: true,
       })
       .on('pointerdown', () => this.onNestTap(nest));
+  }
+
+  /** Hill nests sit on a grassy mound; waterside nests have a lily pad and ripples. Both get a badge. */
+  private drawSpecialNest(slot: Point): void {
+    const kind = nestAt(this.state.battle, slot);
+    if (!kind) return;
+    const under = this.add.graphics().setDepth(entityDepth(slot.y - 21));
+    // The badge sits at the nest's front corner, above any duck in it, so it always shows.
+    const badge = this.add.container(slot.x - 34, slot.y + 22).setDepth(entityDepth(slot.y + 30));
+    badge.add(this.add.circle(0, 0, 13, 0xffffff).setStrokeStyle(3, COLORS.ink));
+    if (kind === 'hill') {
+      under.fillStyle(0x000000, 0.15).fillEllipse(slot.x, slot.y + 22, 110, 34);
+      under.fillStyle(0x5f9e3c).fillEllipse(slot.x, slot.y + 14, 104, 44);
+      under.fillStyle(0x7cbf52).fillEllipse(slot.x, slot.y + 8, 90, 34);
+      // Badge: a little mountain.
+      badge.add(this.add.graphics().fillStyle(0x5f9e3c).fillTriangle(-8, 5, 0, -7, 8, 5).fillStyle(0xffffff).fillTriangle(-3, -2, 0, -7, 3, -2));
+    } else {
+      under.fillStyle(0x4aa3df, 0.55).fillEllipse(slot.x, slot.y + 16, 100, 38);
+      under.lineStyle(3, 0x9fd8ff, 0.8).strokeEllipse(slot.x, slot.y + 16, 100, 38);
+      under.lineStyle(2, 0x9fd8ff, 0.5).strokeEllipse(slot.x, slot.y + 16, 124, 48);
+      this.add.image(slot.x - 40, slot.y + 20, 'lily').setDisplaySize(26, 26).setDepth(entityDepth(slot.y - 20.5));
+      badge.add(this.add.image(0, 0, 'power-splash').setDisplaySize(18, 18));
+    }
   }
 
   private setNestEmpty(nest: Nest): void {
@@ -838,6 +865,7 @@ export class GameScene extends Phaser.Scene {
     playSound(this, 'place');
     this.setNestTaken(nest, duck.id);
     this.drawPlacedDuck(duck.id, duck.kind, nest.slot);
+    this.announceNest(nest.slot);
     this.drawPeckingLoop();
     this.refreshHud();
   }
@@ -879,6 +907,12 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: root, scale: 1, duration: 280, ease: 'Back.Out' });
     this.tweens.add({ targets: art, y: art.y - 3, duration: 900 + Math.random() * 300, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
     this.fx.puff.explode(6, at.x, at.y);
+  }
+
+  /** A duck landing on a special nest says what it's good for. */
+  private announceNest(at: Point): void {
+    const kind = nestAt(this.state.battle, at);
+    if (kind) this.floatText({ x: at.x, y: at.y - 90 }, `${TILES.nests[kind].name}: ${TILES.nests[kind].description}!`, '#c8f59a');
   }
 
   /** Ducks face the nearest bit of path. */
@@ -1384,6 +1418,10 @@ export class GameScene extends Phaser.Scene {
       },
     });
     range.setPosition(target.x, target.y);
+    // A hill nest changes how far it reaches.
+    const moved = this.state.battle.ducks.find((d) => d.id === duckId);
+    if (moved) range.setRadius(duckStats(this.state.battle, moved).range);
+    this.announceNest(target);
     this.drawPeckingLoop();
   }
 

@@ -4,7 +4,8 @@ import { FREEZE_RECOVERY, WING_FLAP_RECOVERY, type DuckKind, type DuckStats } fr
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { DEFAULT_TARGETING, type Targeting } from '../data/targeting';
 import { CHASES, PECKING_LOOP } from '../data/synergy';
-import { distance, type Point } from './geometry';
+import { TILES, type NestKind } from '../data/tiles';
+import { distance, inEllipse, type Ellipse, type Point } from './geometry';
 import { joinPath, makePath, pointAt, type Path } from './path';
 import { NO_MODS, type Mods } from './perks';
 import { statsAt } from './upgrades';
@@ -108,6 +109,10 @@ export interface Battle {
   report: Partial<Record<DuckKind, KindReport>>;
   /** Multipliers from Endless Pond perks (all 1 otherwise). */
   mods: Mods;
+  /** Special map tiles: mud and bramble patches on the path, and special nests. */
+  mud: Ellipse[];
+  brambles: Ellipse[];
+  specialNests: { at: Point; kind: NestKind }[];
 }
 
 /** Things that happened during a step, so the scene can animate them. */
@@ -122,6 +127,9 @@ export type BattleEvent =
 
 export interface BattleOptions {
   sky?: Point[];
+  mud?: Ellipse[];
+  brambles?: Ellipse[];
+  specialNests?: { at: Point; kind: NestKind }[];
   pondAt?: Point;
   fountainAt?: Point;
   enemySpeed?: number;
@@ -142,6 +150,9 @@ export function createBattle(path: Path, options: BattleOptions = {}): Battle {
     enemyHealth: 1,
     report: {},
     mods: { ...NO_MODS },
+    mud: options.mud ?? [],
+    brambles: options.brambles ?? [],
+    specialNests: options.specialNests ?? [],
   };
 }
 
@@ -235,14 +246,35 @@ function enemiesInRange(battle: Battle, from: Point, range: number): Enemy[] {
 export function duckStats(battle: Battle, duck: Duck): DuckStats {
   const base = statsAt(duck.kind, duck.level, duck.path);
   const m = battle.mods;
+  const nest = nestAt(battle, duck.position);
+  const nestBonus = nest ? TILES.nests[nest] : { range: 0, damage: 0 };
   return {
     ...base,
-    range: base.range * m.range,
-    damage: base.damage * m.damage,
+    range: base.range * m.range * (1 + nestBonus.range),
+    damage: base.damage * m.damage * (1 + nestBonus.damage),
     attackInterval: base.attackInterval / m.attackSpeed,
     alarmQuack: base.alarmQuack && { ...base.alarmQuack, stunTime: base.alarmQuack.stunTime * m.stun },
     slowZone: base.slowZone && { slow: base.slowZone.slow * m.slow },
   };
+}
+
+/** The kind of special nest at a spot (a hill or waterside nest), if there is one. */
+export function nestAt(battle: Battle, at: Point): NestKind | undefined {
+  return battle.specialNests.find((n) => distance(n.at, at) < 1)?.kind;
+}
+
+/** Whether a ground predator is standing in mud (flyers skip it). */
+function inMud(battle: Battle, enemy: Enemy): boolean {
+  if (isFlying(enemy)) return false;
+  const at = enemyPosition(enemy);
+  return battle.mud.some((patch) => inEllipse(at, patch));
+}
+
+/** Whether a ground predator is in brambles (flyers skip them). */
+export function inBrambles(battle: Battle, enemy: Enemy): boolean {
+  if (isFlying(enemy)) return false;
+  const at = enemyPosition(enemy);
+  return battle.brambles.some((patch) => inEllipse(at, patch));
 }
 
 /** Whether a sneaky predator is hiding right now (an Alarm Quack flushes it out for a while). */
@@ -404,8 +436,11 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     enemy.pushRecovery = Math.max(0, enemy.pushRecovery - dt);
     enemy.freezeRecovery = Math.max(0, enemy.freezeRecovery - dt);
     enemy.revealedTime = Math.max(0, enemy.revealedTime - dt);
-    const slow = slowFor(battle, enemy);
-    enemy.slowed = slow < 1;
+    const curtisSlow = slowFor(battle, enemy);
+    enemy.slowed = curtisSlow < 1; // (the dusty ring is for Curtis; mud shows for itself)
+    const slow = curtisSlow * (inMud(battle, enemy) ? TILES.mud.speed : 1);
+    // Brambles prickle ground predators the whole time they're in them.
+    if (inBrambles(battle, enemy)) enemy.hp -= TILES.brambles.damagePerSecond * dt;
     if (enemy.stopTime > 0) {
       enemy.stopTime = Math.max(0, enemy.stopTime - dt);
       if (enemy.stopTime === 0) enemy.weakness = 0; // only weakened while frozen

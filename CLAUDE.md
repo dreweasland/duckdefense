@@ -78,6 +78,10 @@ everywhere: dialogue, tooltips, code comments.
 - **Day/night cycle:** Night waves are harder. The **solar battery meter** powers the
   pond fountain, whose refreshing spray makes nearby ducks hit harder. It charges during
   day waves and drains at night, just like the real Victron setup.
+- **Special map tiles:** Level designers can add `mud` (predators slow to half speed) and
+  `brambles` (predators take damage) patches over the path, and mark nests as `hill`
+  (+20% reach) or `water` (+15% damage) with their Tiled class. See `maps/README.md`;
+  the numbers are in `src/data/tiles.ts`.
 - **Aiming:** Tap a duck to pick who it goes after: First, Strong, Last, or Near
   (`src/data/targeting.ts`).
 - **Wave preview:** Between waves, chips beside the start button show what's coming. Tap one

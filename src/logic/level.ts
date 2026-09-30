@@ -1,4 +1,7 @@
-import type { Point } from './geometry';
+import { TILES, type NestKind } from '../data/tiles';
+import type { Ellipse, Point } from './geometry';
+
+export type { Ellipse } from './geometry';
 
 // The parts of Tiled's .tmj format we use. Tiled writes much more; the rest is ignored.
 interface TiledObject {
@@ -9,6 +12,8 @@ interface TiledObject {
   point?: boolean;
   ellipse?: boolean;
   polyline?: Point[];
+  type?: string; // Tiled's "Class" (called "Type" in older versions)
+  class?: string;
 }
 
 interface TiledLayer {
@@ -25,12 +30,6 @@ interface TiledMap {
   layers: TiledLayer[];
 }
 
-export interface Ellipse {
-  center: Point;
-  radiusX: number;
-  radiusY: number;
-}
-
 export interface Level {
   width: number;
   height: number;
@@ -41,6 +40,12 @@ export interface Level {
   ponds: Ellipse[];
   /** Where flying predators enter. They dive straight at the duck house. */
   sky: Point[];
+  /** Mud patches on the path: ground predators slow down in them. */
+  mud: Ellipse[];
+  /** Bramble patches on the path: ground predators get prickled in them. */
+  brambles: Ellipse[];
+  /** Nests with something special about them (hill nests reach farther, waterside nests hit harder). */
+  specialNests: { at: Point; kind: NestKind }[];
 }
 
 /** Turns the text of a Tiled .tmj file into a Level. See maps/README.md for the layer rules. */
@@ -57,20 +62,30 @@ export function parseLevel(tmjText: string): Level {
     throw new Error('The path polyline needs at least 2 points');
   }
 
-  const slots = requireLayer(map, 'slots')
-    .filter((o) => o.point)
-    .map((o) => ({ x: o.x, y: o.y }));
+  const slotObjects = requireLayer(map, 'slots').filter((o) => o.point);
+  const slots = slotObjects.map((o) => ({ x: o.x, y: o.y }));
+  const specialNests: Level['specialNests'] = [];
+  for (const o of slotObjects) {
+    const kind = o.class || o.type;
+    if (!kind) continue;
+    if (!(kind in TILES.nests)) {
+      throw new Error(`A nest at (${o.x}, ${o.y}) has class "${kind}". Nest classes can be: ${Object.keys(TILES.nests).join(', ')}`);
+    }
+    specialNests.push({ at: { x: o.x, y: o.y }, kind: kind as NestKind });
+  }
   if (slots.length === 0) {
     throw new Error('The "slots" layer needs at least one point');
   }
 
-  const ponds = (findLayer(map, 'pond') ?? [])
-    .filter((o) => o.ellipse)
-    .map((o) => ({
-      center: { x: o.x + o.width / 2, y: o.y + o.height / 2 },
-      radiusX: o.width / 2,
-      radiusY: o.height / 2,
-    }));
+  const ellipses = (layer: string): Ellipse[] =>
+    (findLayer(map, layer) ?? [])
+      .filter((o) => o.ellipse)
+      .map((o) => ({
+        center: { x: o.x + o.width / 2, y: o.y + o.height / 2 },
+        radiusX: o.width / 2,
+        radiusY: o.height / 2,
+      }));
+  const ponds = ellipses('pond');
 
   const sky = (findLayer(map, 'sky') ?? []).filter((o) => o.point).map((o) => ({ x: o.x, y: o.y }));
 
@@ -81,6 +96,9 @@ export function parseLevel(tmjText: string): Level {
     slots,
     ponds,
     sky,
+    mud: ellipses('mud'),
+    brambles: ellipses('brambles'),
+    specialNests,
   };
 }
 

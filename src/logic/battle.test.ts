@@ -4,9 +4,10 @@ import { ENEMIES } from '../data/enemies';
 import { ENDLESS } from '../data/endless';
 import { FOUNTAIN, NIGHT } from '../data/dayNight';
 import { PECKING_LOOP } from '../data/synergy';
-import { attackInterval, createBattle, topDuck, damageTo, enemyPosition, isFlying, isHidden, isRefreshed, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
+import { attackInterval, createBattle, topDuck, damageTo, duckStats, enemyPosition, isFlying, isHidden, isRefreshed, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
 import { statsAt } from './upgrades';
 import { perkMods } from './perks';
+import { TILES } from '../data/tiles';
 import { makePath } from './path';
 
 const sunny = DUCKS.sunny;
@@ -844,5 +845,50 @@ describe('final upgrade paths', () => {
     const events = step(battle, 0);
     expect(sunny.scaredTime).toBe(0);
     expect(events).toContainEqual(expect.objectContaining({ type: 'scared', fearlessIds: expect.arrayContaining([sunny.id]) }));
+  });
+});
+
+describe('special map tiles', () => {
+  const straight = () => makePath([{ x: 0, y: 0 }, { x: 2000, y: 0 }]);
+  const patch = { center: { x: 500, y: 0 }, radiusX: 100, radiusY: 40 };
+
+  it('mud slows ground predators, but not flyers', () => {
+    const battle = createBattle(straight(), { mud: [patch], sky: [{ x: 500, y: -300 }] });
+    const raccoon = spawnEnemy(battle, 'raccoon');
+    raccoon.distance = 500;
+    step(battle, 1);
+    expect(raccoon.distance).toBeCloseTo(500 + ENEMIES.raccoon.speed * TILES.mud.speed);
+    const hawk = spawnEnemy(battle, 'hawk');
+    const before = hawk.distance;
+    step(battle, 1);
+    expect(hawk.distance - before).toBeCloseTo(ENEMIES.hawk.speed);
+  });
+
+  it('brambles prickle ground predators while they are in them', () => {
+    const battle = createBattle(straight(), { brambles: [patch] });
+    const inside = spawnEnemy(battle, 'raccoon');
+    inside.distance = 500;
+    inside.speed = 0;
+    const outside = spawnEnemy(battle, 'raccoon');
+    outside.distance = 1500;
+    outside.speed = 0;
+    step(battle, 2);
+    expect(inside.hp).toBeCloseTo(ENEMIES.raccoon.maxHp - 2 * TILES.brambles.damagePerSecond);
+    expect(outside.hp).toBe(ENEMIES.raccoon.maxHp);
+  });
+
+  it('hill nests reach farther and waterside nests hit harder', () => {
+    const battle = createBattle(straight(), {
+      specialNests: [
+        { at: { x: 100, y: 100 }, kind: 'hill' },
+        { at: { x: 300, y: 100 }, kind: 'water' },
+      ],
+    });
+    const onHill = placeDuck(battle, 'sunny', { x: 100, y: 100 });
+    const byWater = placeDuck(battle, 'sunny', { x: 300, y: 100 });
+    const plain = placeDuck(battle, 'sunny', { x: 500, y: 100 });
+    expect(duckStats(battle, onHill).range).toBeCloseTo(DUCKS.sunny.range * (1 + TILES.nests.hill.range));
+    expect(duckStats(battle, byWater).damage).toBeCloseTo(DUCKS.sunny.damage * (1 + TILES.nests.water.damage));
+    expect(duckStats(battle, plain)).toMatchObject({ range: DUCKS.sunny.range, damage: DUCKS.sunny.damage });
   });
 });
