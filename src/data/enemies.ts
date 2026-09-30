@@ -2,7 +2,7 @@
 
 import type { DuckKind } from './ducks';
 
-export type EnemyKind = 'raccoon' | 'fox' | 'mink' | 'turtle' | 'hawk' | 'bandit';
+export type EnemyKind = 'raccoon' | 'fox' | 'mink' | 'turtle' | 'hawk' | 'bandit' | 'stormHawk' | 'silverFox' | 'oldSnapper';
 
 export interface EnemyStats {
   name: string;
@@ -15,6 +15,8 @@ export interface EnemyStats {
   hearts: number; // hearts it costs if it reaches the duck house
   flying: boolean; // flyers skip the path and dive straight at the house
   boss?: boolean; // gets a big health bar and a dramatic entrance
+  // What a boss says: when it shows up, and when it calls for help (if it does).
+  quips?: { arrive: string; summon?: string };
   pushResistance?: number; // how much of a Wing Flap's knockback it shrugs off (0.8 = only moves 20%)
   stunResistance?: number; // how much of an Alarm Quack's freeze it shrugs off (0.6 = frozen 40% as long)
   armor?: number; // every hit does this much less damage (but always at least 1)
@@ -118,8 +120,65 @@ export const ENEMIES: Record<EnemyKind, EnemyStats> = {
     hearts: 5,
     flying: false,
     boss: true,
+    quips: { arrive: 'Snacks for me!', summon: 'Tweet-tweet!' },
     pushResistance: 0.8, // too heavy to push far, so Potato can't pin it in place
     scares: { radius: 150, time: 1.2, when: 'whistling' },
     summons: { enemy: 'raccoon', count: 2, every: 7 },
+  },
+
+  // Boss: a giant hawk. Only ducks that hit flyers can hurt it (Chester can still freeze it).
+  // Calls in hawks and scares every duck it swoops near.
+  stormHawk: {
+    name: 'The Storm Hawk',
+    description: 'A giant hawk! It calls more hawks and scares ducks. Sunny and Potato can hit it.',
+    beatenBy: 'potato',
+    maxHp: 700,
+    speed: 50,
+    peas: 200,
+    hearts: 5,
+    flying: true,
+    boss: true,
+    quips: { arrive: 'SCREEEE!', summon: 'Come, my hawks!' },
+    pushResistance: 0.8,
+    stunResistance: 0.3,
+    scares: { radius: 120, time: 2, when: 'swooping' },
+    summons: { enemy: 'hawk', count: 2, every: 6 },
+  },
+
+  // Boss: a fast, silvery fox who shrugs off nearly all of Chester's freeze and calls in
+  // more foxes. Curtis's slow is the answer.
+  silverFox: {
+    name: 'The Silver Fox',
+    description: "Super fast, and quacks barely freeze it! It calls more foxes. Curtis slows it down.",
+    beatenBy: 'curtis',
+    maxHp: 900,
+    speed: 90,
+    peas: 200,
+    hearts: 5,
+    flying: false,
+    boss: true,
+    quips: { arrive: 'Too slow, ducks!', summon: 'Yip yip!' },
+    pushResistance: 0.8,
+    stunResistance: 0.85,
+    summons: { enemy: 'fox', count: 3, every: 6 },
+  },
+
+  // Boss: an enormous old snapping turtle from the pond. Its thick shell turns little pecks
+  // into almost nothing, and nothing can push it back. Big splashes and trained ducks win.
+  oldSnapper: {
+    name: 'Old Snapper',
+    description: 'A huge old turtle from the pond! Its shell blocks little pecks. Big splashes win.',
+    beatenBy: 'sunny',
+    maxHp: 2000,
+    speed: 22,
+    peas: 250,
+    hearts: 5,
+    flying: false,
+    boss: true,
+    quips: { arrive: 'SNAP. SNAP.' },
+    armor: 6,
+    pushResistance: 1,
+    stunResistance: 0.5,
+    fromPond: true,
   },
 };

@@ -19,6 +19,9 @@ const COUNTER_HINTS: Partial<Record<EnemyKind, { hint: HintId; answered: (kinds:
   turtle: { hint: 'turtles', answered: (kinds) => kinds.includes('sunny') },
   fox: { hint: 'foxes', answered: (kinds) => kinds.includes('curtis') },
   bandit: { hint: 'bandit', answered: (kinds) => kinds.includes('curtis') },
+  stormHawk: { hint: 'hawks', answered: (kinds) => kinds.some((k) => DUCKS[k].canHitFlying) },
+  silverFox: { hint: 'foxes', answered: (kinds) => kinds.includes('curtis') },
+  oldSnapper: { hint: 'turtles', answered: (kinds) => kinds.includes('sunny') },
 };
 
 // Hearts at or below this share of the start, with Craig's blessing unused: suggest calling her.

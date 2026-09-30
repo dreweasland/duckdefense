@@ -98,13 +98,23 @@ const PREVIEW = { right: 1146, y: 112, chip: 58, gap: 4, maxWidth: 256 };
 const CRAIG_BUTTON = { x: 100, y: 640 };
 
 // How each walking predator looks: its picture's size, the shadow under it, and how it waddles.
-const GROUND_LOOKS: Record<Exclude<EnemyKind, 'hawk' | 'bandit'>, { width: number; height: number; shadow: number; wobble: number; wobbleTime: number }> = {
+const GROUND_LOOKS: Record<Exclude<EnemyKind, 'hawk' | 'stormHawk'>, { width: number; height: number; shadow: number; wobble: number; wobbleTime: number }> = {
   raccoon: { width: 92, height: 67, shadow: 64, wobble: 4, wobbleTime: 220 },
   fox: { width: 100, height: 68, shadow: 66, wobble: 5, wobbleTime: 140 },
   mink: { width: 88, height: 44, shadow: 60, wobble: 3, wobbleTime: 160 },
   turtle: { width: 110, height: 75, shadow: 90, wobble: 2, wobbleTime: 520 },
+  bandit: { width: 150, height: 112, shadow: 124, wobble: 3, wobbleTime: 380 },
+  silverFox: { width: 150, height: 102, shadow: 104, wobble: 4, wobbleTime: 150 },
+  oldSnapper: { width: 180, height: 123, shadow: 150, wobble: 1.5, wobbleTime: 700 },
 };
+// Flyers are seen from above, so they're square.
+const FLYING_SIZES: Record<'hawk' | 'stormHawk', number> = { hawk: 88, stormHawk: 140 };
 const HIDDEN_ALPHA = 0.45; // a mink hiding in the grass is see-through
+
+/** A name that starts with "The" reads better mid-sentence as "the": "Craig shooed the Storm Hawk!" */
+function midSentence(name: string): string {
+  return name.replace(/^The /, 'the ');
+}
 
 // Said by the raccoon when it gets into the duck house. Losing a heart should be funny.
 const RACCOON_QUIPS = ['Nom nom!', 'Yoink!', 'Snack time!', 'Crunch!', 'Mine now!'];
@@ -227,7 +237,13 @@ export class GameScene extends Phaser.Scene {
   private preview!: Phaser.GameObjects.Container;
   /** Which wave the preview is showing, so it's only rebuilt when that changes. */
   private previewKey = '';
-  private bossBar?: { container: Phaser.GameObjects.Container; fill: Phaser.GameObjects.Rectangle; enemyId: number };
+  private bossBar?: {
+    container: Phaser.GameObjects.Container;
+    fill: Phaser.GameObjects.Rectangle;
+    face: Phaser.GameObjects.Image;
+    name: Phaser.GameObjects.Text;
+    enemyId: number;
+  };
 
   constructor() {
     super('GameScene');
@@ -1371,20 +1387,15 @@ export class GameScene extends Phaser.Scene {
     let ripple: Phaser.GameObjects.Ellipse | undefined;
     if (flying) {
       // Hawks cast a shadow below them, and point where they're diving.
-      root.add(this.add.ellipse(0, 36, 50, 16, 0x000000, 0.18));
+      const size = FLYING_SIZES[enemy.kind as keyof typeof FLYING_SIZES] ?? 88;
+      root.add(this.add.ellipse(0, size * 0.4, size * 0.57, size * 0.18, 0x000000, 0.18));
       const [from, to] = enemy.path.points;
       art = this.add
-        .image(0, 0, 'hawk')
-        .setDisplaySize(88, 88)
+        .image(0, 0, enemy.kind)
+        .setDisplaySize(size, size)
         .setRotation(Math.atan2(to!.y - from!.y, to!.x - from!.x) + Math.PI / 2);
       this.tweens.add({ targets: art, scaleX: art.scaleX * 0.8, duration: 170, yoyo: true, repeat: -1 });
       root.setDepth(DEPTH.effects - 1);
-    } else if (enemy.kind === 'bandit') {
-      root.add(this.add.ellipse(0, 6, 124, 26, 0x000000, 0.25));
-      ripple = this.add.ellipse(0, 6, 140, 34).setStrokeStyle(5, SLOW_RING, 0.95).setVisible(false);
-      root.add(ripple);
-      art = this.add.image(0, 0, 'bandit').setDisplaySize(150, 112).setOrigin(0.5, 0.85);
-      this.tweens.add({ targets: art, angle: { from: -3, to: 3 }, duration: 380, yoyo: true, repeat: -1 });
     } else {
       const look = GROUND_LOOKS[enemy.kind as keyof typeof GROUND_LOOKS];
       root.add(this.add.ellipse(0, 4, look.shadow, 16, 0x000000, 0.2));
@@ -1402,9 +1413,11 @@ export class GameScene extends Phaser.Scene {
     const hpBack = this.add.rectangle(0, 0, HP_BAR_WIDTH + 4, 10, COLORS.ink).setOrigin(0.5);
     const hpFill = this.add.rectangle(-HP_BAR_WIDTH / 2, 0, HP_BAR_WIDTH, 6, 0x6ee06e).setOrigin(0, 0.5);
     const boss = !!ENEMIES[enemy.kind].boss;
-    const hpBar = this.add.container(0, flying ? -50 : -66, [hpBack, hpFill]).setVisible(false);
+    // Health bar and dizzy stars sit just above the predator's head, however big it is.
+    const top = flying ? -art.displayHeight / 2 : -art.displayHeight * 0.85;
+    const hpBar = this.add.container(0, top - 8, [hpBack, hpFill]).setVisible(false);
     const dizzy = this.add
-      .container(0, flying ? -40 : boss ? -104 : -60, [
+      .container(0, boss ? top - 4 : top + 6, [
         this.add.image(-12, 0, 'star').setDisplaySize(16, 16).setTint(0xffe066),
         this.add.image(12, 0, 'star').setDisplaySize(16, 16).setTint(0xffe066),
       ])
@@ -1493,7 +1506,7 @@ export class GameScene extends Phaser.Scene {
         this.flyPea(event.position, ENEMIES[event.enemy.kind].peas);
         if (ENEMIES[event.enemy.kind].boss) {
           playSound(this, 'bossDefeated');
-          this.showBossGone(event.position, 'The Night Bandit ran away!');
+          this.showBossGone(event.position, `${ENEMIES[event.enemy.kind].name} ran away!`);
         }
         break;
       case 'reachedHouse':
@@ -1501,13 +1514,13 @@ export class GameScene extends Phaser.Scene {
         this.removeEnemySprite(event.enemy.id, 'house');
         this.showHouseRaid();
         this.maybeHint({ type: 'heartLost', enemy: event.enemy.kind });
-        if (ENEMIES[event.enemy.kind].boss) this.showBossGone(this.house, 'The Night Bandit raided the snacks!');
+        if (ENEMIES[event.enemy.kind].boss) this.showBossGone(this.house, `${ENEMIES[event.enemy.kind].name} raided the snacks!`);
         break;
       case 'shooed':
         playSound(this, 'shoo');
         this.removeEnemySprite(event.enemy.id, 'shooed');
         popSpeechBubble(this, this.house.x, this.house.y - 150, 'Shoo!', DEPTH.floatText);
-        if (ENEMIES[event.enemy.kind].boss) this.showBossGone(this.house, 'Craig shooed the Night Bandit!');
+        if (ENEMIES[event.enemy.kind].boss) this.showBossGone(this.house, `Craig shooed ${midSentence(ENEMIES[event.enemy.kind].name)}!`);
         break;
       case 'waveCleared':
         playSound(this, 'waveCleared');
@@ -1746,17 +1759,18 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(1620, () => this.showNextBanner());
   }
 
-  // --- The Night Bandit ------------------------------------------------------
+  // --- Bosses (the Night Bandit, and the Endless Pond's others) -------------------
 
   private showBossEntrance(enemy: Enemy): void {
+    const stats = ENEMIES[enemy.kind];
     playSound(this, 'bossArrives');
     this.cameras.main.shake(450, 0.004);
+    this.showBanner(`${stats.name} is here!`);
+    const pos = enemyPosition(enemy);
+    const say = stats.quips?.arrive;
+    if (say) this.time.delayedCall(700, () => popSpeechBubble(this, pos.x, pos.y - 110, say, DEPTH.floatText));
     // More than one at once (late in the Endless Pond): the big bar stays on the first one.
-    if (this.bossBar) {
-      this.showBanner('Another Night Bandit!');
-      return;
-    }
-    this.showBanner('The Night Bandit is here!');
+    if (this.bossBar) return;
 
     // Big health bar along the bottom of the screen.
     const panel = this.add
@@ -1765,8 +1779,8 @@ export class GameScene extends Phaser.Scene {
       .fillRoundedRect(-240, -23, 480, 46, 23)
       .lineStyle(3, 0xffffff, 0.3)
       .strokeRoundedRect(-240, -23, 480, 46, 23);
-    const face = this.add.image(-208, -1, 'bandit').setDisplaySize(52, 39);
-    const name = this.add.text(-174, -10, ENEMIES.bandit.name, textStyle(16)).setOrigin(0, 0.5);
+    const face = this.enemyIcon(enemy.kind, -208, -1, 52, 40);
+    const name = this.add.text(-174, -10, stats.name, textStyle(16)).setOrigin(0, 0.5);
     const back = this.add.rectangle(-174, 10, BOSS_BAR_WIDTH, 12, 0x000000, 0.5).setOrigin(0, 0.5);
     const fill = this.add.rectangle(-174, 10, BOSS_BAR_WIDTH, 12, 0xff6b5a).setOrigin(0, 0.5);
     // Sits along the very bottom edge, below where paths run.
@@ -1775,16 +1789,15 @@ export class GameScene extends Phaser.Scene {
       .setDepth(DEPTH.hud)
       .setAlpha(0);
     this.tweens.add({ targets: container, alpha: 1, y: container.y - 6, duration: 400 });
-    this.bossBar = { container, fill, enemyId: enemy.id };
-
-    const pos = enemyPosition(enemy);
-    this.time.delayedCall(700, () => popSpeechBubble(this, pos.x, pos.y - 110, 'Snacks for me!', DEPTH.floatText));
+    this.bossBar = { container, fill, face, name, enemyId: enemy.id };
   }
 
   private showSummon(bossId: number, minions: Enemy[]): void {
     const boss = this.enemySprites.get(bossId);
     playSound(this, 'whistle');
-    if (boss) popSpeechBubble(this, boss.root.x, boss.root.y - 110, 'Tweet-tweet!', DEPTH.floatText);
+    const summoner = this.state.battle.enemies.find((e) => e.id === bossId);
+    const say = summoner && ENEMIES[summoner.kind].quips?.summon;
+    if (boss && say) popSpeechBubble(this, boss.root.x, boss.root.y - 110, say, DEPTH.floatText);
     for (const minion of minions) {
       this.addEnemySprite(minion);
       const pos = enemyPosition(minion);
@@ -1797,10 +1810,15 @@ export class GameScene extends Phaser.Scene {
     this.fx.stars.explode(20, at.x, at.y - 40);
     this.showBanner(message);
     const bar = this.bossBar;
-    // Another Bandit still out? The big bar moves to it.
+    // The big bar only changes when the boss it's following is the one that left.
+    if (bar && this.state.battle.enemies.some((e) => e.id === bar.enemyId)) return;
+    // Another boss still out? The big bar moves to it.
     const next = this.state.battle.enemies.find((e) => ENEMIES[e.kind].boss && e.id !== bar?.enemyId);
     if (bar && next) {
       bar.enemyId = next.id;
+      bar.name.setText(ENEMIES[next.kind].name);
+      bar.face.setTexture(next.kind);
+      bar.face.setScale(Math.min(52 / bar.face.width, 40 / bar.face.height));
       return;
     }
     this.bossBar = undefined;

@@ -18,9 +18,15 @@ export const ENDLESS = {
   name: 'Endless Pond',
   maxWaves: 999, // nobody will get this far... right?
   nightEvery: 3, // every 3rd wave is at night
-  // The Night Bandit crashes every 10th wave, then every 5th from wave 20. More of them
-  // come as the waves go on: one more Bandit every 25 waves.
-  boss: { every: 10, fasterFrom: 20, fasterEvery: 5, oneMoreEvery: 25 },
+  // A boss crashes every 10th wave, then every 5th from wave 20, taking turns in this order.
+  // More come at once as the waves go on: one more boss every 25 waves.
+  boss: {
+    every: 10,
+    fasterFrom: 20,
+    fasterEvery: 5,
+    oneMoreEvery: 25,
+    kinds: ['bandit', 'stormHawk', 'silverFox', 'oldSnapper'] satisfies EnemyKind[],
+  },
   // Each wave's predators are this much tougher than the wave before (1.045 = +4.5%). It
   // builds on itself, so late waves get tough fast, even for a strong flock.
   healthGrowth: 1.045,

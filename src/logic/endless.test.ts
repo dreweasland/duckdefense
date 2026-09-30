@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ENDLESS } from '../data/endless';
 import { LEVELS } from '../data/levels';
 import { play } from './simulate';
-import { bossCount, endlessWave, endlessWaves } from './endless';
+import { bossCount, bossesFor, endlessWave, endlessWaves } from './endless';
 import { buyDuck, createGame, mapFromLevel, repairCost, repairHouse, sellValue, startWave, trainDuck, trainingCost, upgradeDuck } from './game';
 import { parseLevel } from './level';
 import { spawnEnemy } from './battle';
@@ -19,7 +19,7 @@ describe('Endless Pond waves', () => {
     }
   });
 
-  it('bring the Night Bandit more and more often, and night every 3rd wave', () => {
+  it('bring bosses more and more often, and night every 3rd wave', () => {
     const { every, fasterFrom, fasterEvery, oneMoreEvery } = ENDLESS.boss;
     expect(kinds(every)).toContain('bandit');
     expect(kinds(every + 1)).not.toContain('bandit');
@@ -28,6 +28,14 @@ describe('Endless Pond waves', () => {
     expect(bossCount(oneMoreEvery * 2)).toBe(3);
     expect(endlessWave(ENDLESS.nightEvery).time).toBe('night');
     expect(endlessWave(1).time).toBe('day');
+  });
+
+  it('take turns through every boss, mixing them when more than one comes', () => {
+    const bossWaves = Array.from({ length: 60 }, (_, i) => i + 1).filter((n) => bossesFor(n).length > 0);
+    const firstFour = bossWaves.slice(0, 4).map((n) => bossesFor(n)[0]);
+    expect(firstFour).toEqual(ENDLESS.boss.kinds);
+    const pair = bossesFor(ENDLESS.boss.oneMoreEvery * 2);
+    expect(new Set(pair).size).toBe(pair.length);
   });
 
   it('keep getting bigger, tougher, and faster', () => {

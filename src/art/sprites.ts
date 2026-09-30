@@ -406,6 +406,59 @@ function turtleSvg(): string {
   );
 }
 
+/** The same drawing in new colors: swaps each color in `colors` (old -> new), then adds `extra` on top. */
+function recolor(art: string, colors: Record<string, string>, extra = ''): string {
+  let out = art;
+  for (const [from, to] of Object.entries(colors)) out = out.split(from).join(to);
+  return extra ? out.replace('</svg>', `${extra}</svg>`) : out;
+}
+
+/** Boss: the Storm Hawk, a slate-blue giant hawk with fierce eyes. */
+function stormHawkSvg(): string {
+  return recolor(hawkSvg(), {
+    '#8f6038': '#5a6478',
+    '#5e3c20': '#2f3544',
+    '#a3764a': '#6b7590',
+    '#6e4a2c': '#3a4256',
+    '#c09565': '#9aa6c0',
+    '#b8582f': '#434b62',
+    '#7a3518': '#262b38',
+    '#f5d547': '#ff5a4a',
+  });
+}
+
+/** Boss: the Silver Fox, a sleek silvery fox. */
+function silverFoxSvg(): string {
+  return recolor(foxSvg(), {
+    '#f29a4a': '#e4e8ee',
+    '#d96b24': '#9aa3b0',
+    '#f0a055': '#eef1f5',
+    '#cf6420': '#a3abb8',
+    '#e57d33': '#b6bdc8',
+    '#fff1e0': '#ffffff',
+  });
+}
+
+/** Boss: Old Snapper, a huge, mossy old snapping turtle. */
+function oldSnapperSvg(): string {
+  const moss =
+    `<ellipse cx="80" cy="48" rx="12" ry="6" fill="#7fae4a" opacity="0.9"/>` +
+    `<ellipse cx="134" cy="56" rx="10" ry="5" fill="#7fae4a" opacity="0.9"/>` +
+    `<ellipse cx="108" cy="80" rx="9" ry="4" fill="#8fc05a" opacity="0.9"/>`;
+  return recolor(
+    turtleSvg(),
+    {
+      '#7c8a4a': '#6a6444',
+      '#4d5a2a': '#3a3522',
+      '#9aa06a': '#8e8a68',
+      '#6f7648': '#5c5840',
+      '#3a4420': '#2a2616',
+      '#5d6b32': '#4a4428',
+    },
+    moss,
+  );
+}
+
 /** The Night Bandit: a big raccoon in a striped shirt and beanie with a sack of stolen snacks. 240 x 180. */
 function banditSvg(): string {
   const body = 'M56 104 C56 72 94 60 134 62 C170 64 192 82 192 108 C192 136 164 148 126 148 C88 148 56 136 56 104 Z';
@@ -773,6 +826,9 @@ export function allSprites(): SpriteArt[] {
     { key: 'turtle', svg: turtleSvg(), width: 110, height: 75 },
     { key: 'hawk', svg: hawkSvg(), width: 88, height: 88 },
     { key: 'bandit', svg: banditSvg(), width: 150, height: 112 },
+    { key: 'stormHawk', svg: stormHawkSvg(), width: 140, height: 140 },
+    { key: 'silverFox', svg: silverFoxSvg(), width: 150, height: 102 },
+    { key: 'oldSnapper', svg: oldSnapperSvg(), width: 180, height: 123 },
     { key: 'house', svg: houseSvg(), width: 150, height: 144 },
     { key: 'fountain', svg: fountainSvg(), width: 64, height: 64 },
     { key: 'nest', svg: nestSvg(), width: 72, height: 72 },

@@ -1,4 +1,5 @@
 import { ENDLESS } from '../data/endless';
+import type { EnemyKind } from '../data/enemies';
 import type { SpawnGroup, Wave } from '../data/waves';
 
 // Builds the Endless Pond's waves from the numbers in src/data/endless.ts.
@@ -15,8 +16,7 @@ export function endlessWave(n: number): Wave {
       every: Math.max(ENDLESS.minEvery, g.every / squeeze),
       ...(g.after !== undefined && { after: g.after }),
     }));
-  const bandits = bossCount(n);
-  if (bandits > 0) groups.push({ enemy: 'bandit', count: bandits, every: 6, after: 8 });
+  bossesFor(n).forEach((enemy, i) => groups.push({ enemy, count: 1, every: 1, after: 8 + i * 6 }));
   return {
     time: n % ENDLESS.nightEvery === 0 ? 'night' : 'day',
     groups,
@@ -25,7 +25,17 @@ export function endlessWave(n: number): Wave {
   };
 }
 
-/** How many Night Bandits crash wave `n` (0 on most waves). */
+/** The bosses that crash wave `n`, taking turns through ENDLESS.boss.kinds (none on most waves). */
+export function bossesFor(n: number): EnemyKind[] {
+  const count = bossCount(n);
+  if (count === 0) return [];
+  let bossWavesBefore = 0;
+  for (let w = 1; w < n; w++) if (bossCount(w) > 0) bossWavesBefore++;
+  const { kinds } = ENDLESS.boss;
+  return Array.from({ length: count }, (_, i) => kinds[(bossWavesBefore + i) % kinds.length]!);
+}
+
+/** How many bosses crash wave `n` (0 on most waves). */
 export function bossCount(n: number): number {
   const { every, fasterFrom, fasterEvery, oneMoreEvery } = ENDLESS.boss;
   const bossWave = n >= fasterFrom ? n % fasterEvery === 0 : n % every === 0;

@@ -4,7 +4,7 @@ import { ENEMIES } from '../data/enemies';
 import { ENDLESS } from '../data/endless';
 import { FOUNTAIN, NIGHT } from '../data/dayNight';
 import { PECKING_LOOP } from '../data/synergy';
-import { attackInterval, createBattle, topDuck, damageTo, enemyPosition, isHidden, isRefreshed, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
+import { attackInterval, createBattle, topDuck, damageTo, enemyPosition, isFlying, isHidden, isRefreshed, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
 import { statsAt } from './upgrades';
 import { makePath } from './path';
 
@@ -701,5 +701,37 @@ describe('training (Endless Pond)', () => {
     duck.training = 2;
     step(battle, 0);
     expect(enemy.hp).toBeCloseTo(raccoon.maxHp - DUCKS.potato.damage * (1 + 2 * ENDLESS.training.damage));
+  });
+});
+
+describe('Endless Pond bosses', () => {
+  it('the Storm Hawk flies at the house and calls in more hawks from the sky', () => {
+    const battle = createBattle(makePath([{ x: 0, y: 0 }, { x: 2000, y: 0 }]), { sky: [{ x: 1000, y: -500 }] });
+    const boss = spawnEnemy(battle, 'stormHawk');
+    expect(isFlying(boss)).toBe(true);
+    const events = step(battle, ENEMIES.stormHawk.summons!.every + 0.01);
+    const summoned = events.find((e) => e.type === 'summoned');
+    expect(summoned && summoned.type === 'summoned' && summoned.minions.every((m) => m.kind === 'hawk' && isFlying(m))).toBe(true);
+  });
+
+  it('the Silver Fox barely stays frozen', () => {
+    const battle = newBattle();
+    const fox = spawnEnemy(battle, 'silverFox');
+    fox.distance = 100;
+    placeDuck(battle, 'chester', { x: 100, y: 0 });
+    step(battle, 0);
+    expect(fox.stopTime).toBeCloseTo(DUCKS.chester.alarmQuack!.stunTime * (1 - ENEMIES.silverFox.stunResistance!));
+  });
+
+  it("Old Snapper can't be pushed back, and shrugs off little pecks", () => {
+    const battle = createBattle(makePath([{ x: 0, y: 0 }, { x: 2000, y: 0 }]), { pondAt: { x: 1000, y: 100 } });
+    const snapper = spawnEnemy(battle, 'oldSnapper');
+    expect(damageTo(snapper, DUCKS.potato.damage)).toBe(1);
+    const potato = placeDuck(battle, 'potato', enemyPosition(snapper));
+    potato.attacks = DUCKS.potato.wingFlap!.everyNthAttack - 1; // the next peck is a Wing Flap
+    const before = snapper.distance;
+    snapper.stopTime = 1; // hold still so only the flap could move it
+    step(battle, 0);
+    expect(snapper.distance).toBe(before);
   });
 });
