@@ -2,6 +2,10 @@ import Phaser from 'phaser';
 import { drawGrass, drawOutskirts, drawPond, scatterDecor } from '../art/terrain';
 import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
+import { HATS, type HatKind } from '../data/hats';
+import { hatFor } from '../logic/hats';
+import { loadProgress } from '../save';
+import { duckWithHat } from '../ui/hats';
 import { LEVELS } from '../data/levels';
 import { postScore } from '../api';
 import { topDuck, type KindReport } from '../logic/battle';
@@ -24,6 +28,7 @@ export interface ResultSceneData {
   peas?: number;
   daily?: string; // the Daily Challenge date, if that's what was played
   report?: Partial<Record<DuckKind, KindReport>>; // what each kind of duck did (the damage report)
+  newHats?: HatKind[]; // hats this win unlocked
 }
 
 const POND = { center: { x: WORLD.width / 2, y: 610 }, radiusX: 420, radiusY: 95 };
@@ -114,14 +119,17 @@ export class ResultScene extends Phaser.Scene {
     // damage report: what it did this level. The duck that did the most damage wears a crown.
     const report = this.result.report;
     const top = report && topDuck(report);
+    const progress = loadProgress();
     DUCK_ORDER.forEach((kind, i) => {
       const x = report ? cx - 285 + i * 190 : cx - 240 + i * 160;
       const size = report ? (won ? 72 : 96) : won ? 90 : 110;
       const y = report ? (won ? 380 : 320) : won ? 400 : 320;
       const stats = report?.[kind];
       const stayedHome = !!report && !stats?.placed;
-      const parts: Phaser.GameObjects.GameObject[] = [this.add.image(0, 0, `duck-${kind}`).setDisplaySize(size, size)];
-      if (kind === top) parts.push(this.drawCrown(0, -size / 2 - 4));
+      const parts: Phaser.GameObjects.GameObject[] = [];
+      // The top duck glows gold (its crown goes by its name, clear of any hat).
+      if (kind === top) parts.push(this.add.image(0, 0, 'glow').setDisplaySize(size * 1.7, size * 1.7).setTint(COLORS.gold).setAlpha(0.7));
+      parts.push(duckWithHat(this, kind, 0, 0, size, hatFor(progress, kind)));
       const duck = this.add.container(x, y, parts).setDepth(51).setAlpha(stayedHome ? 0.4 : 1);
       if (!stayedHome) {
         this.tweens.add(
@@ -130,7 +138,7 @@ export class ResultScene extends Phaser.Scene {
             : { targets: duck, angle: { from: -8, to: 8 }, duration: 260, yoyo: true, repeat: -1, delay: i * 80 },
         );
       }
-      if (report) this.drawDuckReport(x, y + size / 2 + 8, kind, stats);
+      if (report) this.drawDuckReport(x, y + size / 2 + 8, kind, stats, kind === top);
     });
 
     if (won) {
@@ -168,12 +176,15 @@ export class ResultScene extends Phaser.Scene {
       drawBigButton(this, cx + 170, y, 'Levels', COLORS.blue, COLORS.blueDark, () => go('LevelSelectScene', levels)).setDepth(70);
     }
 
+    const newHats = this.result.newHats ?? [];
+    if (newHats.length > 0) this.time.delayedCall(1400, () => this.showNewHats(newHats));
+
     this.cameras.main.fadeIn(300, 0, 0, 0);
     playSound(this, won ? 'win' : 'lose');
   }
 
   /** A duck's damage report under its picture. Ducks that weren't placed "stayed home". */
-  private drawDuckReport(x: number, y: number, kind: DuckKind, stats: KindReport | undefined): void {
+  private drawDuckReport(x: number, y: number, kind: DuckKind, stats: KindReport | undefined, top: boolean): void {
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     if (!stats?.placed) {
       this.add.text(x, y + 8, 'Stayed home', textStyle(16, { ...ink, color: '#8a7f85' })).setOrigin(0.5).setDepth(51);
@@ -186,6 +197,32 @@ export class ResultScene extends Phaser.Scene {
       this.add.text(x, y + 39, `${Math.round(stats.damage).toLocaleString()} damage · ${DUCKS[kind].power.stat} ${stats.special}`, textStyle(13, ink)),
     ];
     lines.forEach((line) => line.setOrigin(0.5, 0).setDepth(51));
+    if (top) this.drawCrown(x - lines[0]!.width / 2 - 26, y + 7).setDepth(51);
+  }
+
+  /** "New hat!" card beside the panel, for hats this win unlocked. */
+  private showNewHats(hats: HatKind[]): void {
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    const W = 200;
+    const H = 190;
+    const shown = hats.slice(0, 3);
+    const parts: Phaser.GameObjects.GameObject[] = [
+      drawCard(this.add.graphics(), W, H, { radius: 20, border: COLORS.pink, borderWidth: 5 }),
+      this.add.text(0, -H / 2 + 26, shown.length > 1 ? 'New hats!' : 'New hat!', textStyle(26, { ...ink, color: '#e0447a', weight: '700' })).setOrigin(0.5),
+    ];
+    shown.forEach((hat, i) => {
+      const x = (i - (shown.length - 1) / 2) * 60;
+      parts.push(this.add.image(x, -8, `hat-${hat}`).setDisplaySize(56, 50));
+    });
+    parts.push(
+      this.add
+        .text(0, 40, shown.length === 1 ? HATS[shown[0]!].name : `${hats.length} new hats`, textStyle(18, { ...ink, weight: '700' }))
+        .setOrigin(0.5),
+      this.add.text(0, 66, 'Try it on in the Wardrobe!', textStyle(14, { ...ink, color: '#8a7f85' })).setOrigin(0.5),
+    );
+    const card = this.add.container(WORLD.width - 110, 300, parts).setDepth(80).setScale(0).setAngle(4);
+    this.tweens.add({ targets: card, scale: 1, duration: 350, ease: 'Back.Out' });
+    playSound(this, 'upgrade');
   }
 
   /** A little gold crown for the duck that did the most damage. */

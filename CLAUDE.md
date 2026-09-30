@@ -86,6 +86,9 @@ everywhere: dialogue, tooltips, code comments.
   and its power (`power.stat` in `src/data/ducks.ts`: splashed, flapped, froze, slowed).
   Tap a duck to see its numbers; the result screen totals them per kind, and the top
   damage-dealer wears a crown.
+- **Hats:** Stars from winning levels unlock hats (`src/data/hats.ts`, drawn in
+  `src/art/sprites.ts`). Pick one for each duck in the Wardrobe (hat button on the title
+  screen); the ducks wear them everywhere. A great job for the art director.
 - **Daily Challenge:** One level and one twist per UTC day, the same for everyone, with its
   own leaderboard. Twists live in `src/data/challenges.ts`; the rules shared with the server
   are in `src/logic/daily.ts`.

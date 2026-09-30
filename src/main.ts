@@ -5,6 +5,7 @@ import { LeaderboardScene } from './scenes/LeaderboardScene';
 import { LevelSelectScene } from './scenes/LevelSelectScene';
 import { ResultScene } from './scenes/ResultScene';
 import { TitleScene } from './scenes/TitleScene';
+import { WardrobeScene } from './scenes/WardrobeScene';
 import { RENDER_SCALE, viewSize } from './ui/theme';
 
 // Size the canvas to the window's shape (at RENDER_SCALE for sharp art), so it fills the screen.
@@ -26,7 +27,7 @@ const game = new Phaser.Game({
     width: initialSize.width,
     height: initialSize.height,
   },
-  scene: [BootScene, TitleScene, LevelSelectScene, GameScene, ResultScene, LeaderboardScene],
+  scene: [BootScene, TitleScene, LevelSelectScene, GameScene, ResultScene, LeaderboardScene, WardrobeScene],
 });
 
 // Phones and tablets held upright see a "turn me sideways" screen (see index.html);

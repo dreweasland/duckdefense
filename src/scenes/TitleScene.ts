@@ -5,6 +5,9 @@ import { DIFFICULTIES } from '../data/difficulty';
 import { DUCK_ORDER } from '../data/ducks';
 import { COLORS, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
 import { playSound } from '../audio/sfx';
+import { hatFor } from '../logic/hats';
+import { loadProgress } from '../save';
+import { duckWithHat } from '../ui/hats';
 import { drawBigButton, drawRoundButton, drawSoundButton } from '../ui/widgets';
 import type { LeaderboardSceneData } from './LeaderboardScene';
 import type { LevelSelectSceneData } from './LevelSelectScene';
@@ -25,10 +28,11 @@ export class TitleScene extends Phaser.Scene {
     drawPond(this, POND, 32);
     scatterDecor(this, { ponds: [POND], blocked: [{ x: 260, y: 40, width: 760, height: 250 }, { x: 250, y: 540, width: 780, height: 150 }] }, 33);
 
-    // The flock, bobbing on the pond.
+    // The flock, bobbing on the pond in their hats.
+    const progress = loadProgress();
     DUCK_ORDER.forEach((kind, i) => {
       const x = cx - 240 + i * 160;
-      const duck = this.add.image(x, 400, `duck-${kind}`).setDisplaySize(110, 110).setDepth(entityDepth(430));
+      const duck = duckWithHat(this, kind, x, 400, 110, hatFor(progress, kind)).setDepth(entityDepth(430));
       this.tweens.add({ targets: duck, y: 392, angle: 3, duration: 800 + i * 110, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
     });
 
@@ -65,6 +69,15 @@ export class TitleScene extends Phaser.Scene {
       const data: LeaderboardSceneData = { back: { scene: 'TitleScene' } };
       this.cameras.main.fadeOut(220, 0, 0, 0);
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('LeaderboardScene', data));
+    });
+    // The Wardrobe: dress up the ducks.
+    const hat = this.add.image(0, 2, 'hat-party').setDisplaySize(52, 47);
+    const wardrobe = drawRoundButton(this, 70, 70, 42, COLORS.pink, 0xc2507a, [hat]);
+    wardrobe.container.setDepth(100);
+    wardrobe.hit.on('pointerdown', () => {
+      playSound(this, 'tap');
+      this.cameras.main.fadeOut(220, 0, 0, 0);
+      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('WardrobeScene'));
     });
     this.cameras.main.fadeIn(300, 0, 0, 0);
   }

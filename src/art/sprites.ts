@@ -3,6 +3,7 @@
 // BootScene loads these as textures at 2x their display size.
 
 import type { DuckKind } from '../data/ducks';
+import { HAT_ORDER, type HatKind } from '../data/hats';
 
 const INK = '#2b2233';
 
@@ -195,6 +196,79 @@ function duckSvg(look: DuckLook): string {
     parts.push(`<path d="M143 37 Q152 31 163 37" fill="none" stroke="#9aa0a6" stroke-width="4" stroke-linecap="round"/>`);
   }
   return svg(200, 200, defs, parts.join(''));
+}
+
+// --- Hats -----------------------------------------------------------------
+
+/**
+ * Where a hat sits on a duck, as fractions of the duck picture's size, measured from its
+ * center (the duck faces right; mirror x when it faces left). This is the top of the head.
+ */
+export const HAT_SPOT = { x: 0.215, y: -0.33, width: 0.5 };
+
+/** Hats are drawn 100 x 90, sitting on the head at (50, 80): the bottom middle of the brim. */
+export const HAT_SIZE = { width: 100, height: 90, anchorY: 80 / 90 };
+
+const HAT_ART: Record<HatKind, string> = {
+  // Striped party cone with a pom-pom.
+  party:
+    `<defs><clipPath id="cone"><path d="M28 80 L50 12 L72 80 Z"/></clipPath></defs>` +
+    `<path d="M28 80 L50 12 L72 80 Z" fill="#ff7aa2"/>` +
+    `<g clip-path="url(#cone)"><path d="M20 66 L80 50 M20 46 L80 30" stroke="#ffe066" stroke-width="9"/></g>` +
+    `<path d="M28 80 L50 12 L72 80 Z" fill="none" ${stroke(4)}/>` +
+    `<circle cx="50" cy="12" r="8" fill="#7fd4ff" ${stroke(3)}/>`,
+  // A daisy tucked behind the ear.
+  flower:
+    [0, 60, 120, 180, 240, 300]
+      .map((a) => `<ellipse cx="50" cy="52" rx="8" ry="16" transform="rotate(${a} 50 66)" fill="#ffffff" ${stroke(3)}/>`)
+      .join('') + `<circle cx="50" cy="66" r="9" fill="#ffd23f" ${stroke(3)}/>`,
+  // A big polka-dot bow.
+  bow:
+    `<path d="M50 62 C36 40 14 44 16 62 C18 80 38 80 50 66 Z" fill="#ff5f8f" ${stroke(4)}/>` +
+    `<path d="M50 62 C64 40 86 44 84 62 C82 80 62 80 50 66 Z" fill="#ff5f8f" ${stroke(4)}/>` +
+    `<circle cx="28" cy="60" r="3.5" fill="#ffffff"/><circle cx="72" cy="60" r="3.5" fill="#ffffff"/><circle cx="36" cy="70" r="3" fill="#ffffff"/><circle cx="64" cy="70" r="3" fill="#ffffff"/>` +
+    `<circle cx="50" cy="64" r="8" fill="#e0447a" ${stroke(4)}/>`,
+  // A cozy knit beanie with a pom-pom.
+  beanie:
+    `<path d="M20 78 C18 44 82 44 80 78 Z" fill="#3d8fe0" ${stroke(4)}/>` +
+    `<path d="M34 52 L34 76 M50 48 L50 76 M66 52 L66 76" stroke="#2a66a8" stroke-width="4" stroke-linecap="round"/>` +
+    `<rect x="16" y="70" width="68" height="14" rx="7" fill="#ffffff" ${stroke(4)}/>` +
+    `<circle cx="50" cy="36" r="10" fill="#ffffff" ${stroke(4)}/>`,
+  // A cowboy hat with a curly brim.
+  cowboy:
+    `<path d="M4 72 C20 84 80 84 96 72 C90 86 10 86 4 72 Z" fill="#a8703c" ${stroke(4)}/>` +
+    `<path d="M26 76 C24 50 30 34 40 34 C44 34 46 40 50 40 C54 40 56 34 60 34 C70 34 76 50 74 76 Z" fill="#c68a4c" ${stroke(4)}/>` +
+    `<path d="M26 66 C40 70 60 70 74 66 L74 74 C60 78 40 78 26 74 Z" fill="#6b4222"/>`,
+  // A tall, puffy chef's hat.
+  chef:
+    `<path d="M30 80 L30 56 C14 54 14 30 30 30 C30 14 50 8 56 22 C66 10 86 20 78 36 C90 42 82 58 70 56 L70 80 Z" fill="#ffffff" ${stroke(4)}/>` +
+    `<path d="M30 70 L70 70" stroke="#d8d2cc" stroke-width="4"/>`,
+  // A pirate tricorn with a skull-ish patch.
+  pirate:
+    `<path d="M6 76 C16 44 30 34 50 34 C70 34 84 44 94 76 C74 68 26 68 6 76 Z" fill="#2b2233" ${stroke(4)}/>` +
+    `<path d="M10 72 C30 64 70 64 90 72" fill="none" stroke="#ffd23f" stroke-width="4" stroke-linecap="round"/>` +
+    `<circle cx="50" cy="50" r="8" fill="#ffffff"/><path d="M45 50 L47 50 M53 50 L55 50" stroke="#2b2233" stroke-width="3" stroke-linecap="round"/>`,
+  // A beanie cap with a spinning propeller.
+  propeller:
+    `<path d="M22 80 C20 50 80 50 78 80 Z" fill="#ffd23f" ${stroke(4)}/>` +
+    `<path d="M22 80 C20 50 50 50 50 80 Z" fill="#ff6b5a"/><path d="M22 80 C20 50 80 50 78 80 Z" fill="none" ${stroke(4)}/>` +
+    `<path d="M50 54 L50 40" ${stroke(4)}/>` +
+    `<path d="M50 40 C38 32 22 34 22 40 C22 46 38 46 50 40 C62 34 78 34 78 40 C78 46 62 46 50 40 Z" fill="#3d8fe0" ${stroke(3)}/>`,
+  // A tall black top hat with a red band.
+  tophat:
+    `<path d="M8 80 C20 72 80 72 92 80 C80 86 20 86 8 80 Z" fill="#2b2233" ${stroke(4)}/>` +
+    `<rect x="26" y="22" width="48" height="56" rx="4" fill="#2b2233" ${stroke(4)}/>` +
+    `<rect x="26" y="60" width="48" height="10" fill="#e0447a"/>`,
+  // A starry wizard hat with a floppy tip.
+  wizard:
+    `<path d="M8 80 C20 72 80 72 92 80 C80 86 20 86 8 80 Z" fill="#6a4cc2" ${stroke(4)}/>` +
+    `<path d="M22 78 L46 18 C52 6 70 4 78 14 C66 12 58 18 58 30 L78 78 Z" fill="#7d5fd6" ${stroke(4)}/>` +
+    `<path d="M44 54 L47 60 L54 60 L48 64 L50 71 L44 67 L38 71 L40 64 L34 60 L41 60 Z" fill="#ffd23f"/>` +
+    `<circle cx="60" cy="40" r="3" fill="#ffd23f"/><circle cx="36" cy="42" r="2.5" fill="#ffffff"/>`,
+};
+
+function hatSvg(hat: HatKind): string {
+  return svg(HAT_SIZE.width, HAT_SIZE.height, '', HAT_ART[hat]);
 }
 
 // --- Predators -----------------------------------------------------------
@@ -692,6 +766,7 @@ export function allSprites(): SpriteArt[] {
   }));
   return [
     ...ducks,
+    ...HAT_ORDER.map((hat) => ({ key: `hat-${hat}`, svg: hatSvg(hat), width: 60, height: 54 })),
     { key: 'raccoon', svg: raccoonSvg(), width: 92, height: 67 },
     { key: 'fox', svg: foxSvg(), width: 100, height: 68 },
     { key: 'mink', svg: minkSvg(), width: 88, height: 44 },

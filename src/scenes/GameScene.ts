@@ -44,6 +44,9 @@ import { nameAt, nextUpgrade, statsAt } from '../logic/upgrades';
 import { challengeSettings, dailyFor } from '../logic/daily';
 import { dailyRecord, recordDailyWin, recordWin, scoreFor, starsFor } from '../logic/progress';
 import { loadProgress, saveProgress } from '../save';
+import type { HatKind } from '../data/hats';
+import { hatFor, newlyUnlocked, totalStars } from '../logic/hats';
+import { duckWithHat, hatImage, placeHat } from '../ui/hats';
 import type { ResultSceneData } from './ResultScene';
 import { BACKDROP, COLORS, DEPTH, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
 import { drawBigButton, drawCard, drawPill, drawRoundButton, drawSoundButton, popSpeechBubble } from '../ui/widgets';
@@ -104,6 +107,8 @@ interface DuckSprite {
   baseSize: number;
   /** Blue glow while the fountain's spray is refreshing this duck. */
   refresh: Phaser.GameObjects.Image;
+  /** The hat it's wearing (kept on its head every frame). */
+  hat?: Phaser.GameObjects.Image;
 }
 
 interface Nest {
@@ -143,6 +148,8 @@ interface Effects {
 export class GameScene extends Phaser.Scene {
   private difficulty: Difficulty = 'easy';
   private levelIndex = 0;
+  /** The hat each duck is wearing (from the Wardrobe). */
+  private hats: Partial<Record<DuckKind, HatKind>> = {};
   /** The Daily Challenge being played, if any. */
   private daily?: { date: string; challenge: Challenge };
   private level!: Level;
@@ -204,6 +211,12 @@ export class GameScene extends Phaser.Scene {
     setupCamera(this);
     // Scene restarts reuse this object, so reset everything here.
     const info = LEVELS[this.levelIndex]!;
+    const progress = loadProgress();
+    this.hats = {};
+    for (const kind of DUCK_ORDER) {
+      const hat = hatFor(progress, kind);
+      if (hat) this.hats[kind] = hat;
+    }
     this.level = parseLevel(info.map);
     this.state = createGame(mapFromLevel(this.level), info.waves, this.difficulty, this.daily?.challenge);
     this.selected = DUCK_ORDER.find((kind) => isDuckAllowed(this.state, kind)) ?? 'sunny';
@@ -631,7 +644,7 @@ export class GameScene extends Phaser.Scene {
   private drawPicker(): void {
     DUCK_ORDER.forEach((kind, i) => {
       const card = drawCard(this.add.graphics(), CARD.width, CARD.height);
-      const duck = this.add.image(0, -6, `duck-${kind}`).setDisplaySize(56, 56);
+      const duck = duckWithHat(this, kind, 0, -6, 56, this.hats[kind]);
       const pea = this.add.image(-18, 30, 'icon-pea').setDisplaySize(18, 18);
       const cost = this.add
         .text(-6, 30, String(DUCKS[kind].cost), textStyle(19, { color: COLORS.inkCss, strokeThickness: 0 }))
@@ -672,7 +685,7 @@ export class GameScene extends Phaser.Scene {
         this.cancelMove();
         this.selected = kind;
         playSound(this, 'tap');
-        this.tweens.add({ targets: duck, scale: duck.scale * 1.15, duration: 90, yoyo: true });
+        this.tweens.add({ targets: duck, scale: 1.15, duration: 90, yoyo: true });
         this.showPickerInfo(kind);
         this.refreshHud();
       });
@@ -756,8 +769,11 @@ export class GameScene extends Phaser.Scene {
       .setBlendMode(Phaser.BlendModes.ADD)
       .setVisible(false);
     this.tweens.add({ targets: refresh, alpha: 0.45, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
-    const root = this.add.container(at.x, at.y, [refresh, art, badge]).setDepth(entityDepth(at.y));
-    this.duckSprites.set(id, { root, art, range, badge, baseSize: size, refresh });
+    const hatKind = this.hats[kind];
+    const hat = hatKind ? hatImage(this, hatKind) : undefined;
+    if (hat) placeHat(hat, art);
+    const root = this.add.container(at.x, at.y, [refresh, art, ...(hat ? [hat] : []), badge]).setDepth(entityDepth(at.y));
+    this.duckSprites.set(id, { root, art, range, badge, baseSize: size, refresh, hat });
     // Tap a duck to see its power, or to move or sell it.
     const tex = art.frame;
     art
@@ -797,7 +813,7 @@ export class GameScene extends Phaser.Scene {
     const stats = { ...statsAt(kind, level), name: nameAt(kind, level) };
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const lines: Phaser.GameObjects.GameObject[] = [
-      this.add.image(-118, -58, `duck-${kind}`).setDisplaySize(64, 64),
+      duckWithHat(this, kind, -118, -58, 64, this.hats[kind]),
       this.add.text(-80, -74, stats.name, textStyle(28, { ...ink, weight: '700' })).setOrigin(0, 0.5),
       this.add.image(-68, -44, `power-${stats.power.icon}`).setDisplaySize(24, 24),
       this.add.text(-50, -44, stats.power.name, textStyle(20, { ...ink, color: '#2a66a8', weight: '700' })).setOrigin(0, 0.5),
@@ -1392,11 +1408,12 @@ export class GameScene extends Phaser.Scene {
             ? (dailyRecord(progress, this.daily.date, this.difficulty)?.bestScore ?? 0)
             : (progress.levels[this.difficulty][this.levelIndex]?.bestScore ?? 0);
           result.newBest = previousBest > 0 && result.score > previousBest;
-          saveProgress(
-            this.daily
-              ? recordDailyWin(progress, this.daily.date, this.difficulty, result.stars, result.score)
-              : recordWin(progress, this.difficulty, this.levelIndex, result.stars, result.score),
-          );
+          const saved = this.daily
+            ? recordDailyWin(progress, this.daily.date, this.difficulty, result.stars, result.score)
+            : recordWin(progress, this.difficulty, this.levelIndex, result.stars, result.score);
+          saveProgress(saved);
+          // New stars can unlock hats.
+          result.newHats = newlyUnlocked(totalStars(progress), totalStars(saved));
         }
         this.time.delayedCall(1000, () => this.scene.start('ResultScene', result));
         break;
@@ -1503,6 +1520,7 @@ export class GameScene extends Phaser.Scene {
         sprite.art.clearTint();
         sprite.art.setAngle(0);
       }
+      if (sprite.hat) placeHat(sprite.hat, sprite.art);
     }
   }
 

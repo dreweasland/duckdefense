@@ -1,4 +1,6 @@
 import type { Difficulty } from '../data/difficulty';
+import { DUCK_ORDER, type DuckKind } from '../data/ducks';
+import { HATS, type HatKind } from '../data/hats';
 
 // Saved progress: which levels are beaten, stars, and best scores, per difficulty.
 
@@ -12,6 +14,8 @@ export interface Progress {
   levels: Record<Difficulty, Record<number, LevelRecord>>;
   /** The most recent Daily Challenge played, and the best result on each difficulty. */
   daily?: { date: string; results: Partial<Record<Difficulty, LevelRecord>> };
+  /** The hat each duck is wearing (picked in the Wardrobe). */
+  hats?: Partial<Record<DuckKind, HatKind>>;
 }
 
 export function emptyProgress(): Progress {
@@ -73,6 +77,7 @@ export function parseProgress(text: string | null): Progress {
     const data = JSON.parse(text) as {
       levels?: Partial<Record<Difficulty, Record<string, Partial<LevelRecord>>>>;
       daily?: { date?: unknown; results?: Partial<Record<Difficulty, Partial<LevelRecord>>> };
+      hats?: Record<string, unknown>;
     };
     for (const difficulty of ['easy', 'normal'] as const) {
       for (const [key, record] of Object.entries(data.levels?.[difficulty] ?? {})) {
@@ -94,6 +99,12 @@ export function parseProgress(text: string | null): Progress {
       }
       progress.daily = { date: daily.date, results };
     }
+    const hats: Partial<Record<DuckKind, HatKind>> = {};
+    for (const kind of DUCK_ORDER) {
+      const hat = data.hats?.[kind];
+      if (typeof hat === 'string' && hat in HATS) hats[kind] = hat as HatKind;
+    }
+    if (Object.keys(hats).length > 0) progress.hats = hats;
   } catch {
     // Corrupt save: start fresh rather than crash.
   }
