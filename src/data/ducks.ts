@@ -22,18 +22,24 @@ export interface DuckStats {
   wingFlap?: {
     everyNthAttack: number; // e.g. 5 = every 5th hit is a Wing Flap
     pushBack: number; // pixels the predator gets knocked back along the path
+    radius?: number; // also blows back every predator this close to the target (Tornado Potato)
   };
   alarmQuack?: {
     cooldown: number; // seconds between quacks
     stunTime: number; // seconds every predator in range is frozen
+    weaken?: number; // frozen predators take this much more damage from everyone (0.5 = +50%)
   };
   slowZone?: {
     slow: number; // ground predators in range walk at this fraction of their speed (0.5 = half)
   };
   fearless?: boolean; // never scared by hawks or the Night Bandit
+  flyerDamage?: number; // multiplies damage against flying predators (2 = double)
+  braveAura?: { radius: number }; // other ducks this close are never scared either
 
   // Two upgrades, bought in order from the duck's panel. Each lists only what changes.
   upgrades: [Upgrade, Upgrade];
+  // Then a final upgrade: pick ONE of these two paths. A duck keeps the path it picks.
+  finals: [Upgrade, Upgrade];
 }
 
 export interface Upgrade {
@@ -48,6 +54,9 @@ export interface Upgrade {
     wingFlap?: Partial<NonNullable<DuckStats['wingFlap']>>;
     alarmQuack?: Partial<NonNullable<DuckStats['alarmQuack']>>;
     slowZone?: Partial<NonNullable<DuckStats['slowZone']>>;
+    canHitFlying?: boolean;
+    flyerDamage?: number;
+    braveAura?: DuckStats['braveAura'];
   };
 }
 
@@ -84,6 +93,10 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
       { name: 'Seasoned Sunny', cost: 90, description: 'Hits harder, bigger splash.', changes: { damage: 16, splashRadius: 55 } },
       { name: 'Legendary Sunny', cost: 160, description: 'Reaches farther, throws faster.', changes: { range: 175, attackInterval: 0.6 } },
     ],
+    finals: [
+      { name: 'Tidal Sunny', cost: 260, description: 'A giant splash that soaks a whole crowd.', changes: { splashRadius: 95, damage: 20 } },
+      { name: 'Eagle-Eye Sunny', cost: 260, description: 'Sees way farther. Double damage to hawks.', changes: { range: 240, damage: 20, flyerDamage: 2 } },
+    ],
   },
 
   // Potato, the Black Swedish chaser: fast pecks, and his untucked wing
@@ -106,6 +119,15 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
         description: 'Flaps every 4th peck and pushes harder.',
         changes: { damage: 8, wingFlap: { everyNthAttack: 4, pushBack: 80 } },
       },
+    ],
+    finals: [
+      {
+        name: 'Tornado Potato',
+        cost: 280,
+        description: 'Every 3rd peck, a gust blows back every predator nearby.',
+        changes: { damage: 10, wingFlap: { everyNthAttack: 3, pushBack: 110, radius: 90 } },
+      },
+      { name: 'Rapid Potato', cost: 280, description: 'Pecks twice as fast!', changes: { attackInterval: 0.13, damage: 9 } },
     ],
   },
 
@@ -130,6 +152,15 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
         changes: { range: 190, alarmQuack: { cooldown: 4 } },
       },
     ],
+    finals: [
+      { name: 'Thunder Chester', cost: 300, description: 'His quack reaches way, way farther.', changes: { range: 260 } },
+      {
+        name: 'Wise Old Chester',
+        cost: 300,
+        description: 'Frozen predators take 50% more damage from everyone.',
+        changes: { alarmQuack: { weaken: 0.5 } },
+      },
+    ],
   },
 
   // Curtis, the unbothered Magpie: a light peck, but nothing scares him, and
@@ -149,6 +180,15 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
     upgrades: [
       { name: 'Stubborn Curtis', cost: 70, description: 'Predators trudge even slower.', changes: { slowZone: { slow: 0.25 } } },
       { name: 'Unmovable Curtis', cost: 140, description: 'Bigger slow zone, harder peck.', changes: { range: 190, damage: 8 } },
+    ],
+    finals: [
+      { name: 'Boulder Curtis', cost: 220, description: 'Predators crawl, in an even bigger zone.', changes: { range: 220, slowZone: { slow: 0.15 } } },
+      {
+        name: 'Guardian Curtis',
+        cost: 220,
+        description: 'Ducks near him are never scared, just like him.',
+        changes: { damage: 10, braveAura: { radius: 200 } },
+      },
     ],
   },
 };

@@ -4,7 +4,7 @@ import type { Wave } from '../data/waves';
 import { createBattle, placeDuck, spawnEnemy, step } from './battle';
 import { buyDuck, canUpgrade, createGame, sellDuck, sellValue, upgradeDuck } from './game';
 import { makePath } from './path';
-import { MAX_UPGRADE_LEVEL, nameAt, nextUpgrade, statsAt, totalSpent } from './upgrades';
+import { MAX_UPGRADE_LEVEL, nameAt, nextUpgrade, statsAt, totalSpent, upgradeOptions } from './upgrades';
 
 describe('upgrade stats', () => {
   it('starts from the base stats', () => {
@@ -30,13 +30,23 @@ describe('upgrade stats', () => {
     expect(nameAt('sunny', 1)).toBe(DUCKS.sunny.upgrades[0].name);
   });
 
-  it('has exactly two upgrades per duck, each actually better', () => {
+  it('has two upgrades then a choice of two final paths per duck, each actually better', () => {
     for (const kind of DUCK_ORDER) {
       expect(nextUpgrade(kind, MAX_UPGRADE_LEVEL)).toBeUndefined();
-      for (let level = 1; level <= MAX_UPGRADE_LEVEL; level++) {
-        expect(JSON.stringify(statsAt(kind, level)), `${kind} level ${level}`).not.toBe(JSON.stringify(statsAt(kind, level - 1)));
+      expect(upgradeOptions(kind, 2)).toHaveLength(2);
+      for (const path of [0, 1]) {
+        for (let level = 1; level <= MAX_UPGRADE_LEVEL; level++) {
+          expect(JSON.stringify(statsAt(kind, level, path)), `${kind} level ${level}`).not.toBe(JSON.stringify(statsAt(kind, level - 1, path)));
+        }
       }
+      // The two paths really are different.
+      expect(JSON.stringify(statsAt(kind, 3, 0))).not.toBe(JSON.stringify(statsAt(kind, 3, 1)));
     }
+  });
+
+  it('names a duck on a final path after that path', () => {
+    expect(nameAt('sunny', 3, 0)).toBe(DUCKS.sunny.finals[0].name);
+    expect(nameAt('sunny', 3, 1)).toBe(DUCKS.sunny.finals[1].name);
   });
 });
 
@@ -44,7 +54,7 @@ describe('buying upgrades', () => {
   const path = makePath([{ x: 0, y: 0 }, { x: 200, y: 0 }]);
   const wave: Wave = { time: 'day', groups: [{ enemy: 'raccoon', count: 1, every: 1 }], bonusPeas: 0 };
 
-  it('spends peas and raises the level, up to the max', () => {
+  it('spends peas and raises the level, then takes the final path you pick, up to the max', () => {
     const game = createGame({ path }, [wave], 'normal');
     game.peas = 10_000;
     const duck = buyDuck(game, 'sunny', { x: 0, y: 50 })!;
@@ -53,8 +63,13 @@ describe('buying upgrades', () => {
     expect(duck.level).toBe(1);
     expect(game.peas).toBe(before - DUCKS.sunny.upgrades[0].cost);
     expect(upgradeDuck(game, duck.id)).toBe(true);
+    const beforeFinal = game.peas;
+    expect(upgradeDuck(game, duck.id, 1)).toBe(true);
+    expect(duck.path).toBe(1);
+    expect(game.peas).toBe(beforeFinal - DUCKS.sunny.finals[1].cost);
     expect(upgradeDuck(game, duck.id)).toBe(false);
     expect(duck.level).toBe(MAX_UPGRADE_LEVEL);
+    expect(sellValue('sunny', 3, 0, 1)).toBe(Math.floor(totalSpent('sunny', 3, 1) * SELL_REFUND));
   });
 
   it("won't upgrade without enough peas", () => {

@@ -12,7 +12,7 @@ import { ENDLESS } from '../data/endless';
 import { PERKS, type PerkId } from '../data/perks';
 import { offerPerks, perkMods, type PerksTaken } from './perks';
 import { challengeSettings, challengeWaves } from './daily';
-import { nextUpgrade, totalSpent } from './upgrades';
+import { isFinalChoice, nextUpgrade, totalSpent, upgradeOptions } from './upgrades';
 import type { Level } from './level';
 import { makePath, type Path } from './path';
 
@@ -158,8 +158,8 @@ export function buyDuck(game: Game, kind: DuckKind, at: Point): Duck | undefined
 }
 
 /** Peas you'd get back for selling a duck: part of everything spent on it, upgrades and training included. */
-export function sellValue(kind: DuckKind, level = 0, training = 0): number {
-  let spent = totalSpent(kind, level);
+export function sellValue(kind: DuckKind, level = 0, training = 0, path = 0): number {
+  let spent = totalSpent(kind, level, path);
   for (let t = 0; t < training; t++) spent += trainingCostAt(t);
   return Math.floor(spent * SELL_REFUND);
 }
@@ -172,7 +172,7 @@ function trainingCostAt(done: number): number {
 /** What the next level of training costs for a duck, or undefined if it can't train (yet). */
 export function trainingCost(game: Game, duckId: number): number | undefined {
   const duck = game.battle.ducks.find((d) => d.id === duckId);
-  if (!game.endless || !duck || nextUpgrade(duck.kind, duck.level)) return undefined;
+  if (!game.endless || !duck || upgradeOptions(duck.kind, duck.level).length > 0) return undefined;
   return trainingCostAt(duck.training);
 }
 
@@ -201,18 +201,22 @@ export function repairHouse(game: Game): boolean {
   return true;
 }
 
-/** Whether a duck can be upgraded right now (not maxed out, and you have the peas). */
-export function canUpgrade(game: Game, duckId: number): boolean {
+/**
+ * Whether a duck can be upgraded right now (not maxed out, and you have the peas). For the
+ * final upgrade, `path` picks which of the two (0 or 1).
+ */
+export function canUpgrade(game: Game, duckId: number, path = 0): boolean {
   const duck = game.battle.ducks.find((d) => d.id === duckId);
-  const upgrade = duck && nextUpgrade(duck.kind, duck.level);
+  const upgrade = duck && nextUpgrade(duck.kind, duck.level, path);
   return !isOver(game) && !!upgrade && game.peas >= upgrade.cost;
 }
 
-/** Buys a duck's next upgrade. Returns false if it's maxed out or you can't afford it. */
-export function upgradeDuck(game: Game, duckId: number): boolean {
-  if (!canUpgrade(game, duckId)) return false;
+/** Buys a duck's next upgrade (for the final one, the path picked). Returns false if it's maxed out or you can't afford it. */
+export function upgradeDuck(game: Game, duckId: number, path = 0): boolean {
+  if (!canUpgrade(game, duckId, path)) return false;
   const duck = game.battle.ducks.find((d) => d.id === duckId)!;
-  game.peas -= nextUpgrade(duck.kind, duck.level)!.cost;
+  game.peas -= nextUpgrade(duck.kind, duck.level, path)!.cost;
+  if (isFinalChoice(duck.kind, duck.level)) duck.path = path;
   duck.level++;
   return true;
 }
@@ -223,7 +227,7 @@ export function sellDuck(game: Game, duckId: number): number | undefined {
   const duck = game.battle.ducks.find((d) => d.id === duckId);
   if (!duck) return undefined;
   game.battle.ducks = game.battle.ducks.filter((d) => d !== duck);
-  const refund = sellValue(duck.kind, duck.level, duck.training);
+  const refund = sellValue(duck.kind, duck.level, duck.training, duck.path);
   game.peas += refund;
   return refund;
 }

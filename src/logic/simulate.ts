@@ -66,6 +66,8 @@ export interface Strategy {
   step?: number;
   /** Stop after this many waves (to keep very long Endless Pond runs quick to test). */
   maxWaves?: number;
+  /** Which final upgrade path to take (0 or 1, default 0). */
+  path?: number;
 }
 
 /** Before each wave, spend peas on `kind` ducks in the best slots (and upgrades, per the strategy). */
@@ -73,12 +75,13 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | n
   const game = createGame(mapFromLevel(parseLevel(info.map)), info.waves, difficulty, strategy.challenge, strategy.endless);
   const slots = bestSlots(info, kind ? DUCKS[kind].range : 0);
   const upgrades = strategy.upgrades ?? 'none';
+  const path = strategy.path ?? 0;
 
   /** The cheapest upgrade you can afford right now, if any. */
   const cheapestUpgrade = () =>
     game.battle.ducks
-      .filter((d) => canUpgrade(game, d.id))
-      .sort((a, b) => nextUpgrade(a.kind, a.level)!.cost - nextUpgrade(b.kind, b.level)!.cost)[0];
+      .filter((d) => canUpgrade(game, d.id, path))
+      .sort((a, b) => nextUpgrade(a.kind, a.level, path)!.cost - nextUpgrade(b.kind, b.level, path)!.cost)[0];
   /** The duck whose next training level costs least, if you can afford one. */
   const cheapestTraining = () =>
     game.battle.ducks
@@ -94,12 +97,12 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | n
       const upgrade = upgrades === 'none' ? undefined : cheapestUpgrade();
       if (upgrades === 'upgrade-first' && anyUpgradeLeft()) {
         // Save up for upgrades while any duck can still improve.
-        if (upgrade) upgradeDuck(game, upgrade.id);
+        if (upgrade) upgradeDuck(game, upgrade.id, path);
         else break;
       } else if (canPlace) {
         buyDuck(game, kind!, slots.shift()!);
       } else if (upgrade) {
-        upgradeDuck(game, upgrade.id);
+        upgradeDuck(game, upgrade.id, path);
       } else if (strategy.extras && repairHouse(game)) {
         // Fixed a heart.
       } else if (strategy.extras && cheapestTraining()) {

@@ -783,3 +783,66 @@ describe('freeze limits', () => {
     expect(frozenShare(1, 2, 0)).toBeCloseTo(alarmQuack!.stunTime / alarmQuack!.cooldown, 1);
   });
 });
+
+describe('final upgrade paths', () => {
+  it('Eagle-Eye Sunny does double damage to hawks', () => {
+    const battle = createBattle(makePath([{ x: 0, y: 0 }, { x: 2000, y: 0 }]), { sky: [{ x: 1000, y: -300 }] });
+    const hawk = spawnEnemy(battle, 'hawk');
+    // Close enough to hit it, but outside its scare range.
+    const at = enemyPosition(hawk);
+    const duck = placeDuck(battle, 'sunny', { x: at.x, y: at.y - ENEMIES.hawk.scares!.radius - 20 });
+    duck.level = 3;
+    duck.path = 1;
+    step(battle, 0);
+    expect(hawk.hp).toBeCloseTo(ENEMIES.hawk.maxHp - statsAt('sunny', 3, 1).damage * 2);
+  });
+
+  it("Tornado Potato's gust blows back every predator near the target", () => {
+    const battle = newBattle();
+    const front = spawnEnemy(battle, 'raccoon');
+    const nearby = spawnEnemy(battle, 'raccoon');
+    front.distance = 1000;
+    nearby.distance = 950;
+    front.hp = nearby.hp = 1e6;
+    const duck = placeDuck(battle, 'potato', { x: 1000, y: 20 });
+    duck.level = 3;
+    duck.path = 0;
+    duck.attacks = statsAt('potato', 3, 0).wingFlap!.everyNthAttack - 1;
+    step(battle, 0);
+    const push = statsAt('potato', 3, 0).wingFlap!.pushBack;
+    expect(front.distance).toBeCloseTo(1000 - push, 0);
+    expect(nearby.distance).toBeCloseTo(950 - push, 0);
+  });
+
+  it('Wise Old Chester makes frozen predators take more damage from everyone', () => {
+    const battle = newBattle();
+    const raccoon = spawnEnemy(battle, 'raccoon');
+    raccoon.distance = 1000;
+    const chester = placeDuck(battle, 'chester', { x: 1000, y: 150 });
+    chester.level = 3;
+    chester.path = 1;
+    step(battle, 0); // quack: frozen and weakened
+    expect(raccoon.weakness).toBe(0.5);
+    const hpAfterQuack = raccoon.hp;
+    placeDuck(battle, 'potato', { x: 1000, y: 20 });
+    step(battle, 0);
+    expect(hpAfterQuack - raccoon.hp).toBeCloseTo(DUCKS.potato.damage * 1.5);
+    battle.ducks = battle.ducks.filter((d) => d !== chester); // no more quacks
+    step(battle, 10); // the freeze wears off, and so does the weakness
+    expect(raccoon.weakness).toBe(0);
+  });
+
+  it('Guardian Curtis keeps the ducks near him from getting scared', () => {
+    // Hawks fly straight down from (500, -500) to the duck house at (500, 500).
+    const battle = createBattle(makePath([{ x: 0, y: 0 }, { x: 500, y: 500 }]), { sky: [{ x: 500, y: -500 }] });
+    const sunny = placeDuck(battle, 'sunny', { x: 500, y: -100 });
+    const curtis = placeDuck(battle, 'curtis', { x: 660, y: -100 });
+    curtis.level = 3;
+    curtis.path = 1;
+    const hawk = spawnEnemy(battle, 'hawk');
+    hawk.distance = 400; // right over Sunny (and too far from Curtis to scare him)
+    const events = step(battle, 0);
+    expect(sunny.scaredTime).toBe(0);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'scared', fearlessIds: expect.arrayContaining([sunny.id]) }));
+  });
+});

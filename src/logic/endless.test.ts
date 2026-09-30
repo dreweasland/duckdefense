@@ -61,19 +61,21 @@ describe('Endless Pond waves', () => {
 describe('Endless Pond extras', () => {
   const newGame = (endless = true) => createGame(mapFromLevel(parseLevel(LEVELS[ENDLESS.level]!.map)), endlessWaves(), 'easy', undefined, endless);
 
-  it('let a duck with both upgrades keep training, each level costing more', () => {
+  it('let a fully upgraded duck keep training, each level costing more', () => {
     const game = newGame();
     game.peas = 10_000;
     const duck = buyDuck(game, 'sunny', { x: 0, y: 0 })!;
     expect(trainingCost(game, duck.id)).toBeUndefined(); // upgrades first
     upgradeDuck(game, duck.id);
     upgradeDuck(game, duck.id);
+    expect(trainingCost(game, duck.id)).toBeUndefined(); // the final upgrade too
+    upgradeDuck(game, duck.id);
     const first = trainingCost(game, duck.id)!;
     expect(first).toBe(ENDLESS.training.firstCost);
     expect(trainDuck(game, duck.id)).toBe(true);
     expect(duck.training).toBe(1);
     expect(trainingCost(game, duck.id)).toBeGreaterThan(first);
-    expect(sellValue('sunny', 2, 1)).toBeGreaterThan(sellValue('sunny', 2));
+    expect(sellValue('sunny', 3, 1)).toBeGreaterThan(sellValue('sunny', 3));
   });
 
   it('let you fix the duck house for peas, up to the hearts you started with', () => {
@@ -95,6 +97,7 @@ describe('Endless Pond extras', () => {
     game.peas = 10_000;
     game.hearts -= 1;
     const duck = buyDuck(game, 'sunny', { x: 0, y: 0 })!;
+    upgradeDuck(game, duck.id);
     upgradeDuck(game, duck.id);
     upgradeDuck(game, duck.id);
     expect(trainDuck(game, duck.id)).toBe(false);

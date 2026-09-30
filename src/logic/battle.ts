@@ -36,6 +36,8 @@ export interface Enemy {
   revealedTime: number;
   /** Ducks that have slowed this predator (so each Curtis counts it once in the damage report). */
   slowedBy: number[];
+  /** While frozen by Wise Old Chester, it takes this much more damage (0.5 = +50%). */
+  weakness: number;
 }
 
 /**
@@ -64,8 +66,10 @@ export interface Duck {
   abilityCooldown: number;
   /** Attacks made so far, for "every Nth attack" abilities. */
   attacks: number;
-  /** Upgrades bought: 0, 1, or 2. */
+  /** Upgrades bought: 0, 1, 2, or 3 (the final upgrade). */
   level: number;
+  /** Which final upgrade path it picked (0 or 1), once it's at level 3. */
+  path: number;
   /** Endless Pond training levels bought after both upgrades (each one hits harder). */
   training: number;
   /** Seconds this duck stays scared (no attacks or powers). */
@@ -176,6 +180,7 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind): Enemy {
     summonTime: stats.summons?.every ?? 0,
     revealedTime: 0,
     slowedBy: [],
+    weakness: 0,
   };
   battle.enemies.push(enemy);
   return enemy;
@@ -190,6 +195,7 @@ export function placeDuck(battle: Battle, kind: DuckKind, position: Point): Duck
     abilityCooldown: 0,
     attacks: 0,
     level: 0,
+    path: 0,
     training: 0,
     scaredTime: 0,
     targeting: DEFAULT_TARGETING,
@@ -227,7 +233,7 @@ function enemiesInRange(battle: Battle, from: Point, range: number): Enemy[] {
  * attack speed, Chester's freeze, Curtis's slow).
  */
 export function duckStats(battle: Battle, duck: Duck): DuckStats {
-  const base = statsAt(duck.kind, duck.level);
+  const base = statsAt(duck.kind, duck.level, duck.path);
   const m = battle.mods;
   return {
     ...base,
@@ -354,7 +360,15 @@ export function isRefreshed(battle: Battle, duck: Duck): boolean {
   return !!fountain?.on && distance(duck.position, fountain.position) <= FOUNTAIN.range;
 }
 
-/** Scares the ducks within `radius` of a point (fearless ducks just shrug). */
+/** Whether a Guardian Curtis (or any duck with a brave aura) is close enough to keep this duck calm. */
+export function isGuarded(battle: Battle, duck: Duck): boolean {
+  return battle.ducks.some((other) => {
+    const aura = other !== duck && statsAt(other.kind, other.level, other.path).braveAura;
+    return !!aura && distance(other.position, duck.position) <= aura.radius;
+  });
+}
+
+/** Scares the ducks within `radius` of a point (fearless ducks, and ducks a Guardian keeps calm, just shrug). */
 function scareDucks(
   battle: Battle,
   enemy: Enemy,
@@ -369,7 +383,7 @@ function scareDucks(
     if (distance(duck.position, at) > radius) continue;
     if (onlyOnce && enemy.scared.includes(duck.id)) continue;
     enemy.scared.push(duck.id);
-    if (statsAt(duck.kind, duck.level).fearless) {
+    if (statsAt(duck.kind, duck.level, duck.path).fearless || isGuarded(battle, duck)) {
       fearlessIds.push(duck.id);
     } else {
       duck.scaredTime = Math.max(duck.scaredTime, time * battle.mods.scare);
@@ -394,6 +408,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     enemy.slowed = slow < 1;
     if (enemy.stopTime > 0) {
       enemy.stopTime = Math.max(0, enemy.stopTime - dt);
+      if (enemy.stopTime === 0) enemy.weakness = 0; // only weakened while frozen
     } else {
       enemy.distance += enemy.speed * slow * dt;
     }
@@ -452,6 +467,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
           const stun = stats.alarmQuack.stunTime * (1 - (enemyStats.stunResistance ?? 0));
           enemy.stopTime = Math.max(enemy.stopTime, stun);
           enemy.freezeRecovery = stun * (1 + FREEZE_RECOVERY);
+          if (stats.alarmQuack.weaken) enemy.weakness = Math.max(enemy.weakness, stats.alarmQuack.weaken);
         }
         // The quack flushes every sneaky predator in range out of the grass, on guard or not.
         for (const enemy of inRange) {
@@ -488,7 +504,9 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
       (battle.night ? battle.mods.nightDamage : 1);
     for (const enemy of hit) {
       const before = enemy.hp;
-      enemy.hp -= damageTo(enemy, damage);
+      const flyer = isFlying(enemy) ? (stats.flyerDamage ?? 1) : 1;
+      const weakened = enemy.stopTime > 0 ? 1 + enemy.weakness : 1;
+      enemy.hp -= damageTo(enemy, damage * flyer * weakened);
       credit(battle, duck, 'damage', before - Math.max(0, enemy.hp));
       if (enemy.hp <= 0) credit(battle, duck, 'chasedOff', 1);
     }
@@ -498,12 +516,19 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
 
     // Potato's Wing Flap: every Nth hit knocks the target back, unless it was just knocked
     // back (it needs a moment to recover). Heavy predators shrug off most of the push.
+    // Tornado Potato's gust blows back every predator near the target too.
     const wingFlap = !!stats.wingFlap && duck.attacks % stats.wingFlap.everyNthAttack === 0 && target.pushRecovery === 0;
     if (wingFlap && stats.wingFlap) {
-      const push = stats.wingFlap.pushBack * (1 - (ENEMIES[target.kind].pushResistance ?? 0));
-      target.distance = Math.max(0, target.distance - push);
-      target.pushRecovery = WING_FLAP_RECOVERY;
-      credit(battle, duck, 'special', 1);
+      const { radius = 0, pushBack } = stats.wingFlap;
+      const blown = battle.enemies.filter(
+        (e) => e === target || (radius > 0 && e.hp > 0 && e.pushRecovery === 0 && distance(enemyPosition(e), targetPos) <= radius),
+      );
+      for (const enemy of blown) {
+        const push = pushBack * (1 - (ENEMIES[enemy.kind].pushResistance ?? 0));
+        enemy.distance = Math.max(0, enemy.distance - push);
+        enemy.pushRecovery = WING_FLAP_RECOVERY;
+      }
+      credit(battle, duck, 'special', blown.length);
     }
 
     events.push({ type: 'attack', duckId: duck.id, target: targetPos, hitIds: hit.map((e) => e.id), wingFlap });

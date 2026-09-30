@@ -46,7 +46,7 @@ import {
 } from '../logic/game';
 import { closestPointOnPolyline, type Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
-import { nameAt, nextUpgrade, statsAt } from '../logic/upgrades';
+import { isFinalChoice, nameAt, nextUpgrade, statsAt, upgradeOptions } from '../logic/upgrades';
 import { challengeSettings, dailyFor } from '../logic/daily';
 import { dailyRecord, recordDailyWin, recordEndless, recordWin, scoreFor, starsFor } from '../logic/progress';
 import { ENDLESS } from '../data/endless';
@@ -899,12 +899,12 @@ export class GameScene extends Phaser.Scene {
   // --- Duck info, selling, and moving --------------------------------------
 
   /** Lines about a duck's power, hawks, and the Pecking Loop, for info cards. */
-  private duckInfoLines(kind: DuckKind, partner?: DuckKind, level = 0): Phaser.GameObjects.GameObject[] {
-    const stats = { ...statsAt(kind, level), name: nameAt(kind, level) };
+  private duckInfoLines(kind: DuckKind, partner?: DuckKind, level = 0, path = 0): Phaser.GameObjects.GameObject[] {
+    const stats = { ...statsAt(kind, level, path), name: nameAt(kind, level, path) };
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const lines: Phaser.GameObjects.GameObject[] = [
       duckWithHat(this, kind, -118, -58, 64, this.hats[kind]),
-      this.add.text(-80, -74, stats.name, textStyle(28, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+      this.fitWidth(this.add.text(-80, -74, stats.name, textStyle(28, { ...ink, weight: '700' })).setOrigin(0, 0.5), 222),
       this.add.image(-68, -44, `power-${stats.power.icon}`).setDisplaySize(24, 24),
       this.add.text(-50, -44, stats.power.name, textStyle(20, { ...ink, color: '#2a66a8', weight: '700' })).setOrigin(0, 0.5),
       this.add
@@ -934,6 +934,12 @@ export class GameScene extends Phaser.Scene {
     lines.push(this.add.text(-126, 70, '♥', textStyle(18, { color: '#ff7aa2', stroke: '#ffffff', strokeThickness: 3 })).setOrigin(0.5));
     lines.push(this.add.text(-108, 70, loopText, textStyle(16, { ...ink, color: partner ? '#e0447a' : '#8a5a70' })).setOrigin(0, 0.5));
     return lines;
+  }
+
+  /** Shrinks a line of text to fit a width (long upgrade names like "Grand Old Chester"). */
+  private fitWidth(text: Phaser.GameObjects.Text, width: number): Phaser.GameObjects.Text {
+    if (text.width > width) text.setScale(width / text.width);
+    return text;
   }
 
   private closePopup(): void {
@@ -1018,7 +1024,7 @@ export class GameScene extends Phaser.Scene {
     const H = 530; // panel height; content is laid out from its center
     const card = drawCard(this.add.graphics(), 310, H, { radius: 18 });
     const block = this.add.zone(0, 0, 310, H).setInteractive(); // taps on the panel itself don't close it
-    const info = this.add.container(0, -150, this.duckInfoLines(duck.kind, partner, duck.level));
+    const info = this.add.container(0, -150, this.duckInfoLines(duck.kind, partner, duck.level, duck.path));
     const stats = this.drawDuckReport(duckId, duck.kind, 0, -50);
     const aim = this.drawTargetingButtons(duckId, duck.kind, 0, 2);
     const divider = this.add.rectangle(0, 44, 270, 3, COLORS.ink, 0.12);
@@ -1027,7 +1033,31 @@ export class GameScene extends Phaser.Scene {
     // Upgrade section.
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const next = nextUpgrade(duck.kind, duck.level);
-    if (next) {
+    if (isFinalChoice(duck.kind, duck.level)) {
+      // The final upgrade: pick one of two paths (and keep it).
+      parts.push(this.add.text(0, 62, 'Final upgrade: pick one!', textStyle(18, { ...ink, color: '#8a5a20', weight: '700' })).setOrigin(0.5));
+      upgradeOptions(duck.kind, duck.level).forEach((option, path) => {
+        const x = path === 0 ? -71 : 71;
+        const affordable = canUpgrade(this.state, duckId, path);
+        parts.push(
+          drawCard(this.add.graphics(), 136, 122, { radius: 12, fill: 0xfff0b3, border: COLORS.gold, borderWidth: 3 }).setPosition(x, 132),
+          this.add.text(x, 88, option.name, { ...textStyle(15, { ...ink, weight: '700' }), align: 'center', wordWrap: { width: 128 } }).setOrigin(0.5, 0),
+          this.add
+            .text(x, 122, option.description, { ...textStyle(12, ink), align: 'center', wordWrap: { width: 126 } })
+            .setOrigin(0.5, 0.5),
+          drawBigButton(
+            this,
+            x,
+            167,
+            `${option.cost}`,
+            affordable ? COLORS.green : 0xb8b0a8,
+            affordable ? COLORS.greenDark : 0x8a8079,
+            () => this.upgrade(duckId, path),
+            { width: 118, height: 32, fontSize: 18, icon: 'icon-pea' },
+          ),
+        );
+      });
+    } else if (next) {
       const affordable = canUpgrade(this.state, duckId);
       parts.push(
         this.add.text(-138, 68, `Upgrade: ${next.name}`, textStyle(20, { ...ink, weight: '700' })).setOrigin(0, 0.5),
@@ -1071,7 +1101,7 @@ export class GameScene extends Phaser.Scene {
     parts.push(drawBigButton(this, sellable ? -74 : 0, 222, 'Move', COLORS.blue, COLORS.blueDark, () => this.startMove(duckId), small));
     // Sell shows how many peas you get back (upgrades included). A Daily Challenge can turn it off.
     if (sellable) parts.push(
-      drawBigButton(this, 74, 222, `+${sellValue(duck.kind, duck.level, duck.training)}`, COLORS.orange, COLORS.orangeDark, () => this.sell(duckId), {
+      drawBigButton(this, 74, 222, `+${sellValue(duck.kind, duck.level, duck.training, duck.path)}`, COLORS.orange, COLORS.orangeDark, () => this.sell(duckId), {
         ...small,
         icon: 'icon-pea',
       }),
@@ -1173,11 +1203,11 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private upgrade(duckId: number): void {
+  private upgrade(duckId: number, path = 0): void {
     const duck = this.state.battle.ducks.find((d) => d.id === duckId);
     const sprite = this.duckSprites.get(duckId);
     if (!duck || !sprite) return;
-    if (!upgradeDuck(this.state, duckId)) {
+    if (!upgradeDuck(this.state, duckId, path)) {
       // Not enough peas: wiggle the counter and show the panel again.
       playSound(this, 'noPeas');
       this.tweens.add({ targets: this.peasText, x: '+=6', duration: 50, yoyo: true, repeat: 3 });
@@ -1189,7 +1219,7 @@ export class GameScene extends Phaser.Scene {
     const { x, y } = duck.position;
     this.fx.sparkles.explode(24, x, y - 30);
     this.ring(x, y - 30, 60, COLORS.gold, 400);
-    this.floatText({ x, y: y - 80 }, nameAt(duck.kind, duck.level), COLORS.goldCss);
+    this.floatText({ x, y: y - 80 }, nameAt(duck.kind, duck.level, duck.path), COLORS.goldCss);
     this.drawPeckingLoop();
     this.refreshHud();
     this.openDuckPanel(duckId);
@@ -1456,6 +1486,7 @@ export class GameScene extends Phaser.Scene {
       if (ENEMIES[enemy.kind].sneaky) sprite.art.setAlpha(isHidden(enemy) ? HIDDEN_ALPHA : 1);
       // A quick red "ouch" tint when hit (keeps the art readable even when hit constantly).
       if (time < sprite.flashUntil) sprite.art.setTint(0xff9a9a);
+      else if (enemy.stopTime > 0 && enemy.weakness > 0) sprite.art.setTint(0xd2b4ff); // Wise Old Chester's weakness
       else sprite.art.clearTint();
     }
   }
@@ -1569,16 +1600,16 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private duckSprite(duckId: number): { sprite: DuckSprite; kind: DuckKind; level: number; position: Point } | undefined {
+  private duckSprite(duckId: number): { sprite: DuckSprite; kind: DuckKind; level: number; path: number; position: Point } | undefined {
     const duck = this.state.battle.ducks.find((d) => d.id === duckId);
     const sprite = this.duckSprites.get(duckId);
-    return duck && sprite ? { sprite, kind: duck.kind, level: duck.level, position: duck.position } : undefined;
+    return duck && sprite ? { sprite, kind: duck.kind, level: duck.level, path: duck.path, position: duck.position } : undefined;
   }
 
   private showAttack(duckId: number, target: Point, hitIds: number[], wingFlap: boolean): void {
     const found = this.duckSprite(duckId);
     if (!found) return;
-    const { sprite, kind, level, position } = found;
+    const { sprite, kind, level, path, position } = found;
     sprite.art.setFlipX(target.x < position.x);
 
     const flash = () => {
@@ -1602,7 +1633,7 @@ export class GameScene extends Phaser.Scene {
           playSound(this, 'splash');
           flash();
           this.fx.splash.explode(12, target.x, target.y - 20);
-          this.ring(target.x, target.y - 20, statsAt(kind, level).splashRadius, COLORS.water, 250);
+          this.ring(target.x, target.y - 20, statsAt(kind, level, path).splashRadius, COLORS.water, 250);
         },
       });
     } else {
@@ -1629,10 +1660,10 @@ export class GameScene extends Phaser.Scene {
   private showAlarmQuack(duckId: number): void {
     const found = this.duckSprite(duckId);
     if (!found) return;
-    const { sprite, kind, level, position } = found;
+    const { sprite, kind, level, path, position } = found;
     this.tweens.add({ targets: sprite.art, scale: sprite.art.scale * 1.2, duration: 100, yoyo: true });
     const quacker = this.state.battle.ducks.find((d) => d.id === duckId);
-    const range = quacker ? duckStats(this.state.battle, quacker).range : statsAt(kind, level).range;
+    const range = quacker ? duckStats(this.state.battle, quacker).range : statsAt(kind, level, path).range;
     this.ring(position.x, position.y - 30, range, COLORS.gold, 500);
     this.time.delayedCall(120, () => this.ring(position.x, position.y - 30, range * 0.7, COLORS.gold, 450));
     this.fx.stars.explode(10, position.x, position.y - 40);

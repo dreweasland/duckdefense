@@ -117,7 +117,10 @@ everywhere: dialogue, tooltips, code comments.
   own leaderboard. Twists live in `src/data/challenges.ts`; the rules shared with the server
   are in `src/logic/daily.ts`.
 - **Upgrades:** Two tiers per duck (e.g. Sunny → "Seasoned Sunny" → "Legendary Sunny"),
-  bought from the duck's panel. Names, prices, and what changes are in `src/data/ducks.ts`.
+  then a **final upgrade where you pick one of two paths** and keep it (e.g. "Tidal Sunny",
+  a giant splash, or "Eagle-Eye Sunny", long reach and double damage to hawks). Bought
+  from the duck's panel. Names, prices, and what changes are in `src/data/ducks.ts`
+  (`upgrades` and `finals`).
 
 ## Kid-friendly contribution points
 
