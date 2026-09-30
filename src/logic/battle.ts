@@ -1,4 +1,5 @@
 import { FOUNTAIN, NIGHT } from '../data/dayNight';
+import { ENDLESS } from '../data/endless';
 import { WING_FLAP_RECOVERY, type DuckKind } from '../data/ducks';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { DEFAULT_TARGETING, type Targeting } from '../data/targeting';
@@ -62,6 +63,8 @@ export interface Duck {
   attacks: number;
   /** Upgrades bought: 0, 1, or 2. */
   level: number;
+  /** Endless Pond training levels bought after both upgrades (each one hits harder). */
+  training: number;
   /** Seconds this duck stays scared (no attacks or powers). */
   scaredTime: number;
   /** Which predator it goes after when more than one is in reach. */
@@ -180,6 +183,7 @@ export function placeDuck(battle: Battle, kind: DuckKind, position: Point): Duck
     abilityCooldown: 0,
     attacks: 0,
     level: 0,
+    training: 0,
     scaredTime: 0,
     targeting: DEFAULT_TARGETING,
     report: { damage: 0, chasedOff: 0, special: 0 },
@@ -444,7 +448,8 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
         (e === target ||
           ((stats.canHitFlying || !isFlying(e)) && distance(enemyPosition(e), targetPos) <= stats.splashRadius)),
     );
-    const damage = stats.damage * (isRefreshed(battle, duck) ? 1 + FOUNTAIN.damageBoost : 1);
+    const damage =
+      stats.damage * (isRefreshed(battle, duck) ? 1 + FOUNTAIN.damageBoost : 1) * (1 + ENDLESS.training.damage * duck.training);
     for (const enemy of hit) {
       const before = enemy.hp;
       enemy.hp -= damageTo(enemy, damage);

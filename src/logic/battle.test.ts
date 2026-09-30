@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DUCKS } from '../data/ducks';
 import { ENEMIES } from '../data/enemies';
+import { ENDLESS } from '../data/endless';
 import { FOUNTAIN, NIGHT } from '../data/dayNight';
 import { PECKING_LOOP } from '../data/synergy';
 import { attackInterval, createBattle, topDuck, damageTo, enemyPosition, isHidden, isRefreshed, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
@@ -688,5 +689,17 @@ describe('top duck', () => {
     expect(topDuck({ sunny: row(100, 2), potato: row(100, 5) })).toBe('potato');
     expect(topDuck({ curtis: row(0, 0) })).toBeUndefined();
     expect(topDuck({})).toBeUndefined();
+  });
+});
+
+describe('training (Endless Pond)', () => {
+  it('makes a trained duck hit harder', () => {
+    const battle = newBattle();
+    const enemy = spawnEnemy(battle, 'raccoon');
+    enemy.distance = 1000;
+    const duck = placeDuck(battle, 'potato', { x: 1000, y: 20 });
+    duck.training = 2;
+    step(battle, 0);
+    expect(enemy.hp).toBeCloseTo(raccoon.maxHp - DUCKS.potato.damage * (1 + 2 * ENDLESS.training.damage));
   });
 });

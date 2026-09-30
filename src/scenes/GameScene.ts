@@ -8,7 +8,7 @@ import { CHASES } from '../data/synergy';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { GAME_SPEEDS } from '../data/gameSpeed';
 import { TARGETING, TARGETING_ORDER, type Targeting } from '../data/targeting';
-import { HUD_AREAS } from '../data/layout';
+import { ENDLESS_REPAIR_AREA, HUD_AREAS } from '../data/layout';
 import { LEVELS } from '../data/levels';
 import { chasePartner, enemyPosition, isFlying, isHidden, isRefreshed, type Enemy } from '../logic/battle';
 import {
@@ -18,6 +18,10 @@ import {
   canCallEarly,
   canSell,
   earlyBonus,
+  repairCost,
+  repairHouse,
+  trainDuck,
+  trainingCost,
   isDuckAllowed,
   canUpgrade,
   setTargeting,
@@ -79,6 +83,12 @@ const PEA_ICON = { x: 596, y: 38 };
 // Low enough that the raised (selected) card and its corner badges never go off the top of the screen.
 const CARD = { width: 84, height: 90, y: 54, spacing: 92, lift: 3 };
 const GO_BUTTON = { x: 1200, y: 70 };
+const REPAIR_BUTTON = {
+  x: ENDLESS_REPAIR_AREA.x + ENDLESS_REPAIR_AREA.width / 2,
+  y: ENDLESS_REPAIR_AREA.y + ENDLESS_REPAIR_AREA.height / 2,
+  width: ENDLESS_REPAIR_AREA.width,
+  height: 40,
+};
 // "Coming next" chips, in a row that ends just left of the start button.
 // Call the next wave early (during a wave, left of the fast-forward button).
 const CALL_EARLY = { x: 1110, y: 112 };
@@ -119,6 +129,8 @@ interface DuckSprite {
   refresh: Phaser.GameObjects.Image;
   /** The hat it's wearing (kept on its head every frame). */
   hat?: Phaser.GameObjects.Image;
+  /** Endless Pond: a gold star showing its training level. */
+  training?: Phaser.GameObjects.Container;
 }
 
 interface Nest {
@@ -182,6 +194,8 @@ export class GameScene extends Phaser.Scene {
   private shield!: Phaser.GameObjects.Container;
   private goButton!: Phaser.GameObjects.Container;
   private speedButton!: { container: Phaser.GameObjects.Container; draw: () => void };
+  /** Endless Pond: the "fix the duck house" button under the hearts, and its price. */
+  private repairButton?: { container: Phaser.GameObjects.Container; cost: Phaser.GameObjects.Text; pea: Phaser.GameObjects.Image };
   private callEarlyButton!: { container: Phaser.GameObjects.Container; label: Phaser.GameObjects.Text };
   /** The open call-early card, if any, and its peas text (kept up to date as predators are chased off). */
   /** The open duck panel's report numbers, refreshed as the battle goes on. */
@@ -235,7 +249,13 @@ export class GameScene extends Phaser.Scene {
       if (hat) this.hats[kind] = hat;
     }
     this.level = parseLevel(info.map);
-    this.state = createGame(mapFromLevel(this.level), this.endless ? endlessWaves() : info.waves, this.difficulty, this.daily?.challenge);
+    this.state = createGame(
+      mapFromLevel(this.level),
+      this.endless ? endlessWaves() : info.waves,
+      this.difficulty,
+      this.daily?.challenge,
+      this.endless,
+    );
     this.selected = DUCK_ORDER.find((kind) => isDuckAllowed(this.state, kind)) ?? 'sunny';
     this.duckSprites.clear();
     this.enemySprites.clear();
@@ -250,6 +270,7 @@ export class GameScene extends Phaser.Scene {
     this.previewKey = '';
     this.bannerQueue = [];
     this.callEarlyCard = undefined;
+    this.repairButton = undefined;
     this.panelReport = undefined;
     this.hintBubble = undefined;
     this.lastHintAt = -Infinity;
@@ -265,6 +286,7 @@ export class GameScene extends Phaser.Scene {
     this.drawPicker();
     this.drawHud();
     this.preview = this.add.container(0, 0).setDepth(DEPTH.hud);
+    if (this.endless) this.repairButton = this.drawRepairButton();
     this.goButton = this.drawGoButton();
     this.speedButton = this.drawSpeedButton();
     this.callEarlyButton = this.drawCallEarlyButton();
@@ -547,6 +569,13 @@ export class GameScene extends Phaser.Scene {
     if (card && this.popup === card.popup) {
       if (early) card.bonus.setText(`${peas} peas`);
       else this.closePopup();
+    }
+    if (this.repairButton) {
+      // Shows its price when the house needs fixing, dimmed if you can't afford it yet.
+      const cost = repairCost(game);
+      this.repairButton.cost.setText(cost === undefined ? 'Full' : String(cost)).setX(cost === undefined ? -6 : 22);
+      this.repairButton.pea.setVisible(cost !== undefined);
+      this.repairButton.container.setAlpha(cost !== undefined && game.peas >= cost ? 1 : 0.5);
     }
     const blessing = canUseBlessing(game);
     this.craigButton.setVisible(!game.challenge?.noCraig);
@@ -978,6 +1007,25 @@ export class GameScene extends Phaser.Scene {
           { width: 276, height: 54, fontSize: 26, icon: 'icon-pea' },
         ),
       );
+    } else if (trainingCost(this.state, duckId) !== undefined) {
+      // Endless Pond: keep training a fully upgraded duck.
+      const cost = trainingCost(this.state, duckId)!;
+      const affordable = this.state.peas >= cost;
+      const boost = Math.round(ENDLESS.training.damage * 100);
+      parts.push(
+        this.add.text(-138, 68, `Train: level ${duck.training + 1}`, textStyle(20, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-138, 94, `Hits ${boost}% harder every time you train.`, { ...textStyle(16, ink), wordWrap: { width: 276 } }).setOrigin(0, 0.5),
+        drawBigButton(
+          this,
+          0,
+          146,
+          `${cost}`,
+          affordable ? COLORS.green : 0xb8b0a8,
+          affordable ? COLORS.greenDark : 0x8a8079,
+          () => this.train(duckId),
+          { width: 276, height: 54, fontSize: 26, icon: 'icon-pea' },
+        ),
+      );
     } else {
       parts.push(this.add.text(0, 110, 'Fully upgraded!', textStyle(26, { color: COLORS.goldCss, weight: '700' })).setOrigin(0.5));
     }
@@ -987,7 +1035,7 @@ export class GameScene extends Phaser.Scene {
     parts.push(drawBigButton(this, sellable ? -74 : 0, 222, 'Move', COLORS.blue, COLORS.blueDark, () => this.startMove(duckId), small));
     // Sell shows how many peas you get back (upgrades included). A Daily Challenge can turn it off.
     if (sellable) parts.push(
-      drawBigButton(this, 74, 222, `+${sellValue(duck.kind, duck.level)}`, COLORS.orange, COLORS.orangeDark, () => this.sell(duckId), {
+      drawBigButton(this, 74, 222, `+${sellValue(duck.kind, duck.level, duck.training)}`, COLORS.orange, COLORS.orangeDark, () => this.sell(duckId), {
         ...small,
         icon: 'icon-pea',
       }),
@@ -1109,6 +1157,38 @@ export class GameScene extends Phaser.Scene {
     this.drawPeckingLoop();
     this.refreshHud();
     this.openDuckPanel(duckId);
+  }
+
+  /** Endless Pond: train a fully upgraded duck to hit harder. */
+  private train(duckId: number): void {
+    const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+    const sprite = this.duckSprites.get(duckId);
+    if (!duck || !sprite) return;
+    if (!trainDuck(this.state, duckId)) {
+      playSound(this, 'noPeas');
+      this.tweens.add({ targets: this.peasText, x: '+=6', duration: 50, yoyo: true, repeat: 3 });
+      this.openDuckPanel(duckId);
+      return;
+    }
+    playSound(this, 'upgrade');
+    this.showTraining(sprite, duck.training);
+    const { x, y } = duck.position;
+    this.fx.stars.explode(14, x, y - 30);
+    this.floatText({ x, y: y - 80 }, `Training ${duck.training}!`, COLORS.goldCss);
+    this.refreshHud();
+    this.openDuckPanel(duckId);
+  }
+
+  /** A trained duck shows its training level in a little gold star by its feet. */
+  private showTraining(sprite: DuckSprite, training: number): void {
+    if (!sprite.training) {
+      const star = this.add.image(0, 0, 'star').setDisplaySize(30, 30).setTint(COLORS.gold);
+      const text = this.add.text(0, 1, '', textStyle(14, { weight: '700', strokeThickness: 3 })).setOrigin(0.5);
+      sprite.training = this.add.container(30, 8, [star, text]);
+      sprite.root.add(sprite.training);
+    }
+    (sprite.training.list[1] as Phaser.GameObjects.Text).setText(String(training));
+    this.tweens.add({ targets: sprite.training, scale: { from: 1.5, to: 1 }, duration: 250, ease: 'Back.Out' });
   }
 
   /** Upgraded ducks grow a little, wear gold chevrons, and reach as far as their new stats. */
@@ -1749,6 +1829,37 @@ export class GameScene extends Phaser.Scene {
       draw();
     });
     return { container, draw };
+  }
+
+  /** Endless Pond: under the hearts, spend peas to fix the duck house (one heart back). */
+  private drawRepairButton(): { container: Phaser.GameObjects.Container; cost: Phaser.GameObjects.Text; pea: Phaser.GameObjects.Image } {
+    const { x, y, width, height } = REPAIR_BUTTON;
+    const cost = this.add.text(22, 0, '', textStyle(20, { weight: '700', color: '#c8f59a' })).setOrigin(0, 0.5);
+    const pea = this.add.image(8, 0, 'icon-pea').setDisplaySize(20, 20);
+    const hit = this.add.zone(0, 0, width, height + 8).setInteractive({ useHandCursor: true });
+    const container = this.add
+      .container(x, y, [
+        drawPill(this, 0, 0, width, height),
+        this.add.text(-46, 0, '+', textStyle(24, { weight: '700' })).setOrigin(0.5),
+        this.add.image(-26, 0, 'icon-heart').setDisplaySize(24, 24),
+        pea,
+        cost,
+        hit,
+      ])
+      .setDepth(DEPTH.hud);
+    hit.on('pointerdown', () => {
+      if (!repairHouse(this.state)) {
+        playSound(this, 'noPeas');
+        this.tweens.add({ targets: container, x: x + 6, duration: 50, yoyo: true, repeat: 3 });
+        return;
+      }
+      playSound(this, 'upgrade');
+      this.fx.sparkles.explode(16, this.house.x, this.house.y - 60);
+      this.tweens.add({ targets: this.heartsPill, scale: 1.25, duration: 120, yoyo: true });
+      popSpeechBubble(this, this.house.x, this.house.y - 150, 'Good as new!', DEPTH.floatText);
+      this.refreshHud();
+    });
+    return { container, cost, pea };
   }
 
   /**

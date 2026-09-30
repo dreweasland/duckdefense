@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { FOUNTAIN } from '../data/dayNight';
 import { DUCKS } from '../data/ducks';
-import { HUD_AREAS, type Area } from '../data/layout';
+import { ENDLESS } from '../data/endless';
+import { ENDLESS_REPAIR_AREA, HUD_AREAS, type Area } from '../data/layout';
 import { LEVELS } from '../data/levels';
 import { distance, type Point } from './geometry';
 import { parseLevel } from './level';
@@ -105,6 +106,13 @@ for (const [index, info] of LEVELS.entries()) {
     });
   });
 }
+
+describe('the Endless Pond map', () => {
+  it('keeps nests out from under the fix-the-duck-house button', () => {
+    const level = parseLevel(LEVELS[ENDLESS.level]!.map);
+    for (const slot of level.slots) expect(circleHitsArea(slot, NEST_RADIUS, ENDLESS_REPAIR_AREA), JSON.stringify(slot)).toBe(false);
+  });
+});
 
 describe('parseLevel', () => {
   it('explains what is missing when a layer is absent', () => {

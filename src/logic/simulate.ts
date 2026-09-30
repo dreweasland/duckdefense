@@ -4,7 +4,22 @@ import type { Challenge } from '../data/challenges';
 import type { Difficulty } from '../data/difficulty';
 import { DUCKS, type DuckKind } from '../data/ducks';
 import type { LevelInfo } from '../data/levels';
-import { buyDuck, canBuy, canUpgrade, createGame, isOver, mapFromLevel, startWave, update, upgradeDuck, useBlessing, type Game } from './game';
+import {
+  buyDuck,
+  canBuy,
+  canUpgrade,
+  createGame,
+  isOver,
+  mapFromLevel,
+  repairHouse,
+  startWave,
+  trainDuck,
+  trainingCost,
+  update,
+  upgradeDuck,
+  useBlessing,
+  type Game,
+} from './game';
 import { distance, type Point } from './geometry';
 import { parseLevel } from './level';
 import { makePath, pointAt } from './path';
@@ -42,11 +57,17 @@ export interface Strategy {
   upgrades?: 'none' | 'place-first' | 'upgrade-first';
   /** Play with a Daily Challenge twist. */
   challenge?: Challenge;
+  /** Play the Endless Pond (the level's waves should be the endless ones). */
+  endless?: boolean;
+  /** In the Endless Pond, spend spare peas on training ducks and fixing the duck house. */
+  extras?: boolean;
+  /** Seconds per simulation step (default 1/30). Bigger is faster to run but a little rougher. */
+  step?: number;
 }
 
 /** Before each wave, spend peas on `kind` ducks in the best slots (and upgrades, per the strategy). */
 export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | null, strategy: Strategy = {}): Game {
-  const game = createGame(mapFromLevel(parseLevel(info.map)), info.waves, difficulty, strategy.challenge);
+  const game = createGame(mapFromLevel(parseLevel(info.map)), info.waves, difficulty, strategy.challenge, strategy.endless);
   const slots = bestSlots(info, kind ? DUCKS[kind].range : 0);
   const upgrades = strategy.upgrades ?? 'none';
 
@@ -55,6 +76,11 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | n
     game.battle.ducks
       .filter((d) => canUpgrade(game, d.id))
       .sort((a, b) => nextUpgrade(a.kind, a.level)!.cost - nextUpgrade(b.kind, b.level)!.cost)[0];
+  /** The duck whose next training level costs least, if you can afford one. */
+  const cheapestTraining = () =>
+    game.battle.ducks
+      .filter((d) => (trainingCost(game, d.id) ?? Infinity) <= game.peas)
+      .sort((a, b) => trainingCost(game, a.id)! - trainingCost(game, b.id)!)[0];
   const anyUpgradeLeft = () => game.battle.ducks.some((d) => nextUpgrade(d.kind, d.level));
 
   while (!isOver(game)) {
@@ -69,13 +95,18 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | n
         buyDuck(game, kind!, slots.shift()!);
       } else if (upgrade) {
         upgradeDuck(game, upgrade.id);
+      } else if (strategy.extras && repairHouse(game)) {
+        // Fixed a heart.
+      } else if (strategy.extras && cheapestTraining()) {
+        trainDuck(game, cheapestTraining()!.id);
       } else {
         break;
       }
     }
     if (strategy.craig && game.waveIndex === game.waves.length - 1) useBlessing(game);
     startWave(game);
-    for (let i = 0; i < 200_000 && game.phase === 'wave'; i++) update(game, 1 / 30);
+    const dt = strategy.step ?? 1 / 30;
+    for (let i = 0; i < 200_000 && game.phase === 'wave'; i++) update(game, dt);
   }
   return game;
 }

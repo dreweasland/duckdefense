@@ -23,6 +23,17 @@ export const ENDLESS = {
   spacingPerWave: 0.03, // and arrive this much closer together
   minEvery: 0.35, // but never closer than this many seconds apart
   bonusPeas: { first: 50, perWave: 4 }, // peas for clearing a wave
+  // Training: once a duck has both upgrades, it can keep training to hit harder.
+  training: {
+    damage: 0.15, // each level of training adds this much damage (0.15 = +15%)
+    firstCost: 150, // peas for the first level
+    costGrowth: 1.25, // each level after costs this much more (1.25 = +25%)
+  },
+  // Fixing the duck house: spend peas to get a heart back (up to the hearts you started with).
+  repair: {
+    firstCost: 120, // peas for the first heart
+    costGrowth: 1.3, // each heart after costs this much more
+  },
   groups: [
     { enemy: 'raccoon', from: 1, count: 4, perWave: 1.2, every: 1.3 },
     { enemy: 'fox', from: 3, count: 2, perWave: 0.5, every: 1.1, after: 2 },

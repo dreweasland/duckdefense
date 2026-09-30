@@ -98,6 +98,10 @@ everywhere: dialogue, tooltips, code comments.
   so it's fair) from the numbers in `src/data/endless.ts`: when each predator joins, how
   fast they grow, and how much tougher they get (`health` on a wave). Endless scores are
   stored on the leaderboard as level -1 (`ENDLESS_LEVEL`).
+  Endless only, so peas never pile up: fully upgraded ducks can keep **training** (+15%
+  damage per level, each costing more), and a button under the hearts **fixes the duck
+  house** (one heart back, up to the starting hearts, each costing more). Both in
+  `ENDLESS.training` and `ENDLESS.repair`.
 - **Daily Challenge:** One level and one twist per UTC day, the same for everyone, with its
   own leaderboard. Twists live in `src/data/challenges.ts`; the rules shared with the server
   are in `src/logic/daily.ts`.

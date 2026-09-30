@@ -8,6 +8,7 @@ import type { Targeting } from '../data/targeting';
 import { EARLY_CALL, type Wave } from '../data/waves';
 import { createBattle, placeDuck, spawnEnemy, step, type Battle, type BattleEvent, type Duck, type Enemy } from './battle';
 import { distance, type Point } from './geometry';
+import { ENDLESS } from '../data/endless';
 import { challengeSettings, challengeWaves } from './daily';
 import { nextUpgrade, totalSpent } from './upgrades';
 import type { Level } from './level';
@@ -45,6 +46,12 @@ export interface Game {
   shieldTime: number;
   /** The Daily Challenge twist being played, if any. */
   challenge?: Challenge;
+  /** The hearts the duck house started with (fixing it can't go past this). */
+  maxHearts: number;
+  /** Whether this is the Endless Pond (which adds training and fixing the duck house). */
+  endless: boolean;
+  /** Hearts bought back by fixing the duck house (each one costs more). */
+  repairs: number;
 }
 
 /** What the game needs from a level. */
@@ -71,8 +78,11 @@ export type GameEvent =
   | { type: 'won' }
   | { type: 'lost' };
 
-/** A new game. A Daily Challenge twist, if given, changes the peas, hearts, waves, and rules. */
-export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Difficulty, challenge?: Challenge): Game {
+/**
+ * A new game. A Daily Challenge twist, if given, changes the peas, hearts, waves, and rules.
+ * `endless` turns on the Endless Pond's extras: training ducks and fixing the duck house.
+ */
+export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Difficulty, challenge?: Challenge, endless = false): Game {
   if (waves.length === 0) {
     throw new Error('A level needs at least one wave');
   }
@@ -90,6 +100,9 @@ export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Dif
     blessingUsed: false,
     shieldTime: 0,
     challenge,
+    maxHearts: settings.hearts,
+    endless,
+    repairs: 0,
   };
 }
 
@@ -136,9 +149,48 @@ export function buyDuck(game: Game, kind: DuckKind, at: Point): Duck | undefined
   return placeDuck(game.battle, kind, at);
 }
 
-/** Peas you'd get back for selling a duck: part of everything spent on it, upgrades included. */
-export function sellValue(kind: DuckKind, level = 0): number {
-  return Math.floor(totalSpent(kind, level) * SELL_REFUND);
+/** Peas you'd get back for selling a duck: part of everything spent on it, upgrades and training included. */
+export function sellValue(kind: DuckKind, level = 0, training = 0): number {
+  let spent = totalSpent(kind, level);
+  for (let t = 0; t < training; t++) spent += trainingCostAt(t);
+  return Math.floor(spent * SELL_REFUND);
+}
+
+/** Peas for training level `done + 1`. */
+function trainingCostAt(done: number): number {
+  return Math.round(ENDLESS.training.firstCost * ENDLESS.training.costGrowth ** done);
+}
+
+/** What the next level of training costs for a duck, or undefined if it can't train (yet). */
+export function trainingCost(game: Game, duckId: number): number | undefined {
+  const duck = game.battle.ducks.find((d) => d.id === duckId);
+  if (!game.endless || !duck || nextUpgrade(duck.kind, duck.level)) return undefined;
+  return trainingCostAt(duck.training);
+}
+
+/** Endless Pond only: once a duck has both upgrades, train it to hit harder. */
+export function trainDuck(game: Game, duckId: number): boolean {
+  const cost = trainingCost(game, duckId);
+  if (isOver(game) || cost === undefined || game.peas < cost) return false;
+  game.peas -= cost;
+  game.battle.ducks.find((d) => d.id === duckId)!.training++;
+  return true;
+}
+
+/** What fixing the duck house (one heart back) costs, or undefined if it can't be fixed right now. */
+export function repairCost(game: Game): number | undefined {
+  if (!game.endless || isOver(game) || game.hearts >= game.maxHearts) return undefined;
+  return Math.round(ENDLESS.repair.firstCost * ENDLESS.repair.costGrowth ** game.repairs);
+}
+
+/** Endless Pond only: spend peas to get a heart back (up to the hearts you started with). */
+export function repairHouse(game: Game): boolean {
+  const cost = repairCost(game);
+  if (cost === undefined || game.peas < cost) return false;
+  game.peas -= cost;
+  game.hearts++;
+  game.repairs++;
+  return true;
 }
 
 /** Whether a duck can be upgraded right now (not maxed out, and you have the peas). */
@@ -163,7 +215,7 @@ export function sellDuck(game: Game, duckId: number): number | undefined {
   const duck = game.battle.ducks.find((d) => d.id === duckId);
   if (!duck) return undefined;
   game.battle.ducks = game.battle.ducks.filter((d) => d !== duck);
-  const refund = sellValue(duck.kind, duck.level);
+  const refund = sellValue(duck.kind, duck.level, duck.training);
   game.peas += refund;
   return refund;
 }

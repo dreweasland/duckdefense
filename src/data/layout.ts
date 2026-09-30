@@ -16,3 +16,7 @@ export const HUD_AREAS: Area[] = [
   { x: 40, y: 580, width: 120, height: 120 }, // Craig
   { x: 1210, y: 650, width: 70, height: 70 }, // sound on/off
 ];
+
+// Only on the Endless Pond's map (see src/data/endless.ts): the "fix the duck house" button
+// under the hearts. `npm test` checks that map keeps its nests out from under it.
+export const ENDLESS_REPAIR_AREA: Area = { x: 695, y: 74, width: 120, height: 42 };
