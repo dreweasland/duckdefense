@@ -1,6 +1,6 @@
 import { FOUNTAIN, NIGHT } from '../data/dayNight';
 import { ENDLESS } from '../data/endless';
-import { WING_FLAP_RECOVERY, type DuckKind, type DuckStats } from '../data/ducks';
+import { FREEZE_RECOVERY, WING_FLAP_RECOVERY, type DuckKind, type DuckStats } from '../data/ducks';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { DEFAULT_TARGETING, type Targeting } from '../data/targeting';
 import { CHASES, PECKING_LOOP } from '../data/synergy';
@@ -24,6 +24,8 @@ export interface Enemy {
   stopTime: number;
   /** Seconds before a Wing Flap can knock it back again. */
   pushRecovery: number;
+  /** Seconds before an Alarm Quack can freeze it again (counts the freeze, then a short guard). */
+  freezeRecovery: number;
   /** True while Curtis is slowing it (for drawing). */
   slowed: boolean;
   /** Ducks this predator has already scared (swooping hawks scare each duck once). */
@@ -168,6 +170,7 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind): Enemy {
     distance: 0,
     stopTime: 0,
     pushRecovery: 0,
+    freezeRecovery: 0,
     slowed: false,
     scared: [],
     summonTime: stats.summons?.every ?? 0,
@@ -385,6 +388,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
   // 1. Predators head for the house, unless something has frozen them.
   for (const enemy of battle.enemies) {
     enemy.pushRecovery = Math.max(0, enemy.pushRecovery - dt);
+    enemy.freezeRecovery = Math.max(0, enemy.freezeRecovery - dt);
     enemy.revealedTime = Math.max(0, enemy.revealedTime - dt);
     const slow = slowFor(battle, enemy);
     enemy.slowed = slow < 1;
@@ -436,19 +440,27 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     const stats = duckStats(battle, duck);
 
     // Chester's Alarm Quack: freeze every predator in range, hawks included, and flush
-    // hiding predators out of the grass. Quick ones (foxes) shake it off sooner.
+    // hiding predators out of the grass. Quick ones (foxes) shake it off sooner. A predator
+    // that was just frozen is on guard for a moment, so Chester saves his quack for
+    // predators he can freeze.
     if (stats.alarmQuack) {
       const inRange = enemiesInRange(battle, duck.position, stats.range);
-      if (inRange.length > 0) {
-        for (const enemy of inRange) {
+      const freezable = inRange.filter((e) => e.freezeRecovery === 0);
+      if (freezable.length > 0) {
+        for (const enemy of freezable) {
           const enemyStats = ENEMIES[enemy.kind];
           const stun = stats.alarmQuack.stunTime * (1 - (enemyStats.stunResistance ?? 0));
           enemy.stopTime = Math.max(enemy.stopTime, stun);
-          if (enemyStats.sneaky) enemy.revealedTime = Math.max(enemy.revealedTime, enemyStats.sneaky.revealTime);
+          enemy.freezeRecovery = stun * (1 + FREEZE_RECOVERY);
+        }
+        // The quack flushes every sneaky predator in range out of the grass, on guard or not.
+        for (const enemy of inRange) {
+          const sneaky = ENEMIES[enemy.kind].sneaky;
+          if (sneaky) enemy.revealedTime = Math.max(enemy.revealedTime, sneaky.revealTime);
         }
         duck.abilityCooldown = stats.alarmQuack.cooldown;
-        credit(battle, duck, 'special', inRange.length);
-        events.push({ type: 'alarmQuack', duckId: duck.id, stunnedIds: inRange.map((e) => e.id) });
+        credit(battle, duck, 'special', freezable.length);
+        events.push({ type: 'alarmQuack', duckId: duck.id, stunnedIds: freezable.map((e) => e.id) });
       }
     }
   }

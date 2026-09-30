@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { DUCKS } from '../data/ducks';
+import { DUCKS, FREEZE_RECOVERY } from '../data/ducks';
 import { ENEMIES } from '../data/enemies';
 import { ENDLESS } from '../data/endless';
 import { FOUNTAIN, NIGHT } from '../data/dayNight';
 import { PECKING_LOOP } from '../data/synergy';
 import { attackInterval, createBattle, topDuck, damageTo, enemyPosition, isFlying, isHidden, isRefreshed, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
 import { statsAt } from './upgrades';
+import { perkMods } from './perks';
 import { makePath } from './path';
 
 const sunny = DUCKS.sunny;
@@ -733,5 +734,52 @@ describe('Endless Pond bosses', () => {
     snapper.stopTime = 1; // hold still so only the flap could move it
     step(battle, 0);
     expect(snapper.distance).toBe(before);
+  });
+});
+
+describe('freeze limits', () => {
+  it("can't freeze a predator again until it's been on guard for a moment", () => {
+    const { alarmQuack } = DUCKS.chester;
+    const battle = newBattle();
+    const enemy = spawnEnemy(battle, 'raccoon');
+    enemy.distance = 1000;
+    enemy.hp = 1e9;
+    const chester = placeDuck(battle, 'chester', { x: 1000, y: 20 });
+    step(battle, 0);
+    expect(enemy.freezeRecovery).toBeCloseTo(alarmQuack!.stunTime * (1 + FREEZE_RECOVERY));
+
+    // Another Chester right away can't freeze it (and saves his quack).
+    const second = placeDuck(battle, 'chester', { x: 1000, y: -20 });
+    const events = step(battle, 0.1);
+    expect(events.some((e) => e.type === 'alarmQuack' && e.duckId === second.id)).toBe(false);
+    expect(second.abilityCooldown).toBe(0);
+    expect(chester.abilityCooldown).toBeGreaterThan(0);
+  });
+
+  /** How much of 60 seconds a tough raccoon spends frozen, with these Chesters and perks. */
+  function frozenShare(chesters: number, level: number, extraLoud: number): number {
+    const battle = newBattle();
+    battle.mods = perkMods({ extraLoud });
+    const enemy = spawnEnemy(battle, 'raccoon');
+    enemy.hp = 1e9;
+    enemy.distance = 1000;
+    enemy.speed = 0; // stays in reach the whole time
+    for (let i = 0; i < chesters; i++) placeDuck(battle, 'chester', { x: 1000, y: 20 + i }).level = level;
+    let frozen = 0;
+    const dt = 1 / 30;
+    for (let t = 0; t < 60; t += dt) {
+      step(battle, dt);
+      if (enemy.stopTime > 0) frozen += dt;
+    }
+    return frozen / 60;
+  }
+
+  it("won't let loud Chesters taking turns keep a predator frozen", () => {
+    expect(frozenShare(3, 2, 2)).toBeLessThan(0.7);
+  });
+
+  it('leaves a single fully upgraded Chester just as strong as before', () => {
+    const { alarmQuack } = statsAt('chester', 2);
+    expect(frozenShare(1, 2, 0)).toBeCloseTo(alarmQuack!.stunTime / alarmQuack!.cooldown, 1);
   });
 });

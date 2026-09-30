@@ -61,6 +61,11 @@ export const MOVE_SETTLE_TIME = 1;
 // seconds, so a row of Potatoes can't juggle a predator in place forever.
 export const WING_FLAP_RECOVERY = 1;
 
+// After an Alarm Quack's freeze wears off, a predator is on guard and can't be frozen again
+// for this share of the time it was frozen (0.5 = half as long). Without it, two loud
+// Chesters taking turns could keep a predator frozen until it's chased off.
+export const FREEZE_RECOVERY = 0.5;
+
 // The order ducks appear in the duck picker.
 export const DUCK_ORDER: readonly DuckKind[] = ['sunny', 'potato', 'chester', 'curtis'];
 
