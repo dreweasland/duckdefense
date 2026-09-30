@@ -12,6 +12,8 @@ export interface LeaderboardSceneData {
   level?: number;
   /** Show this date's Daily Challenge board (YYYY-MM-DD) instead of a level's. */
   daily?: string;
+  /** Show the Endless Pond board. */
+  endless?: boolean;
   difficulty?: Difficulty;
   /** Score id to highlight (the one just posted). */
   highlightId?: number;
@@ -26,7 +28,8 @@ export class LeaderboardScene extends Phaser.Scene {
   private level = 0;
   /** The Daily Challenge date the Daily tab shows, and whether that tab is picked. */
   private dailyDate = '';
-  private showDaily = false;
+  /** Which tab is picked: the Daily Challenge, a level (this.level), or the Endless Pond. */
+  private board: 'daily' | 'level' | 'endless' = 'level';
   private difficulty: Difficulty = 'easy';
   private highlightId?: number;
   private back: { scene: string; data?: object } = { scene: 'TitleScene' };
@@ -41,7 +44,7 @@ export class LeaderboardScene extends Phaser.Scene {
   init(data: LeaderboardSceneData): void {
     this.level = data.level ?? 0;
     this.dailyDate = data.daily ?? dailyDate();
-    this.showDaily = !!data.daily;
+    this.board = data.endless ? 'endless' : data.daily ? 'daily' : 'level';
     this.difficulty = data.difficulty ?? 'easy';
     this.highlightId = data.highlightId;
     this.back = data.back ?? { scene: 'TitleScene' };
@@ -58,17 +61,18 @@ export class LeaderboardScene extends Phaser.Scene {
     this.add.image(cx - 190, 62, 'icon-trophy').setDisplaySize(60, 60);
     this.add.text(cx + 30, 62, 'Top Scores', textStyle(58, { weight: '700', strokeThickness: 10 })).setOrigin(0.5);
 
-    // The Daily Challenge tab, then level tabs, then Easy / Normal.
-    const tabs = LEVELS.length + 1;
+    // The Daily Challenge tab, then level tabs, then the Endless Pond, then Easy / Normal.
+    const tabs = LEVELS.length + 2;
+    const tabX = (i: number) => cx + (i - (tabs - 1) / 2) * 190;
     const dailyName = dailyFor(this.dailyDate)?.challenge.name ?? 'Daily';
-    this.drawTab(cx - ((tabs - 1) / 2) * 196, 138, 184, `★ ${dailyName}`, () => this.showDaily, () => (this.showDaily = true));
+    this.drawTab(tabX(0), 138, 178, `★ ${dailyName}`, () => this.board === 'daily', () => (this.board = 'daily'));
     LEVELS.forEach((info, i) => {
-      const x = cx + (i + 1 - (tabs - 1) / 2) * 196;
-      this.drawTab(x, 138, 184, `${i + 1}. ${info.name}`, () => !this.showDaily && this.level === i, () => {
-        this.showDaily = false;
+      this.drawTab(tabX(i + 1), 138, 178, `${i + 1}. ${info.name}`, () => this.board === 'level' && this.level === i, () => {
+        this.board = 'level';
         this.level = i;
       });
     });
+    this.drawTab(tabX(tabs - 1), 138, 178, '∞ Endless', () => this.board === 'endless', () => (this.board = 'endless'));
     (['easy', 'normal'] as const).forEach((difficulty, i) => {
       this.drawTab(cx + (i - 0.5) * 170, 192, 150, DIFFICULTIES[difficulty].label, () => this.difficulty === difficulty, () => (this.difficulty = difficulty));
     });
@@ -129,7 +133,8 @@ export class LeaderboardScene extends Phaser.Scene {
   private async loadScores(): Promise<void> {
     const id = ++this.requestId;
     this.message('Loading...');
-    const result = await fetchScores(this.level, this.difficulty, this.showDaily ? this.dailyDate : undefined);
+    const board = this.board === 'daily' ? { daily: this.dailyDate } : this.board === 'endless' ? ({ endless: true } as const) : { level: this.level };
+    const result = await fetchScores(board, this.difficulty);
     if (id !== this.requestId || !this.sys.isActive()) return; // a newer tab was picked, or we left
     if (!result.ok) {
       this.message(result.error);
@@ -154,6 +159,11 @@ export class LeaderboardScene extends Phaser.Scene {
     parts.push(this.add.text(-LIST.width / 2 + 46, y, String(index + 1), textStyle(18, { ...ink, weight: '700' })).setOrigin(0.5));
     // Names are shown as plain text (never as HTML), so nothing typed can do anything sneaky.
     parts.push(this.add.text(-LIST.width / 2 + 84, y, row.name, textStyle(24, { ...ink, weight: '700' })).setOrigin(0, 0.5));
+    if (this.board === 'endless') {
+      // Endless Pond scores are waves survived.
+      parts.push(this.add.text(LIST.width / 2 - 36, y, `${row.score} ${row.score === 1 ? 'wave' : 'waves'}`, textStyle(24, { ...ink, weight: '700' })).setOrigin(1, 0.5));
+      return parts;
+    }
     parts.push(this.add.image(LIST.width / 2 - 170, y, 'icon-heart').setDisplaySize(20, 20));
     parts.push(this.add.text(LIST.width / 2 - 155, y, String(row.hearts), textStyle(20, ink)).setOrigin(0, 0.5));
     parts.push(this.add.text(LIST.width / 2 - 36, y, String(row.score), textStyle(24, { ...ink, weight: '700' })).setOrigin(1, 0.5));

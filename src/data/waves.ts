@@ -22,6 +22,7 @@ export interface Wave {
   time: 'day' | 'night';
   groups: SpawnGroup[];
   bonusPeas: number; // peas earned for clearing the wave
+  health?: number; // multiplies every predator's health this wave (the Endless Pond uses it)
 }
 
 export const LEVEL1_WAVES: Wave[] = [

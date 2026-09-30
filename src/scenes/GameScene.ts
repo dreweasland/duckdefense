@@ -42,7 +42,9 @@ import { closestPointOnPolyline, type Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
 import { nameAt, nextUpgrade, statsAt } from '../logic/upgrades';
 import { challengeSettings, dailyFor } from '../logic/daily';
-import { dailyRecord, recordDailyWin, recordWin, scoreFor, starsFor } from '../logic/progress';
+import { dailyRecord, recordDailyWin, recordEndless, recordWin, scoreFor, starsFor } from '../logic/progress';
+import { ENDLESS } from '../data/endless';
+import { endlessWaves } from '../logic/endless';
 import { loadProgress, saveProgress } from '../save';
 import type { HatKind } from '../data/hats';
 import { HINT_GAP, HINTS, type HintId } from '../data/hints';
@@ -101,6 +103,8 @@ export interface GameSceneData {
   level?: number;
   /** Play the Daily Challenge for this date (YYYY-MM-DD) instead; the date picks the level. */
   daily?: string;
+  /** Play the Endless Pond instead: waves until you run out of hearts. */
+  endless?: boolean;
 }
 
 interface DuckSprite {
@@ -156,6 +160,8 @@ export class GameScene extends Phaser.Scene {
   private levelIndex = 0;
   /** The hat each duck is wearing (from the Wardrobe). */
   private hats: Partial<Record<DuckKind, HatKind>> = {};
+  /** Whether this is the Endless Pond. */
+  private endless = false;
   /** The Daily Challenge being played, if any. */
   private daily?: { date: string; challenge: Challenge };
   private level!: Level;
@@ -214,6 +220,8 @@ export class GameScene extends Phaser.Scene {
     const daily = data.daily ? dailyFor(data.daily) : undefined;
     this.daily = daily && { date: daily.date, challenge: daily.challenge };
     if (daily) this.levelIndex = Math.min(daily.level, LEVELS.length - 1);
+    this.endless = !daily && !!data.endless;
+    if (this.endless) this.levelIndex = ENDLESS.level;
   }
 
   create(): void {
@@ -227,7 +235,7 @@ export class GameScene extends Phaser.Scene {
       if (hat) this.hats[kind] = hat;
     }
     this.level = parseLevel(info.map);
-    this.state = createGame(mapFromLevel(this.level), info.waves, this.difficulty, this.daily?.challenge);
+    this.state = createGame(mapFromLevel(this.level), this.endless ? endlessWaves() : info.waves, this.difficulty, this.daily?.challenge);
     this.selected = DUCK_ORDER.find((kind) => isDuckAllowed(this.state, kind)) ?? 'sunny';
     this.duckSprites.clear();
     this.enemySprites.clear();
@@ -267,7 +275,9 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(7000, () => {
       if (this.state.phase === 'building' && this.state.waveIndex === 0) this.maybeHint({ type: 'noDucksYet' });
     });
-    if (this.daily) {
+    if (this.endless) {
+      this.time.delayedCall(350, () => this.showBanner(`${ENDLESS.name}: how long can you last?`));
+    } else if (this.daily) {
       const { challenge } = this.daily;
       this.time.delayedCall(350, () => this.showBanner(`Daily Challenge: ${challenge.name}`));
       this.time.delayedCall(2500, () => this.showChallengeInfo(challenge));
@@ -507,7 +517,7 @@ export class GameScene extends Phaser.Scene {
     this.peasText.setText(String(game.peas));
     this.heartsText.setText(String(game.hearts));
     const wave = Math.min(game.waveIndex + 1, game.waves.length);
-    this.waveText.setText(`Wave ${wave}/${game.waves.length}`);
+    this.waveText.setText(this.endless ? `Wave ${wave}` : `Wave ${wave}/${game.waves.length}`);
     const night = isNight(game);
     this.dayIcon.setTexture(night ? 'icon-moon' : 'icon-sun').setDisplaySize(34, 34);
     this.setNight(night);
@@ -1412,7 +1422,15 @@ export class GameScene extends Phaser.Scene {
           daily: this.daily?.date,
           report: this.state.battle.report,
         };
-        if (result.won) {
+        if (this.endless) {
+          // The score is waves survived (the one that got you doesn't count). Keep the best.
+          const progress = loadProgress();
+          result.endlessWaves = this.state.phase === 'won' ? this.state.waves.length : this.state.waveIndex;
+          const previousBest = progress.endless?.[this.difficulty] ?? 0;
+          result.newBest = previousBest > 0 && result.endlessWaves > previousBest;
+          result.endlessBest = Math.max(previousBest, result.endlessWaves);
+          saveProgress(recordEndless(progress, this.difficulty, result.endlessWaves));
+        } else if (result.won) {
           // Save progress: this unlocks the next level and keeps the best stars and score.
           // (A Daily Challenge win is saved on its own and doesn't unlock anything.)
           result.hearts = this.state.hearts;

@@ -4,6 +4,7 @@ import { drawGrass, drawOutskirts } from '../art/terrain';
 import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
 import { LEVELS } from '../data/levels';
 import { parseLevel, type Level } from '../logic/level';
+import { ENDLESS } from '../data/endless';
 import { dailyDate, dailyFor } from '../logic/daily';
 import { dailyRecord, isUnlocked, type Progress } from '../logic/progress';
 import { loadProgress } from '../save';
@@ -17,6 +18,7 @@ export interface LevelSelectSceneData {
 
 const CARD = { width: 340, height: 340, spacing: 380 };
 const MAP = { width: 300, height: 169 }; // 16:9, like the real map
+const MODE_BUTTON = { width: 430, height: 84, gap: 24 }; // Daily Challenge and Endless Pond, side by side
 
 export class LevelSelectScene extends Phaser.Scene {
   private difficulty: Difficulty = 'easy';
@@ -52,7 +54,8 @@ export class LevelSelectScene extends Phaser.Scene {
       this.drawLevelCard(x, y, i, info.name, parseLevel(info.map), progress.levels[this.difficulty][i]?.stars ?? 0, isUnlocked(progress, this.difficulty, i));
     });
 
-    this.drawDailyButton(cx, 648, progress);
+    this.drawDailyButton(cx - (MODE_BUTTON.width + MODE_BUTTON.gap) / 2, 648, progress);
+    this.drawEndlessButton(cx + (MODE_BUTTON.width + MODE_BUTTON.gap) / 2, 648, progress);
 
     // Back to the title screen.
     const arrow = this.add
@@ -139,27 +142,66 @@ export class LevelSelectScene extends Phaser.Scene {
     const date = dailyDate();
     const daily = dailyFor(date);
     if (!daily) return;
-    const W = 600;
-    const H = 84;
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const record = dailyRecord(progress, date, this.difficulty);
-    const parts: Phaser.GameObjects.GameObject[] = [
-      drawCard(this.add.graphics(), W, H, { radius: 22, fill: 0xfff0b3, border: COLORS.gold, borderWidth: 5 }),
-      this.add.image(-W / 2 + 46, 0, 'star').setDisplaySize(48, 48).setTint(COLORS.gold),
-      this.add.text(-W / 2 + 82, -16, 'Daily Challenge', textStyle(26, { ...ink, weight: '700' })).setOrigin(0, 0.5),
-      this.add
-        .text(-W / 2 + 82, 16, `${daily.challenge.name}  ·  ${LEVELS[daily.level]?.name ?? ''}`, textStyle(20, { ...ink, color: '#8a5a20' }))
-        .setOrigin(0, 0.5),
-    ];
-    if (record) {
+    const data: GameSceneData = { difficulty: this.difficulty, daily: date };
+    this.drawModeButton(x, y, {
+      icon: this.add.image(0, 0, 'star').setDisplaySize(46, 46).setTint(COLORS.gold),
+      title: 'Daily Challenge',
+      subtitle: `${daily.challenge.name}  ·  ${LEVELS[daily.level]?.name ?? ''}`,
+      fill: 0xfff0b3,
+      border: COLORS.gold,
       // Already won today: show the stars (you can still play again for a better score).
+      stars: record?.stars,
+      data,
+    });
+  }
+
+  /** The Endless Pond: waves until you run out of hearts. Shows your best. */
+  private drawEndlessButton(x: number, y: number, progress: Progress): void {
+    const best = progress.endless?.[this.difficulty];
+    const data: GameSceneData = { difficulty: this.difficulty, endless: true };
+    this.drawModeButton(x, y, {
+      icon: this.add.text(0, -2, '∞', textStyle(46, { weight: '700', color: '#3d8fe0', stroke: COLORS.inkCss, strokeThickness: 6 })).setOrigin(0.5),
+      title: ENDLESS.name,
+      subtitle: best ? `Your best: ${best} ${best === 1 ? 'wave' : 'waves'}` : 'How long can you last?',
+      fill: 0xdff1ff,
+      border: COLORS.blue,
+      data,
+    });
+  }
+
+  /** A wide button for a way to play (Daily Challenge, Endless Pond): icon, title, subtitle, and a play button or stars. */
+  private drawModeButton(
+    x: number,
+    y: number,
+    options: {
+      icon: Phaser.GameObjects.GameObject & { x: number };
+      title: string;
+      subtitle: string;
+      fill: number;
+      border: number;
+      stars?: number;
+      data: GameSceneData;
+    },
+  ): void {
+    const W = MODE_BUTTON.width;
+    const H = MODE_BUTTON.height;
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    options.icon.x = -W / 2 + 40;
+    const parts: Phaser.GameObjects.GameObject[] = [
+      drawCard(this.add.graphics(), W, H, { radius: 22, fill: options.fill, border: options.border, borderWidth: 5 }),
+      options.icon,
+      this.add.text(-W / 2 + 72, -16, options.title, textStyle(24, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+      this.add.text(-W / 2 + 72, 15, options.subtitle, textStyle(16, { ...ink, color: '#6a5a4a' })).setOrigin(0, 0.5),
+    ];
+    if (options.stars !== undefined) {
       for (let s = 0; s < 3; s++) {
-        parts.push(this.add.image(W / 2 - 130 + s * 40, 0, 'star').setDisplaySize(36, 36).setTint(s < record.stars ? 0xffd23f : 0xd8d2cc));
+        parts.push(this.add.image(W / 2 - 92 + s * 28, 0, 'star').setDisplaySize(28, 28).setTint(s < options.stars ? 0xffd23f : 0xd8d2cc));
       }
     } else {
-      const play = this.add.graphics().fillStyle(COLORS.green).fillCircle(0, 0, 26).lineStyle(4, COLORS.ink).strokeCircle(0, 0, 26);
-      play.fillStyle(0xffffff).fillTriangle(-8, -12, -8, 12, 13, 0).lineStyle(3, COLORS.ink).strokeTriangle(-8, -12, -8, 12, 13, 0);
-      play.x = W / 2 - 52;
+      const play = this.add.graphics().fillStyle(COLORS.green).fillCircle(0, 0, 24).lineStyle(4, COLORS.ink).strokeCircle(0, 0, 24);
+      play.fillStyle(0xffffff).fillTriangle(-7, -11, -7, 11, 12, 0).lineStyle(3, COLORS.ink).strokeTriangle(-7, -11, -7, 11, 12, 0);
+      play.x = W / 2 - 44;
       parts.push(play);
       this.tweens.add({ targets: play, scale: 1.1, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
     }
@@ -171,8 +213,7 @@ export class LevelSelectScene extends Phaser.Scene {
     hit.on('pointerdown', () => {
       playSound(this, 'tap');
       this.tweens.add({ targets: container, scale: 0.96, duration: 80, yoyo: true });
-      const data: GameSceneData = { difficulty: this.difficulty, daily: date };
-      this.go('GameScene', data);
+      this.go('GameScene', options.data);
     });
   }
 

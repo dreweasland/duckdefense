@@ -26,21 +26,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T
   }
 }
 
-/** Top scores for a level, or for a Daily Challenge when `daily` (a YYYY-MM-DD date) is given. */
-export async function fetchScores(level: number, difficulty: Difficulty, daily?: string): Promise<ApiResult<ScoreRow[]>> {
-  const board = daily ? `daily=${encodeURIComponent(daily)}` : `level=${level}`;
-  const result = await request<{ scores: ScoreRow[] }>(`/api/scores?${board}&difficulty=${difficulty}`);
+/** Which leaderboard: a level's, a day's Daily Challenge (YYYY-MM-DD), or the Endless Pond. */
+export type Board = { level: number } | { daily: string } | { endless: true };
+
+export async function fetchScores(board: Board, difficulty: Difficulty): Promise<ApiResult<ScoreRow[]>> {
+  const query = 'daily' in board ? `daily=${encodeURIComponent(board.daily)}` : 'endless' in board ? 'endless=1' : `level=${board.level}`;
+  const result = await request<{ scores: ScoreRow[] }>(`/api/scores?${query}&difficulty=${difficulty}`);
   return result.ok ? { ok: true, data: result.data.scores } : result;
 }
 
-export async function postScore(entry: {
-  name: string;
-  level: number;
-  difficulty: Difficulty;
-  hearts: number;
-  peas: number;
-  daily?: string;
-}): Promise<ApiResult<{ id: number; score: number; rank: number }>> {
+export async function postScore(
+  entry:
+    | { name: string; level: number; difficulty: Difficulty; hearts: number; peas: number; daily?: string }
+    | { name: string; difficulty: Difficulty; endless: true; waves: number },
+): Promise<ApiResult<{ id: number; score: number; rank: number }>> {
   return request('/api/scores', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

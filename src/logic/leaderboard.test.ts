@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DIFFICULTIES } from '../data/difficulty';
 import { LEVEL_COUNT } from '../data/levelCount';
 import { LEVELS } from '../data/levels';
+import { ENDLESS, ENDLESS_LEVEL } from '../data/endless';
 import { challengeSettings, dailyFor } from './daily';
 import { MAX_PEAS, NAME_MAX_LENGTH, checkName, checkSubmission } from './leaderboard';
 import { scoreFor } from './progress';
@@ -85,5 +86,21 @@ describe('daily challenge submissions', () => {
 describe('level count', () => {
   it('matches the levels list (update src/data/levelCount.ts when adding a level)', () => {
     expect(LEVEL_COUNT).toBe(LEVELS.length);
+  });
+});
+
+describe('Endless Pond submissions', () => {
+  it('scores the waves survived, on its own board', () => {
+    expect(checkSubmission({ name: 'Pond Pro', difficulty: 'normal', endless: true, waves: 23, hearts: 5, peas: 9999 })).toEqual({
+      ok: true,
+      entry: { name: 'Pond Pro', level: ENDLESS_LEVEL, difficulty: 'normal', hearts: 0, peas: 0, score: 23 },
+    });
+  });
+
+  it('rejects impossible wave counts', () => {
+    const run = { name: 'Pond Pro', difficulty: 'easy', endless: true };
+    expect(checkSubmission({ ...run, waves: 0 }).ok).toBe(false);
+    expect(checkSubmission({ ...run, waves: ENDLESS.maxWaves + 1 }).ok).toBe(false);
+    expect(checkSubmission({ ...run, waves: 2.5 }).ok).toBe(false);
   });
 });

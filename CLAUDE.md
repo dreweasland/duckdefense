@@ -93,6 +93,11 @@ everywhere: dialogue, tooltips, code comments.
   yet), Craig pops up beside her button with a tip that fits: call her when hearts are low,
   the duck that beats the predator that got in, then general tips. Each hint shows once per
   visit. Words in `src/data/hints.ts`, rules in `src/logic/hints.ts`.
+- **Endless Pond:** Waves on the Backyard Pond map until the hearts run out; the score is
+  waves survived, with its own leaderboard tab. Waves are built by a formula (no randomness,
+  so it's fair) from the numbers in `src/data/endless.ts`: when each predator joins, how
+  fast they grow, and how much tougher they get (`health` on a wave). Endless scores are
+  stored on the leaderboard as level -1 (`ENDLESS_LEVEL`).
 - **Daily Challenge:** One level and one twist per UTC day, the same for everyone, with its
   own leaderboard. Twists live in `src/data/challenges.ts`; the rules shared with the server
   are in `src/logic/daily.ts`.

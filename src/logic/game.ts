@@ -230,6 +230,7 @@ export function startWave(game: Game): boolean {
   game.waveTime = 0;
   game.pending = scheduleWave(game.waves[game.waveIndex]!);
   game.battle.night = isNight(game);
+  game.battle.enemyHealth = game.waves[game.waveIndex]!.health ?? 1;
   return true;
 }
 
@@ -255,6 +256,7 @@ export function callNextWave(game: Game): number | undefined {
   game.waveTime = 0;
   game.pending = scheduleWave(game.waves[game.waveIndex]!);
   game.battle.night = isNight(game);
+  game.battle.enemyHealth = game.waves[game.waveIndex]!.health ?? 1;
   return earned;
 }
 

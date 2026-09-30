@@ -29,6 +29,8 @@ export interface ResultSceneData {
   daily?: string; // the Daily Challenge date, if that's what was played
   report?: Partial<Record<DuckKind, KindReport>>; // what each kind of duck did (the damage report)
   newHats?: HatKind[]; // hats this win unlocked
+  endlessWaves?: number; // for an Endless Pond run: waves survived
+  endlessBest?: number; // and the most ever survived on this difficulty
 }
 
 const POND = { center: { x: WORLD.width / 2, y: 610 }, radiusX: 420, radiusY: 95 };
@@ -48,7 +50,8 @@ export class ResultScene extends Phaser.Scene {
     setupCamera(this);
     const cx = WORLD.width / 2;
     const { won, difficulty, level, daily } = this.result;
-    const hasNext = won && !daily && level + 1 < LEVELS.length;
+    const endless = this.result.endlessWaves !== undefined;
+    const hasNext = won && !daily && !endless && level + 1 < LEVELS.length;
     const beatEverything = won && !daily && !hasNext;
 
     drawGrass(this, 41);
@@ -62,9 +65,9 @@ export class ResultScene extends Phaser.Scene {
 
     // Losing should never feel harsh: silly message, same big "again" button.
     this.add
-      .text(cx, 108, won ? 'You saved the duck house!' : 'The raccoons had a snack party!', {
+      .text(cx, 108, endless ? this.endlessHeadline() : won ? 'You saved the duck house!' : 'The raccoons had a snack party!', {
         ...textStyle(52, { weight: '700', strokeThickness: 10 }),
-        color: won ? '#ffd23f' : '#ffb3c1',
+        color: won || endless ? '#ffd23f' : '#ffb3c1',
         align: 'center',
         wordWrap: { width: 760 },
       })
@@ -74,7 +77,9 @@ export class ResultScene extends Phaser.Scene {
       .text(
         cx,
         172,
-        daily && won
+        endless
+          ? `Your best: ${this.result.endlessBest ?? 0} ${this.result.endlessBest === 1 ? 'wave' : 'waves'}`
+          : daily && won
           ? "You beat today's Daily Challenge!"
           : beatEverything
             ? 'You beat every level! The flock is so proud.'
@@ -86,9 +91,32 @@ export class ResultScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(51);
 
+    // An Endless Pond run: a Post button for the leaderboard, and a cheer for a new best.
+    if (endless) {
+      const waves = this.result.endlessWaves ?? 0;
+      const big = this.add
+        .text(cx, 250, String(waves), textStyle(76, { color: '#3d8fe0', stroke: COLORS.inkCss, strokeThickness: 10, weight: '700' }))
+        .setOrigin(0.5)
+        .setDepth(51);
+      this.add
+        .text(cx, 304, waves === 1 ? 'wave survived' : 'waves survived', textStyle(22, { color: COLORS.inkCss, strokeThickness: 0 }))
+        .setOrigin(0.5)
+        .setDepth(51);
+      big.setScale(0);
+      this.tweens.add({ targets: big, scale: 1, delay: 300, duration: 350, ease: 'Back.Out' });
+      if (this.result.newBest) {
+        this.add
+          .text(cx + big.width / 2 + 20, 230, 'New best!', textStyle(28, { color: '#e0447a', stroke: '#ffffff', strokeThickness: 6, weight: '700' }))
+          .setOrigin(0, 0.5)
+          .setDepth(51)
+          .setAngle(-8);
+      }
+      if ((this.result.endlessWaves ?? 0) > 0) this.drawPostButton(cx + 300, 296);
+    }
+
     // Stars and score for a win.
     const stars = this.result.stars ?? 0;
-    if (won) {
+    if (won && !endless) {
       for (let s = 0; s < 3; s++) {
         const earned = s < stars;
         const star = this.add
@@ -122,8 +150,9 @@ export class ResultScene extends Phaser.Scene {
     const progress = loadProgress();
     DUCK_ORDER.forEach((kind, i) => {
       const x = report ? cx - 285 + i * 190 : cx - 240 + i * 160;
-      const size = report ? (won ? 72 : 96) : won ? 90 : 110;
-      const y = report ? (won ? 380 : 320) : won ? 400 : 320;
+      const roomy = won || endless; // the win layout, with the ducks lower down
+      const size = report ? (roomy ? 72 : 96) : won ? 90 : 110;
+      const y = report ? (roomy ? 380 : 320) : won ? 400 : 320;
       const stats = report?.[kind];
       const stayedHome = !!report && !stats?.placed;
       const parts: Phaser.GameObjects.GameObject[] = [];
@@ -161,7 +190,7 @@ export class ResultScene extends Phaser.Scene {
       this.cameras.main.fadeOut(250, 0, 0, 0);
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start(scene, data));
     };
-    const again: GameSceneData = { difficulty, level, daily };
+    const again: GameSceneData = { difficulty, level, daily, endless };
     const levels: LevelSelectSceneData = { difficulty };
     const y = 560;
     if (hasNext) {
@@ -180,7 +209,7 @@ export class ResultScene extends Phaser.Scene {
     if (newHats.length > 0) this.time.delayedCall(1400, () => this.showNewHats(newHats));
 
     this.cameras.main.fadeIn(300, 0, 0, 0);
-    playSound(this, won ? 'win' : 'lose');
+    playSound(this, won || (endless && this.result.newBest) ? 'win' : 'lose');
   }
 
   /** A duck's damage report under its picture. Ducks that weren't placed "stayed home". */
@@ -198,6 +227,13 @@ export class ResultScene extends Phaser.Scene {
     ];
     lines.forEach((line) => line.setOrigin(0.5, 0).setDepth(51));
     if (top) this.drawCrown(x - lines[0]!.width / 2 - 26, y + 7).setDepth(51);
+  }
+
+  /** The big line for an Endless Pond run. */
+  private endlessHeadline(): string {
+    const waves = this.result.endlessWaves ?? 0;
+    if (waves === 0) return 'The raccoons were extra hungry!';
+    return `You survived ${waves} ${waves === 1 ? 'wave' : 'waves'}!`;
   }
 
   /** "New hat!" card beside the panel, for hats this win unlocked. */
@@ -241,8 +277,9 @@ export class ResultScene extends Phaser.Scene {
 
   /** "Post" puts this win on the public leaderboard (asks for a name first). */
   private drawPostButton(x: number, y: number): void {
-    const { level, difficulty, hearts, peas, daily } = this.result;
-    if (hearts === undefined || peas === undefined) return;
+    const { level, difficulty, hearts, peas, daily, endlessWaves } = this.result;
+    const endless = endlessWaves !== undefined;
+    if (!endless && (hearts === undefined || peas === undefined)) return;
     const button = drawBigButton(
       this,
       x,
@@ -253,7 +290,9 @@ export class ResultScene extends Phaser.Scene {
       async () => {
         let posted: { id: number } | undefined;
         const ok = await askForName(async (name) => {
-          const result = await postScore({ name, level, difficulty, hearts, peas, daily });
+          const result = await postScore(
+            endless ? { name, difficulty, endless: true, waves: endlessWaves } : { name, level, difficulty, hearts: hearts!, peas: peas!, daily },
+          );
           if (!result.ok) return result.error;
           posted = result.data;
           return undefined;
@@ -268,6 +307,7 @@ export class ResultScene extends Phaser.Scene {
           level,
           difficulty,
           daily,
+          endless,
           highlightId: posted.id,
           back: { scene: 'LevelSelectScene', data: { difficulty } },
         };

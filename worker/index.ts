@@ -2,11 +2,14 @@
 //
 //   GET    /api/scores?level=0&difficulty=easy          top scores for a level
 //   GET    /api/scores?daily=2026-09-29&difficulty=easy top scores for a Daily Challenge
+//   GET    /api/scores?endless=1&difficulty=easy        most Endless Pond waves survived
 //   POST   /api/scores                                  post a win { name, level, difficulty, hearts, peas, daily? }
+//                                                       or an Endless Pond run { name, difficulty, endless: true, waves }
 //   DELETE /api/scores/:id                       remove an entry (needs the ADMIN_TOKEN secret)
 
 import { checkSubmission } from '../src/logic/leaderboard';
 import { LEVEL_COUNT } from '../src/data/levelCount';
+import { ENDLESS_LEVEL } from '../src/data/endless';
 import { dailyFor } from '../src/logic/daily';
 
 interface Env {
@@ -67,8 +70,10 @@ async function listScores(url: URL, env: Env): Promise<Response> {
     return json({ scores: results });
   }
 
-  const level = Number(url.searchParams.get('level'));
-  if (!Number.isInteger(level) || level < 0 || level >= LEVEL_COUNT) return json({ error: 'Unknown level.' }, 400);
+  // Endless Pond runs are stored under their own level number.
+  const level = url.searchParams.get('endless') === '1' ? ENDLESS_LEVEL : Number(url.searchParams.get('level'));
+  const realLevel = Number.isInteger(level) && level >= 0 && level < LEVEL_COUNT;
+  if (!realLevel && level !== ENDLESS_LEVEL) return json({ error: 'Unknown level.' }, 400);
   const { results } = await env.DB.prepare(
     `SELECT id, name, score, hearts, created_at AS createdAt FROM scores
      WHERE level = ? AND difficulty = ? AND daily IS NULL

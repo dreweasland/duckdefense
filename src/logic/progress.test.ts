@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dailyRecord, emptyProgress, isUnlocked, parseProgress, recordDailyWin, recordWin, scoreFor, starsFor } from './progress';
+import { dailyRecord, emptyProgress, isUnlocked, parseProgress, recordDailyWin, recordEndless, recordWin, scoreFor, starsFor } from './progress';
 
 describe('stars', () => {
   it('gives 3 stars for keeping almost every heart', () => {
@@ -74,5 +74,15 @@ describe('daily challenge progress', () => {
   it('survives saving and loading', () => {
     const progress = recordDailyWin(emptyProgress(), '2026-09-29', 'easy', 2, 500);
     expect(parseProgress(JSON.stringify(progress))).toEqual(progress);
+  });
+});
+
+describe('Endless Pond progress', () => {
+  it('keeps the most waves survived on each difficulty, and survives saving', () => {
+    let progress = recordEndless(emptyProgress(), 'easy', 12);
+    progress = recordEndless(progress, 'easy', 8);
+    progress = recordEndless(progress, 'normal', 5);
+    expect(progress.endless).toEqual({ easy: 12, normal: 5 });
+    expect(parseProgress(JSON.stringify(progress)).endless).toEqual({ easy: 12, normal: 5 });
   });
 });

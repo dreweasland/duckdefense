@@ -1,6 +1,7 @@
 import { englishDataset, englishRecommendedTransformers, RegExpMatcher } from 'obscenity';
 import type { Difficulty } from '../data/difficulty';
 import { LEVEL_COUNT } from '../data/levelCount';
+import { ENDLESS, ENDLESS_LEVEL } from '../data/endless';
 import { challengeSettings, dailyFor, isPostableDate } from './daily';
 import { scoreFor } from './progress';
 
@@ -39,11 +40,20 @@ export type SubmissionCheck = { ok: true; entry: ScoreSubmission & { score: numb
 /** Validates a score someone wants to post, and works out the score itself (never trusting a sent one). */
 export function checkSubmission(body: unknown, now: Date = new Date()): SubmissionCheck {
   if (typeof body !== 'object' || body === null) return { ok: false, reason: 'Bad request.' };
-  const { name, difficulty, hearts, peas, daily } = body as Record<string, unknown>;
+  const { name, difficulty, hearts, peas, daily, endless, waves } = body as Record<string, unknown>;
   let { level } = body as Record<string, unknown>;
   const nameCheck = checkName(typeof name === 'string' ? name : '');
   if (!nameCheck.ok) return nameCheck;
   if (difficulty !== 'easy' && difficulty !== 'normal') return { ok: false, reason: 'Unknown difficulty.' };
+
+  // An Endless Pond run: the score is how many waves were survived.
+  if (endless === true) {
+    if (!Number.isInteger(waves) || (waves as number) < 1 || (waves as number) > ENDLESS.maxWaves) {
+      return { ok: false, reason: 'That score is not possible.' };
+    }
+    const entry: ScoreSubmission = { name: nameCheck.name, level: ENDLESS_LEVEL, difficulty, hearts: 0, peas: 0 };
+    return { ok: true, entry: { ...entry, score: waves as number } };
+  }
 
   // A Daily Challenge score: only for today (or yesterday), and the date decides the level and twist.
   const today = daily === undefined ? undefined : typeof daily === 'string' ? dailyFor(daily) : undefined;

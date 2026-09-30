@@ -92,6 +92,8 @@ export interface Battle {
   enemySpeed: number;
   /** Predators that arrive while this is true move faster. */
   night: boolean;
+  /** Multiplies the health of predators that arrive (tougher Endless Pond waves). */
+  enemyHealth: number;
   /** The damage report for each kind of duck placed this level. */
   report: Partial<Record<DuckKind, KindReport>>;
 }
@@ -125,6 +127,7 @@ export function createBattle(path: Path, options: BattleOptions = {}): Battle {
     flyersSpawned: 0,
     enemySpeed: options.enemySpeed ?? 1,
     night: false,
+    enemyHealth: 1,
     report: {},
   };
 }
@@ -147,11 +150,12 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind): Enemy {
     if (!battle.pond) throw new Error(`A ${stats.name} needs a pond to climb out of: add a "pond" layer to the map`);
     path = joinPath(battle.pond, battle.path);
   }
+  const maxHp = stats.maxHp * battle.enemyHealth;
   const enemy: Enemy = {
     id: battle.nextId++,
     kind,
-    hp: stats.maxHp,
-    maxHp: stats.maxHp,
+    hp: maxHp,
+    maxHp,
     speed: stats.speed * battle.enemySpeed * (battle.night ? NIGHT.enemySpeed : 1),
     path,
     distance: 0,

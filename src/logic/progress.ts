@@ -16,6 +16,14 @@ export interface Progress {
   daily?: { date: string; results: Partial<Record<Difficulty, LevelRecord>> };
   /** The hat each duck is wearing (picked in the Wardrobe). */
   hats?: Partial<Record<DuckKind, HatKind>>;
+  /** The most Endless Pond waves survived on each difficulty. */
+  endless?: Partial<Record<Difficulty, number>>;
+}
+
+/** Records an Endless Pond run, keeping the most waves survived. Returns a new Progress. */
+export function recordEndless(progress: Progress, difficulty: Difficulty, waves: number): Progress {
+  const best = Math.max(waves, progress.endless?.[difficulty] ?? 0);
+  return { ...progress, endless: { ...progress.endless, [difficulty]: best } };
 }
 
 export function emptyProgress(): Progress {
@@ -78,6 +86,7 @@ export function parseProgress(text: string | null): Progress {
       levels?: Partial<Record<Difficulty, Record<string, Partial<LevelRecord>>>>;
       daily?: { date?: unknown; results?: Partial<Record<Difficulty, Partial<LevelRecord>>> };
       hats?: Record<string, unknown>;
+      endless?: Record<string, unknown>;
     };
     for (const difficulty of ['easy', 'normal'] as const) {
       for (const [key, record] of Object.entries(data.levels?.[difficulty] ?? {})) {
@@ -105,6 +114,10 @@ export function parseProgress(text: string | null): Progress {
       if (typeof hat === 'string' && hat in HATS) hats[kind] = hat as HatKind;
     }
     if (Object.keys(hats).length > 0) progress.hats = hats;
+    for (const difficulty of ['easy', 'normal'] as const) {
+      const waves = Number(data.endless?.[difficulty]);
+      if (Number.isInteger(waves) && waves > 0) progress.endless = { ...progress.endless, [difficulty]: waves };
+    }
   } catch {
     // Corrupt save: start fresh rather than crash.
   }
