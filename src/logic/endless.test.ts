@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ENDLESS } from '../data/endless';
 import { LEVELS } from '../data/levels';
 import { play } from './simulate';
-import { endlessWave, endlessWaves } from './endless';
+import { bossCount, endlessWave, endlessWaves } from './endless';
 import { buyDuck, createGame, mapFromLevel, repairCost, repairHouse, sellValue, startWave, trainDuck, trainingCost, upgradeDuck } from './game';
 import { parseLevel } from './level';
 import { spawnEnemy } from './battle';
@@ -19,9 +19,13 @@ describe('Endless Pond waves', () => {
     }
   });
 
-  it('bring the Night Bandit every 10th wave, and night every 3rd', () => {
-    expect(kinds(ENDLESS.bossEvery)).toContain('bandit');
-    expect(kinds(ENDLESS.bossEvery + 1)).not.toContain('bandit');
+  it('bring the Night Bandit more and more often, and night every 3rd wave', () => {
+    const { every, fasterFrom, fasterEvery, oneMoreEvery } = ENDLESS.boss;
+    expect(kinds(every)).toContain('bandit');
+    expect(kinds(every + 1)).not.toContain('bandit');
+    expect(bossCount(fasterEvery)).toBe(0); // not every 5th wave yet...
+    expect(bossCount(fasterFrom + fasterEvery)).toBeGreaterThan(0); // ...but later, yes
+    expect(bossCount(oneMoreEvery * 2)).toBe(3);
     expect(endlessWave(ENDLESS.nightEvery).time).toBe('night');
     expect(endlessWave(1).time).toBe('day');
   });

@@ -15,13 +15,21 @@ export function endlessWave(n: number): Wave {
       every: Math.max(ENDLESS.minEvery, g.every / squeeze),
       ...(g.after !== undefined && { after: g.after }),
     }));
-  if (n % ENDLESS.bossEvery === 0) groups.push({ enemy: 'bandit', count: 1, every: 1, after: 8 });
+  const bandits = bossCount(n);
+  if (bandits > 0) groups.push({ enemy: 'bandit', count: bandits, every: 6, after: 8 });
   return {
     time: n % ENDLESS.nightEvery === 0 ? 'night' : 'day',
     groups,
     bonusPeas: ENDLESS.bonusPeas.first + ENDLESS.bonusPeas.perWave * (n - 1),
-    health: 1 + ENDLESS.healthPerWave * (n - 1),
+    health: ENDLESS.healthGrowth ** (n - 1),
   };
+}
+
+/** How many Night Bandits crash wave `n` (0 on most waves). */
+export function bossCount(n: number): number {
+  const { every, fasterFrom, fasterEvery, oneMoreEvery } = ENDLESS.boss;
+  const bossWave = n >= fasterFrom ? n % fasterEvery === 0 : n % every === 0;
+  return bossWave ? 1 + Math.floor(n / oneMoreEvery) : 0;
 }
 
 /** Every Endless Pond wave, in order. */

@@ -96,7 +96,9 @@ everywhere: dialogue, tooltips, code comments.
 - **Endless Pond:** Waves on the Backyard Pond map until the hearts run out; the score is
   waves survived, with its own leaderboard tab. Waves are built by a formula (no randomness,
   so it's fair) from the numbers in `src/data/endless.ts`: when each predator joins, how
-  fast they grow, and how much tougher they get (`health` on a wave). Endless scores are
+  fast they grow, and how much tougher they get (`health` on a wave, growing 4.5% a wave on
+  top of the last). The Night Bandit comes every 10th wave, then every 5th from wave 20,
+  with one more Bandit every 25 waves. Endless scores are
   stored on the leaderboard as level -1 (`ENDLESS_LEVEL`).
   Endless only, so peas never pile up: fully upgraded ducks can keep **training** (+15%
   damage per level, each costing more), and a button under the hearts **fixes the duck

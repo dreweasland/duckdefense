@@ -1750,8 +1750,13 @@ export class GameScene extends Phaser.Scene {
 
   private showBossEntrance(enemy: Enemy): void {
     playSound(this, 'bossArrives');
-    this.showBanner('The Night Bandit is here!');
     this.cameras.main.shake(450, 0.004);
+    // More than one at once (late in the Endless Pond): the big bar stays on the first one.
+    if (this.bossBar) {
+      this.showBanner('Another Night Bandit!');
+      return;
+    }
+    this.showBanner('The Night Bandit is here!');
 
     // Big health bar along the bottom of the screen.
     const panel = this.add
@@ -1792,6 +1797,12 @@ export class GameScene extends Phaser.Scene {
     this.fx.stars.explode(20, at.x, at.y - 40);
     this.showBanner(message);
     const bar = this.bossBar;
+    // Another Bandit still out? The big bar moves to it.
+    const next = this.state.battle.enemies.find((e) => ENEMIES[e.kind].boss && e.id !== bar?.enemyId);
+    if (bar && next) {
+      bar.enemyId = next.id;
+      return;
+    }
     this.bossBar = undefined;
     if (bar) this.tweens.add({ targets: bar.container, alpha: 0, duration: 400, onComplete: () => bar.container.destroy() });
   }
