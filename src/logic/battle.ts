@@ -1,11 +1,12 @@
 import { FOUNTAIN, NIGHT } from '../data/dayNight';
 import { ENDLESS } from '../data/endless';
-import { WING_FLAP_RECOVERY, type DuckKind } from '../data/ducks';
+import { WING_FLAP_RECOVERY, type DuckKind, type DuckStats } from '../data/ducks';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { DEFAULT_TARGETING, type Targeting } from '../data/targeting';
 import { CHASES, PECKING_LOOP } from '../data/synergy';
 import { distance, type Point } from './geometry';
 import { joinPath, makePath, pointAt, type Path } from './path';
+import { NO_MODS, type Mods } from './perks';
 import { statsAt } from './upgrades';
 
 export interface Enemy {
@@ -99,6 +100,8 @@ export interface Battle {
   enemyHealth: number;
   /** The damage report for each kind of duck placed this level. */
   report: Partial<Record<DuckKind, KindReport>>;
+  /** Multipliers from Endless Pond perks (all 1 otherwise). */
+  mods: Mods;
 }
 
 /** Things that happened during a step, so the scene can animate them. */
@@ -132,6 +135,7 @@ export function createBattle(path: Path, options: BattleOptions = {}): Battle {
     night: false,
     enemyHealth: 1,
     report: {},
+    mods: { ...NO_MODS },
   };
 }
 
@@ -215,6 +219,23 @@ function enemiesInRange(battle: Battle, from: Point, range: number): Enemy[] {
   return battle.enemies.filter((e) => e.hp > 0 && distance(enemyPosition(e), from) <= range);
 }
 
+/**
+ * A duck's stats right now: its upgrades, plus any Endless Pond perks (reach, damage,
+ * attack speed, Chester's freeze, Curtis's slow).
+ */
+export function duckStats(battle: Battle, duck: Duck): DuckStats {
+  const base = statsAt(duck.kind, duck.level);
+  const m = battle.mods;
+  return {
+    ...base,
+    range: base.range * m.range,
+    damage: base.damage * m.damage,
+    attackInterval: base.attackInterval / m.attackSpeed,
+    alarmQuack: base.alarmQuack && { ...base.alarmQuack, stunTime: base.alarmQuack.stunTime * m.stun },
+    slowZone: base.slowZone && { slow: base.slowZone.slow * m.slow },
+  };
+}
+
 /** Whether a sneaky predator is hiding right now (an Alarm Quack flushes it out for a while). */
 export function isHidden(enemy: Enemy): boolean {
   return !!ENEMIES[enemy.kind].sneaky && enemy.revealedTime <= 0;
@@ -292,7 +313,7 @@ export function chasePartner(battle: Battle, duck: Duck): Duck | undefined {
 }
 
 export function attackInterval(battle: Battle, duck: Duck): number {
-  const base = statsAt(duck.kind, duck.level).attackInterval;
+  const base = duckStats(battle, duck).attackInterval;
   return chasePartner(battle, duck) ? base / (1 + PECKING_LOOP.attackSpeedBonus) : base;
 }
 
@@ -310,7 +331,7 @@ function slowFor(battle: Battle, enemy: Enemy): number {
   let factor = 1;
   let slower: Duck | undefined;
   for (const duck of battle.ducks) {
-    const stats = statsAt(duck.kind, duck.level);
+    const stats = duckStats(battle, duck);
     if (stats.slowZone && distance(at, duck.position) <= stats.range && stats.slowZone.slow < factor) {
       factor = stats.slowZone.slow;
       slower = duck;
@@ -348,7 +369,7 @@ function scareDucks(
     if (statsAt(duck.kind, duck.level).fearless) {
       fearlessIds.push(duck.id);
     } else {
-      duck.scaredTime = Math.max(duck.scaredTime, time);
+      duck.scaredTime = Math.max(duck.scaredTime, time * battle.mods.scare);
       duckIds.push(duck.id);
     }
   }
@@ -412,7 +433,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
   for (const duck of battle.ducks) {
     duck.abilityCooldown = Math.max(0, duck.abilityCooldown - dt);
     if (duck.abilityCooldown > 0 || isScared(duck)) continue;
-    const stats = statsAt(duck.kind, duck.level);
+    const stats = duckStats(battle, duck);
 
     // Chester's Alarm Quack: freeze every predator in range, hawks included, and flush
     // hiding predators out of the grass. Quick ones (foxes) shake it off sooner.
@@ -437,7 +458,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     duck.cooldown = Math.max(0, duck.cooldown - dt);
     if (duck.cooldown > 0 || isScared(duck)) continue;
 
-    const stats = statsAt(duck.kind, duck.level);
+    const stats = duckStats(battle, duck);
     const target = pickTarget(battle, duck.position, stats.range, stats.canHitFlying, duck.targeting);
     if (!target) continue;
 
@@ -449,7 +470,10 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
           ((stats.canHitFlying || !isFlying(e)) && distance(enemyPosition(e), targetPos) <= stats.splashRadius)),
     );
     const damage =
-      stats.damage * (isRefreshed(battle, duck) ? 1 + FOUNTAIN.damageBoost : 1) * (1 + ENDLESS.training.damage * duck.training);
+      stats.damage *
+      (isRefreshed(battle, duck) ? 1 + FOUNTAIN.damageBoost : 1) *
+      (1 + ENDLESS.training.damage * duck.training) *
+      (battle.night ? battle.mods.nightDamage : 1);
     for (const enemy of hit) {
       const before = enemy.hp;
       enemy.hp -= damageTo(enemy, damage);

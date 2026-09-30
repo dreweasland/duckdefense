@@ -94,7 +94,8 @@ describe('Endless Pond balance', () => {
   const info = { ...LEVELS[ENDLESS.level]!, waves: endlessWaves() };
 
   it('lets a simple Easy player last a good while, but not forever', () => {
-    const survived = play(info, 'easy', 'sunny', { upgrades: 'place-first' }).waveIndex;
+    // Bigger simulation steps keep this long run quick.
+    const survived = play(info, 'easy', 'sunny', { upgrades: 'place-first', endless: true, step: 1 / 10 }).waveIndex;
     expect(survived).toBeGreaterThanOrEqual(15);
     expect(survived).toBeLessThan(80);
   }, 60_000);

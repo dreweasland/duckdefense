@@ -8,6 +8,7 @@ import {
   buyDuck,
   canBuy,
   canUpgrade,
+  choosePerk,
   createGame,
   isOver,
   mapFromLevel,
@@ -63,6 +64,8 @@ export interface Strategy {
   extras?: boolean;
   /** Seconds per simulation step (default 1/30). Bigger is faster to run but a little rougher. */
   step?: number;
+  /** Stop after this many waves (to keep very long Endless Pond runs quick to test). */
+  maxWaves?: number;
 }
 
 /** Before each wave, spend peas on `kind` ducks in the best slots (and upgrades, per the strategy). */
@@ -83,7 +86,9 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | n
       .sort((a, b) => trainingCost(game, a.id)! - trainingCost(game, b.id)!)[0];
   const anyUpgradeLeft = () => game.battle.ducks.some((d) => nextUpgrade(d.kind, d.level));
 
-  while (!isOver(game)) {
+  while (!isOver(game) && game.waveIndex < (strategy.maxWaves ?? Infinity)) {
+    // Endless Pond: take the first Pond Perk on offer.
+    if (game.perkChoice) choosePerk(game, game.perkChoice[0]!);
     for (;;) {
       const canPlace = !!kind && slots.length > 0 && canBuy(game, kind);
       const upgrade = upgrades === 'none' ? undefined : cheapestUpgrade();

@@ -9,6 +9,8 @@ import { EARLY_CALL, type Wave } from '../data/waves';
 import { createBattle, placeDuck, spawnEnemy, step, type Battle, type BattleEvent, type Duck, type Enemy } from './battle';
 import { distance, type Point } from './geometry';
 import { ENDLESS } from '../data/endless';
+import { PERKS, type PerkId } from '../data/perks';
+import { offerPerks, perkMods, type PerksTaken } from './perks';
 import { challengeSettings, challengeWaves } from './daily';
 import { nextUpgrade, totalSpent } from './upgrades';
 import type { Level } from './level';
@@ -52,6 +54,10 @@ export interface Game {
   endless: boolean;
   /** Hearts bought back by fixing the duck house (each one costs more). */
   repairs: number;
+  /** Endless Pond: Pond Perks picked so far, and how many times each. */
+  perks: PerksTaken;
+  /** Endless Pond: perks on offer right now (pick one before the next wave). */
+  perkChoice?: PerkId[];
 }
 
 /** What the game needs from a level. */
@@ -72,6 +78,7 @@ export function mapFromLevel(level: Level): GameMap {
 
 export type GameEvent =
   | BattleEvent
+  | { type: 'perkOffered'; perks: PerkId[] }
   | { type: 'spawned'; enemy: Enemy }
   | { type: 'shooed'; enemy: Enemy }
   | { type: 'waveCleared'; waveIndex: number; bonus: number }
@@ -103,6 +110,7 @@ export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Dif
     maxHearts: settings.hearts,
     endless,
     repairs: 0,
+    perks: {},
   };
 }
 
@@ -275,9 +283,9 @@ export function scheduleWave(wave: Wave): ScheduledSpawn[] {
   return spawns.sort((a, b) => a.time - b.time);
 }
 
-/** Sends the next wave. Only works between waves. */
+/** Sends the next wave. Only works between waves, once any Pond Perk on offer has been picked. */
 export function startWave(game: Game): boolean {
-  if (game.phase !== 'building') return false;
+  if (game.phase !== 'building' || game.perkChoice) return false;
   game.phase = 'wave';
   game.waveTime = 0;
   game.pending = scheduleWave(game.waves[game.waveIndex]!);
@@ -302,14 +310,45 @@ export function earlyBonus(game: Game): number {
  */
 export function callNextWave(game: Game): number | undefined {
   if (!canCallEarly(game)) return undefined;
-  const earned = game.waves[game.waveIndex]!.bonusPeas + earlyBonus(game);
+  const earned = waveBonus(game) + earlyBonus(game);
   game.peas += earned;
   game.waveIndex++;
+  offerPerksIfDue(game);
   game.waveTime = 0;
   game.pending = scheduleWave(game.waves[game.waveIndex]!);
   game.battle.night = isNight(game);
   game.battle.enemyHealth = game.waves[game.waveIndex]!.health ?? 1;
   return earned;
+}
+
+/** The peas for clearing the current wave (Early Riser makes day waves pay more). */
+function waveBonus(game: Game): number {
+  const wave = game.waves[game.waveIndex]!;
+  return Math.round(wave.bonusPeas * (wave.time === 'day' ? game.battle.mods.dayBonus : 1));
+}
+
+/** Endless Pond: after every few waves, offer Pond Perks. Returns true if it just did. */
+function offerPerksIfDue(game: Game): boolean {
+  if (!game.endless || game.perkChoice || game.waveIndex === 0 || game.waveIndex % ENDLESS.perkEvery !== 0) return false;
+  const offer = offerPerks(game.perks, game.waveIndex);
+  if (offer.length === 0) return false;
+  game.perkChoice = offer;
+  return true;
+}
+
+/** Picks one of the Pond Perks on offer. Returns false if it isn't one of them. */
+export function choosePerk(game: Game, id: PerkId): boolean {
+  if (!game.perkChoice?.includes(id) || isOver(game)) return false;
+  game.perkChoice = undefined;
+  game.perks = { ...game.perks, [id]: (game.perks[id] ?? 0) + 1 };
+  game.battle.mods = perkMods(game.perks);
+  const { hearts, peas } = PERKS[id].effect;
+  if (hearts) {
+    game.hearts += hearts;
+    game.maxHearts += hearts;
+  }
+  if (peas) game.peas += peas;
+  return true;
 }
 
 /** Advances the game by `dt` seconds. Nothing moves between waves. */
@@ -333,7 +372,7 @@ export function update(game: Game, dt: number): GameEvent[] {
       continue;
     }
     events.push(event);
-    if (event.type === 'defeated') game.peas += ENEMIES[event.enemy.kind].peas;
+    if (event.type === 'defeated') game.peas += Math.round(ENEMIES[event.enemy.kind].peas * game.battle.mods.killPeas);
     if (event.type === 'reachedHouse') game.hearts = Math.max(0, game.hearts - ENEMIES[event.enemy.kind].hearts);
   }
 
@@ -344,7 +383,7 @@ export function update(game: Game, dt: number): GameEvent[] {
   }
 
   if (game.pending.length === 0 && game.battle.enemies.length === 0) {
-    const bonus = game.waves[game.waveIndex]!.bonusPeas;
+    const bonus = waveBonus(game);
     game.peas += bonus;
     events.push({ type: 'waveCleared', waveIndex: game.waveIndex, bonus });
     game.waveIndex++;
@@ -353,6 +392,7 @@ export function update(game: Game, dt: number): GameEvent[] {
       events.push({ type: 'won' });
     } else {
       game.phase = 'building';
+      if (offerPerksIfDue(game)) events.push({ type: 'perkOffered', perks: game.perkChoice! });
     }
   }
 

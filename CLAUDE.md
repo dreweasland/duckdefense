@@ -102,6 +102,11 @@ everywhere: dialogue, tooltips, code comments.
   damage per level, each costing more), and a button under the hearts **fixes the duck
   house** (one heart back, up to the starting hearts, each costing more). Both in
   `ENDLESS.training` and `ENDLESS.repair`.
+  **Pond Perks** (Endless only): after every 5th wave the game waits while you pick 1 of 3
+  perks, like Sharp Beaks (+10% damage) or Early Riser (day waves pay more). Perks stack
+  up to a limit. Offers come from the wave number (no randomness). Perks are listed in
+  `src/data/perks.ts`; `src/logic/perks.ts` turns them into multipliers the battle reads
+  through `duckStats()`.
 - **Daily Challenge:** One level and one twist per UTC day, the same for everyone, with its
   own leaderboard. Twists live in `src/data/challenges.ts`; the rules shared with the server
   are in `src/logic/daily.ts`.

@@ -23,6 +23,7 @@ export const ENDLESS = {
   spacingPerWave: 0.03, // and arrive this much closer together
   minEvery: 0.35, // but never closer than this many seconds apart
   bonusPeas: { first: 50, perWave: 4 }, // peas for clearing a wave
+  perkEvery: 5, // after every 5th wave, pick a Pond Perk (see src/data/perks.ts)
   // Training: once a duck has both upgrades, it can keep training to hit harder.
   training: {
     damage: 0.15, // each level of training adds this much damage (0.15 = +15%)

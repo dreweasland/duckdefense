@@ -17,6 +17,8 @@ export const HUD_AREAS: Area[] = [
   { x: 1210, y: 650, width: 70, height: 70 }, // sound on/off
 ];
 
-// Only on the Endless Pond's map (see src/data/endless.ts): the "fix the duck house" button
-// under the hearts. `npm test` checks that map keeps its nests out from under it.
+// Only on the Endless Pond's map (see src/data/endless.ts): the Pond Perks counter and the
+// "fix the duck house" button, under the peas and hearts. `npm test` checks that map keeps
+// its nests out from under them.
+export const ENDLESS_PERKS_AREA: Area = { x: 575, y: 74, width: 110, height: 42 };
 export const ENDLESS_REPAIR_AREA: Area = { x: 695, y: 74, width: 120, height: 42 };

@@ -8,15 +8,17 @@ import { CHASES } from '../data/synergy';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { GAME_SPEEDS } from '../data/gameSpeed';
 import { TARGETING, TARGETING_ORDER, type Targeting } from '../data/targeting';
-import { ENDLESS_REPAIR_AREA, HUD_AREAS } from '../data/layout';
+import { ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, HUD_AREAS } from '../data/layout';
+import { PERKS, type PerkId } from '../data/perks';
 import { LEVELS } from '../data/levels';
-import { chasePartner, enemyPosition, isFlying, isHidden, isRefreshed, type Enemy } from '../logic/battle';
+import { chasePartner, duckStats, enemyPosition, isFlying, isHidden, isRefreshed, type Enemy } from '../logic/battle';
 import {
   buyDuck,
   callNextWave,
   canBuy,
   canCallEarly,
   canSell,
+  choosePerk,
   earlyBonus,
   repairCost,
   repairHouse,
@@ -194,6 +196,9 @@ export class GameScene extends Phaser.Scene {
   private shield!: Phaser.GameObjects.Container;
   private goButton!: Phaser.GameObjects.Container;
   private speedButton!: { container: Phaser.GameObjects.Container; draw: () => void };
+  /** Endless Pond: the Pond Perks counter under the peas, and the "pick a perk" card while it's open. */
+  private perksButton?: { container: Phaser.GameObjects.Container; count: Phaser.GameObjects.Text };
+  private perkCard?: Phaser.GameObjects.Container;
   /** Endless Pond: the "fix the duck house" button under the hearts, and its price. */
   private repairButton?: { container: Phaser.GameObjects.Container; cost: Phaser.GameObjects.Text; pea: Phaser.GameObjects.Image };
   private callEarlyButton!: { container: Phaser.GameObjects.Container; label: Phaser.GameObjects.Text };
@@ -271,6 +276,8 @@ export class GameScene extends Phaser.Scene {
     this.bannerQueue = [];
     this.callEarlyCard = undefined;
     this.repairButton = undefined;
+    this.perksButton = undefined;
+    this.perkCard = undefined;
     this.panelReport = undefined;
     this.hintBubble = undefined;
     this.lastHintAt = -Infinity;
@@ -286,7 +293,10 @@ export class GameScene extends Phaser.Scene {
     this.drawPicker();
     this.drawHud();
     this.preview = this.add.container(0, 0).setDepth(DEPTH.hud);
-    if (this.endless) this.repairButton = this.drawRepairButton();
+    if (this.endless) {
+      this.repairButton = this.drawRepairButton();
+      this.perksButton = this.drawPerksButton();
+    }
     this.goButton = this.drawGoButton();
     this.speedButton = this.drawSpeedButton();
     this.callEarlyButton = this.drawCallEarlyButton();
@@ -313,7 +323,8 @@ export class GameScene extends Phaser.Scene {
     const speed = this.state.phase === 'wave' ? (GAME_SPEEDS[speedIndex] ?? 1) : 1;
     this.setTimeScale(speed);
     const events: GameEvent[] = [];
-    let remaining = Math.min(deltaMs / 1000, MAX_STEP) * speed;
+    // Everything waits while you pick a Pond Perk.
+    let remaining = this.perkCard ? 0 : Math.min(deltaMs / 1000, MAX_STEP) * speed;
     while (remaining > 1e-6 && !isOver(this.state)) {
       const dt = Math.min(remaining, SIM_STEP);
       events.push(...update(this.state, dt));
@@ -570,6 +581,13 @@ export class GameScene extends Phaser.Scene {
       if (early) card.bonus.setText(`${peas} peas`);
       else this.closePopup();
     }
+    if (this.perksButton) {
+      const picked = Object.values(game.perks).reduce((sum, n) => sum + n, 0);
+      this.perksButton.count.setText(String(picked));
+      this.perksButton.container.setAlpha(picked > 0 ? 1 : 0.5);
+    }
+    // Pond Perks on offer: show the card to pick one.
+    if (game.perkChoice && !this.perkCard && !isOver(game)) this.showPerkChoice(game.perkChoice);
     if (this.repairButton) {
       // Shows its price when the house needs fixing, dimmed if you can't afford it yet.
       const cost = repairCost(game);
@@ -809,7 +827,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawPlacedDuck(id: number, kind: DuckKind, at: Point): void {
-    const range = this.add.circle(at.x, at.y, DUCKS[kind].range).setStrokeStyle(2, 0xffffff, 0.22);
+    const placed = this.state.battle.ducks.find((d) => d.id === id);
+    const reach = placed ? duckStats(this.state.battle, placed).range : DUCKS[kind].range;
+    const range = this.add.circle(at.x, at.y, reach).setStrokeStyle(2, 0xffffff, 0.22);
     range.setDepth(DEPTH.path + 0.5);
 
     const size = kind === 'curtis' ? DUCK_SIZE * 1.12 : DUCK_SIZE;
@@ -1198,7 +1218,8 @@ export class GameScene extends Phaser.Scene {
     const size = sprite.baseSize * (1 + 0.07 * level);
     sprite.art.setDisplaySize(size, size).setY(-size * 0.28);
     this.tweens.add({ targets: sprite.art, y: sprite.art.y - 3, duration: 1000, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
-    sprite.range.setRadius(statsAt(kind, level).range);
+    const duck = [...this.state.battle.ducks].find((d) => this.duckSprites.get(d.id) === sprite);
+    sprite.range.setRadius(duck ? duckStats(this.state.battle, duck).range : statsAt(kind, level).range);
     const g = sprite.badge.clear();
     for (let i = 0; i < level; i++) {
       const cy = 16 - i * 9;
@@ -1597,7 +1618,8 @@ export class GameScene extends Phaser.Scene {
     if (!found) return;
     const { sprite, kind, level, position } = found;
     this.tweens.add({ targets: sprite.art, scale: sprite.art.scale * 1.2, duration: 100, yoyo: true });
-    const range = statsAt(kind, level).range;
+    const quacker = this.state.battle.ducks.find((d) => d.id === duckId);
+    const range = quacker ? duckStats(this.state.battle, quacker).range : statsAt(kind, level).range;
     this.ring(position.x, position.y - 30, range, COLORS.gold, 500);
     this.time.delayedCall(120, () => this.ring(position.x, position.y - 30, range * 0.7, COLORS.gold, 450));
     this.fx.stars.explode(10, position.x, position.y - 40);
@@ -1829,6 +1851,116 @@ export class GameScene extends Phaser.Scene {
       draw();
     });
     return { container, draw };
+  }
+
+  /** Endless Pond: "Pick a Pond Perk!" with three big cards. The game waits until you pick. */
+  private showPerkChoice(offer: PerkId[]): void {
+    this.cancelMove();
+    this.closePopup();
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    const dim = this.add
+      .rectangle(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height, 0x000000, 0.45)
+      .setInteractive(); // blocks taps on the map underneath
+    const title = this.add.text(WORLD.width / 2, 200, 'Pick a Pond Perk!', textStyle(52, { weight: '700', strokeThickness: 10 })).setOrigin(0.5);
+    const parts: Phaser.GameObjects.GameObject[] = [dim, title];
+    const W = 250;
+    const H = 250;
+    offer.forEach((id, i) => {
+      const perk = PERKS[id];
+      const have = this.state.perks[id] ?? 0;
+      const icon = this.add.image(0, -60, perk.icon);
+      icon.setScale(Math.min(70 / icon.width, 70 / icon.height));
+      if (perk.tint !== undefined) icon.setTint(perk.tint);
+      const cardParts: Phaser.GameObjects.GameObject[] = [
+        drawCard(this.add.graphics(), W, H, { radius: 22, border: COLORS.gold, borderWidth: 5 }),
+        icon,
+        this.add.text(0, 6, perk.name, textStyle(26, { ...ink, weight: '700' })).setOrigin(0.5),
+        this.add.text(0, 60, perk.description, { ...textStyle(18, ink), align: 'center', wordWrap: { width: W - 30 } }).setOrigin(0.5),
+      ];
+      if (have > 0) {
+        // Already picked before: this one makes it stronger.
+        cardParts.push(this.add.text(W / 2 - 16, -H / 2 + 22, `×${have + 1}`, textStyle(22, { weight: '700', color: COLORS.goldCss })).setOrigin(1, 0.5));
+      }
+      const hit = this.add.zone(0, 0, W, H).setInteractive({ useHandCursor: true });
+      cardParts.push(hit);
+      const card = this.add.container(WORLD.width / 2 + (i - (offer.length - 1) / 2) * (W + 24), 400, cardParts);
+      card.setScale(0);
+      this.tweens.add({ targets: card, scale: 1, delay: 120 + i * 90, duration: 280, ease: 'Back.Out' });
+      hit.on('pointerover', () => card.setScale(1.04));
+      hit.on('pointerout', () => card.setScale(1));
+      hit.on('pointerdown', () => this.pickPerk(id));
+      parts.push(card);
+    });
+    this.perkCard = this.add.container(0, 0, parts).setDepth(DEPTH.hud + 6);
+    playSound(this, 'waveCleared');
+  }
+
+  private pickPerk(id: PerkId): void {
+    if (!choosePerk(this.state, id)) return;
+    this.perkCard?.destroy();
+    this.perkCard = undefined;
+    playSound(this, 'upgrade');
+    // Reach may have changed: redraw every duck's range circle.
+    for (const duck of this.state.battle.ducks) this.duckSprites.get(duck.id)?.range.setRadius(duckStats(this.state.battle, duck).range);
+    if (PERKS[id].effect.hearts) this.tweens.add({ targets: this.heartsPill, scale: 1.25, duration: 120, yoyo: true });
+    this.showBanner(`${PERKS[id].name}!`);
+    this.refreshHud();
+  }
+
+  /** Endless Pond: under the peas, how many Pond Perks you've picked. Tap it to see them. */
+  private drawPerksButton(): { container: Phaser.GameObjects.Container; count: Phaser.GameObjects.Text } {
+    const area = ENDLESS_PERKS_AREA;
+    const count = this.add.text(4, 0, '0', textStyle(22, { weight: '700' })).setOrigin(0, 0.5);
+    const hit = this.add.zone(0, 0, area.width, area.height + 8).setInteractive({ useHandCursor: true });
+    const container = this.add
+      .container(area.x + area.width / 2, area.y + area.height / 2, [
+        drawPill(this, 0, 0, area.width, 40),
+        this.add.image(-22, 0, 'star').setDisplaySize(26, 26).setTint(0x8fe07a),
+        count,
+        hit,
+      ])
+      .setDepth(DEPTH.hud);
+    hit.on('pointerdown', () => this.showPerksTaken());
+    return { container, count };
+  }
+
+  /** A card listing the Pond Perks picked so far. */
+  private showPerksTaken(): void {
+    const taken = (Object.keys(this.state.perks) as PerkId[]).filter((id) => (this.state.perks[id] ?? 0) > 0);
+    this.cancelMove();
+    this.closePopup();
+    playSound(this, 'tap');
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    const W = 340;
+    const rowH = 34;
+    const H = 70 + Math.max(1, taken.length) * rowH;
+    const parts: Phaser.GameObjects.GameObject[] = [
+      drawCard(this.add.graphics(), W, H, { radius: 18 }),
+      this.add.text(0, -H / 2 + 28, 'Pond Perks', textStyle(24, { ...ink, weight: '700' })).setOrigin(0.5),
+    ];
+    if (taken.length === 0) {
+      parts.push(this.add.text(0, -H / 2 + 70, `Pick one every ${ENDLESS.perkEvery} waves!`, textStyle(17, ink)).setOrigin(0.5));
+    }
+    taken.forEach((id, i) => {
+      const y = -H / 2 + 70 + i * rowH;
+      const icon = this.add.image(-W / 2 + 30, y, PERKS[id].icon);
+      icon.setScale(Math.min(24 / icon.width, 24 / icon.height));
+      if (PERKS[id].tint !== undefined) icon.setTint(PERKS[id].tint);
+      const times = this.state.perks[id] ?? 0;
+      parts.push(
+        icon,
+        this.add.text(-W / 2 + 52, y, `${PERKS[id].name}${times > 1 ? ` ×${times}` : ''}`, textStyle(18, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+      );
+    });
+    const area = ENDLESS_PERKS_AREA;
+    const popup = this.add.container(area.x + W / 2, area.y + area.height + 16 + H / 2, parts).setDepth(DEPTH.hud + 5);
+    popup.setScale(0.8).setAlpha(0);
+    this.tweens.add({ targets: popup, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
+    this.popup = popup;
+    this.popupTimer = this.time.delayedCall(5000, () => {
+      if (this.popup !== popup) return;
+      this.tweens.add({ targets: popup, alpha: 0, duration: 250, onComplete: () => this.popup === popup && this.closePopup() });
+    });
   }
 
   /** Endless Pond: under the hearts, spend peas to fix the duck house (one heart back). */
