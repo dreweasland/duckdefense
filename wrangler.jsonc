@@ -24,10 +24,10 @@
     }
   ],
 
-  // Custom domains (zone must be on this Cloudflare account).
-  // www is the main address; a Cloudflare redirect rule sends the bare domain to www.
-  "routes": [
-    { "pattern": "www.duckdefense.com", "custom_domain": true },
-    { "pattern": "duckdefense.com", "custom_domain": true }
-  ]
+  // Custom domain (zone must be on this Cloudflare account). www is the main address.
+  // The bare duckdefense.com is NOT listed: a Cloudflare redirect rule sends it to www, and
+  // that rule needs its own DNS record, which Cloudflare won't let a Worker domain replace
+  // (deploys used to end with "Hostname 'duckdefense.com' already has externally managed
+  // DNS records" after uploading the game).
+  "routes": [{ "pattern": "www.duckdefense.com", "custom_domain": true }]
 }
