@@ -104,7 +104,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
   potato: {
     name: 'Potato',
     power: { name: 'Wing Flap', description: 'Super fast pecks. Every 5th one flaps predators backward.', icon: 'flap', stat: 'Flapped' },
-    cost: 120,
+    cost: 100, // same as Sunny, so a Normal game can open with one of each
     range: 140, // a little shorter than Sunny; his strength is speed
     damage: 6,
     attackInterval: 0.3,
@@ -136,7 +136,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
   chester: {
     name: 'Chester',
     power: { name: 'Alarm Quack', description: 'QUACK! Freezes every predator nearby, even hawks.', icon: 'quack', stat: 'Froze' },
-    cost: 150,
+    cost: 110, // he barely pecks, so he has to be cheap enough to be worth a nest
     range: 160,
     damage: 5,
     attackInterval: 1,
