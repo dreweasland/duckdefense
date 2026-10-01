@@ -61,7 +61,7 @@ everywhere: dialogue, tooltips, code comments.
 
 | Enemy | Movement | Notes |
 |---|---|---|
-| Raccoon | Ground path | Baseline enemy. Clever: occasionally dodges |
+| Raccoon | Ground path | Baseline enemy |
 | Fox | Ground path | Fast, low health. Shakes off most of an Alarm Quack, so Curtis's slow is the answer |
 | Mink | Ground path | Small and slippery. Hides in the grass: ducks only spot it up close until Chester's Alarm Quack flushes it out |
 | Hawk | Flying | Ignores the path and dives straight at the house. Only some ducks can hit it. Scares ducks it swoops over |
