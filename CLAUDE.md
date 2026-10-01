@@ -81,7 +81,7 @@ everywhere: dialogue, tooltips, code comments.
   (`scorePeas` in `src/logic/game.ts`), doubled on Normal. Spending never costs score and
   selling never adds any.
 - **Pause:** The pause button above the sound button (or Esc) freezes the game and opens
-  `PauseScene`: Play, Again, or Levels. Leaving an Endless Pond run this way still saves
+  `PauseScene`: Play, Again, or Levels (the last two ask "are you sure?" first). Leaving an Endless Pond run this way still saves
   the waves survived.
 - **Lives:** The duck house has hearts. Each predator that reaches it costs one (the Night Bandit costs five).
 - **Day/night cycle:** Night waves are harder. The **solar battery meter** powers the

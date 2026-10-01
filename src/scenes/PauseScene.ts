@@ -19,6 +19,7 @@ export interface PauseSceneData {
  */
 export class PauseScene extends Phaser.Scene {
   private options!: PauseSceneData;
+  private card?: Phaser.GameObjects.Container;
 
   constructor() {
     super('PauseScene');
@@ -26,40 +27,52 @@ export class PauseScene extends Phaser.Scene {
 
   init(data: PauseSceneData): void {
     this.options = data;
+    this.card = undefined;
   }
 
   create(): void {
     setupCamera(this);
     this.scene.bringToTop();
-    const cx = WORLD.width / 2;
-    const cy = WORLD.height / 2;
-
     // Dims the game and soaks up taps.
     this.add
       .rectangle(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height, 0x000000, 0.5)
       .setInteractive();
 
-    const card = this.add.container(cx, cy, [
-      drawCard(this.add.graphics(), 480, 380, { radius: 28, borderWidth: 5 }),
-      this.add.text(0, -138, 'Paused', textStyle(52, { weight: '700', color: COLORS.goldCss, strokeThickness: 10 })).setOrigin(0.5),
-      // Keep playing is the big, obvious choice.
-      drawBigButton(this, 0, -30, '▶  Play', COLORS.green, COLORS.greenDark, () => this.resume(), { width: 320 }),
-      drawBigButton(this, -112, 100, '↻  Again', COLORS.blue, COLORS.blueDark, () => this.leave('GameScene', this.options.again), {
-        width: 200,
-        height: 76,
-        fontSize: 30,
-      }),
-      drawBigButton(this, 112, 100, 'Levels', COLORS.blue, COLORS.blueDark, () => this.leave('LevelSelectScene', this.levels()), {
-        width: 200,
-        height: 76,
-        fontSize: 30,
-      }),
-    ]);
-    card.setScale(0.8).setAlpha(0);
-    this.tweens.add({ targets: card, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
+    this.showMenu();
     drawSoundButton(this, WORLD.width - 40, WORLD.height - 40, 1);
 
     this.input.keyboard?.once('keydown-ESC', () => this.resume());
+  }
+
+  /** Swaps what the card shows (the menu, or an "are you sure?"), popping it in. */
+  private showCard(parts: Phaser.GameObjects.GameObject[]): void {
+    this.card?.destroy();
+    this.card = this.add.container(WORLD.width / 2, WORLD.height / 2, [drawCard(this.add.graphics(), 480, 380, { radius: 28, borderWidth: 5 }), ...parts]);
+    this.card.setScale(0.8).setAlpha(0);
+    this.tweens.add({ targets: this.card, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
+  }
+
+  private showMenu(): void {
+    const small = { width: 200, height: 76, fontSize: 30 };
+    this.showCard([
+      this.add.text(0, -138, 'Paused', textStyle(52, { weight: '700', color: COLORS.goldCss, strokeThickness: 10 })).setOrigin(0.5),
+      // Keep playing is the big, obvious choice.
+      drawBigButton(this, 0, -30, '▶  Play', COLORS.green, COLORS.greenDark, () => this.resume(), { width: 320 }),
+      drawBigButton(this, -112, 100, '↻  Again', COLORS.blue, COLORS.blueDark, () => this.confirm('Start again?', 'GameScene', this.options.again), small),
+      drawBigButton(this, 112, 100, 'Levels', COLORS.blue, COLORS.blueDark, () => this.confirm('Leave this game?', 'LevelSelectScene', this.levels()), small),
+    ]);
+  }
+
+  /** "Are you sure?" before giving up the game being played, so a stray tap can't lose it. */
+  private confirm(question: string, scene: string, data: object): void {
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    this.showCard([
+      this.add.text(0, -130, question, textStyle(44, { weight: '700', color: COLORS.goldCss, strokeThickness: 9 })).setOrigin(0.5),
+      this.add.text(0, -74, "You'll lose your ducks and peas.", textStyle(24, ink)).setOrigin(0.5),
+      // "No" is the big green one: going back to the game is the safe choice.
+      drawBigButton(this, 0, 10, 'No, keep playing', COLORS.green, COLORS.greenDark, () => this.showMenu(), { width: 400, fontSize: 36 }),
+      drawBigButton(this, 0, 122, 'Yes', COLORS.orange, COLORS.orangeDark, () => this.leave(scene, data), { width: 200, height: 76, fontSize: 30 }),
+    ]);
   }
 
   private levels(): LevelSelectSceneData {
