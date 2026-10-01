@@ -265,6 +265,12 @@ const HAT_ART: Record<HatKind, string> = {
     `<path d="M22 78 L46 18 C52 6 70 4 78 14 C66 12 58 18 58 30 L78 78 Z" fill="#7d5fd6" ${stroke(4)}/>` +
     `<path d="M44 54 L47 60 L54 60 L48 64 L50 71 L44 67 L38 71 L40 64 L34 60 L41 60 Z" fill="#ffd23f"/>` +
     `<circle cx="60" cy="40" r="3" fill="#ffd23f"/><circle cx="36" cy="42" r="2.5" fill="#ffffff"/>`,
+  // A golden crown with jewels, for earning every star.
+  crown:
+    `<path d="M18 80 L14 36 L32 54 L50 26 L68 54 L86 36 L82 80 Z" fill="#ffd23f" ${stroke(4)}/>` +
+    `<rect x="18" y="68" width="64" height="12" rx="3" fill="#f2a900" ${stroke(4)}/>` +
+    `<circle cx="14" cy="34" r="5" fill="#ff5f8f" ${stroke(3)}/><circle cx="50" cy="24" r="6" fill="#7fd4ff" ${stroke(3)}/><circle cx="86" cy="34" r="5" fill="#ff5f8f" ${stroke(3)}/>` +
+    `<circle cx="34" cy="74" r="3" fill="#e0447a"/><circle cx="50" cy="74" r="3" fill="#3d8fe0"/><circle cx="66" cy="74" r="3" fill="#3fbf5f"/>`,
 };
 
 function hatSvg(hat: HatKind): string {

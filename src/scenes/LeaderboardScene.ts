@@ -62,17 +62,20 @@ export class LeaderboardScene extends Phaser.Scene {
     this.add.text(cx + 30, 62, 'Top Scores', textStyle(58, { weight: '700', strokeThickness: 10 })).setOrigin(0.5);
 
     // The Daily Challenge tab, then level tabs, then the Endless Pond, then Easy / Normal.
+    // They share the width of the screen, so more levels means narrower tabs.
     const tabs = LEVELS.length + 2;
-    const tabX = (i: number) => cx + (i - (tabs - 1) / 2) * 190;
+    const spacing = Math.min(190, 1200 / tabs);
+    const tabWidth = spacing - 10;
+    const tabX = (i: number) => cx + (i - (tabs - 1) / 2) * spacing;
     const dailyName = dailyFor(this.dailyDate)?.challenge.name ?? 'Daily';
-    this.drawTab(tabX(0), 138, 178, `★ ${dailyName}`, () => this.board === 'daily', () => (this.board = 'daily'));
+    this.drawTab(tabX(0), 138, tabWidth, `★ ${dailyName}`, () => this.board === 'daily', () => (this.board = 'daily'));
     LEVELS.forEach((info, i) => {
-      this.drawTab(tabX(i + 1), 138, 178, `${i + 1}. ${info.name}`, () => this.board === 'level' && this.level === i, () => {
+      this.drawTab(tabX(i + 1), 138, tabWidth, `${i + 1}. ${info.name}`, () => this.board === 'level' && this.level === i, () => {
         this.board = 'level';
         this.level = i;
       });
     });
-    this.drawTab(tabX(tabs - 1), 138, 178, '∞ Endless', () => this.board === 'endless', () => (this.board = 'endless'));
+    this.drawTab(tabX(tabs - 1), 138, tabWidth, '∞ Endless', () => this.board === 'endless', () => (this.board = 'endless'));
     (['easy', 'normal'] as const).forEach((difficulty, i) => {
       this.drawTab(cx + (i - 0.5) * 170, 192, 150, DIFFICULTIES[difficulty].label, () => this.difficulty === difficulty, () => (this.difficulty = difficulty));
     });
@@ -86,6 +89,8 @@ export class LeaderboardScene extends Phaser.Scene {
   private drawTab(x: number, y: number, width: number, label: string, isOn: () => boolean, select: () => void): void {
     const g = this.add.graphics();
     const text = this.add.text(0, 0, label, textStyle(20, { strokeThickness: 0 })).setOrigin(0.5);
+    // Long names shrink to fit their tab.
+    if (text.width > width - 16) text.setScale((width - 16) / text.width);
     const refresh = () => {
       const on = isOn();
       g.clear()

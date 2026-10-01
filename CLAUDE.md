@@ -65,10 +65,10 @@ everywhere: dialogue, tooltips, code comments.
 | Mink | Ground path | Small and slippery. Hides in the grass: ducks only spot it up close until Chester's Alarm Quack flushes it out |
 | Hawk | Flying | Ignores the path and dives straight at the house. Only some ducks can hit it. Scares ducks it swoops over |
 | Snapping Turtle | From the pond | Slow, huge health. Climbs out of the pond and cuts across to the path. Its shell (armor) blocks part of every hit, so big splashes beat little pecks |
-| **Boss: The Night Bandit** | Ground path | A masked mega-raccoon at the end of each world. Whistles up raccoon minions, scaring nearby ducks |
-| **Boss: The Storm Hawk** | Flying | Endless Pond. A giant hawk that calls in hawks and scares ducks it swoops near. Only Sunny and Potato can hit it. Always flies in from the sky point farthest from the house |
-| **Boss: The Silver Fox** | Ground path | Endless Pond. Fast, barely freezes, calls in foxes. Curtis's slow is the answer |
-| **Boss: Old Snapper** | From the pond | Endless Pond. A huge mossy turtle with a thick shell (little pecks do 1 damage) that can't be pushed back |
+| **Boss: The Night Bandit** | Ground path | A masked mega-raccoon at the end of level 3 (he drops by Snapper Swamp too). Whistles up raccoon minions, scaring nearby ducks |
+| **Boss: The Storm Hawk** | Flying | Hawk Hill and the Endless Pond. A giant hawk that calls in hawks and scares ducks it swoops near. Only Sunny and Potato can hit it. Always flies in from the sky point farthest from the house |
+| **Boss: The Silver Fox** | Ground path | Fox Run and the Endless Pond. Fast, barely freezes, calls in foxes. Curtis's slow is the answer |
+| **Boss: Old Snapper** | From the pond | Snapper Swamp and the Endless Pond. A huge mossy turtle with a thick shell (little pecks do 1 damage) that can't be pushed back |
 
 ## Economy and systems
 
@@ -171,9 +171,12 @@ When adding a feature, prefer a design where the tunable part lives in a data fi
 - **M3: Depth.** Pecking Loop synergy, flying hawks, day/night cycle with the solar
   battery, the fountain tower, Craig's blessing.
 - **M4: Make it ours.** Sound system (the kids' recordings drop into `src/sounds/`; anything
-  missing uses a built-in placeholder), three levels (`src/data/levels.ts`), and the Night
-  Bandit boss fight at the end of level 3. Levels 2 and 3 were designed by Claude; the kids
-  can redesign them or add their own in Tiled. (Art was overhauled into polished vector art
+  missing uses a built-in placeholder), six levels in two worlds (`src/data/levels.ts`), and
+  the Night Bandit boss fight at the end of level 3. World 2 (Hawk Hill, Fox Run, Snapper
+  Swamp) ends each level with one of the other bosses: the Storm Hawk, the Silver Fox, and
+  Old Snapper. Levels 2 to 6 were designed by Claude; the kids can redesign them or add
+  their own in Tiled. The level select screen has room for six: a seventh needs a third row
+  or pages (`CARD.rows` in `LevelSelectScene.ts`). (Art was overhauled into polished vector art
   instead of the kids' drawings.)
 - **M5: Polish.** Title screen, level select, save progress in localStorage, mobile touch
   support, and a public leaderboard on Workers + D1 (typed names, profanity-filtered,

@@ -13,7 +13,7 @@ Each level needs these **object layers** (the names must match exactly):
 |---|---|---|
 | `path` | Exactly one polyline. Predators walk it from the first point to the last. The **duck house** sits at the last point. Start it just off the left edge so predators walk in. | Insert Polyline |
 | `slots` | Points where ducks can be placed. Keep them at least ~60 px away from the path so ducks don't sit on it. | Insert Point |
-| `pond` | *(optional)* An ellipse for the pond. The solar fountain sits in the middle of the first one and slows predators near it. | Insert Ellipse |
+| `pond` | *(optional)* An ellipse for the pond. The solar fountain sits in the middle of the first one, and ducks nesting near it hit harder while it has power. Turtles climb out of it. | Insert Ellipse |
 | `sky` | *(needed if a wave has hawks)* Points where hawks fly in. They dive in a straight line to the duck house. Put them just off the edge of the map. | Insert Point |
 | `mud` | *(optional)* Ellipses over the path. Ground predators slog through mud at half speed. | Insert Ellipse |
 | `brambles` | *(optional)* Ellipses over the path. Ground predators lose health while they're in the thorns. | Insert Ellipse |

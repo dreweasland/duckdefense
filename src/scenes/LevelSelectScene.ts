@@ -16,8 +16,9 @@ export interface LevelSelectSceneData {
   difficulty: Difficulty;
 }
 
-const CARD = { width: 340, height: 340, spacing: 380 };
-const MAP = { width: 300, height: 169 }; // 16:9, like the real map
+// Two rows of three wide cards: a little map on the left, the level's number and stars on the right.
+const CARD = { width: 340, height: 196, spacing: 380, rows: [268, 482] };
+const MAP = { width: 160, height: 90 }; // 16:9, like the real map
 const MODE_BUTTON = { width: 430, height: 84, gap: 24 }; // Daily Challenge and Endless Pond, side by side
 
 export class LevelSelectScene extends Phaser.Scene {
@@ -44,13 +45,13 @@ export class LevelSelectScene extends Phaser.Scene {
       .text(cx, 128, DIFFICULTIES[this.difficulty].label, textStyle(28, { color: chipColor, stroke: '#ffffff', strokeThickness: 6 }))
       .setOrigin(0.5);
 
-    // Rows of three cards.
+    // Rows of three cards (CARD.rows has room for two rows: six levels).
     LEVELS.forEach((info, i) => {
       const row = Math.floor(i / 3);
       const inRow = Math.min(3, LEVELS.length - row * 3);
       const col = i % 3;
       const x = cx + (col - (inRow - 1) / 2) * CARD.spacing;
-      const y = 380 + row * (CARD.height + 30);
+      const y = CARD.rows[row] ?? CARD.rows[CARD.rows.length - 1]!;
       this.drawLevelCard(x, y, i, info.name, parseLevel(info.map), progress.levels[this.difficulty][i]?.stars ?? 0, isUnlocked(progress, this.difficulty, i));
     });
 
@@ -66,15 +67,15 @@ export class LevelSelectScene extends Phaser.Scene {
 
   private drawLevelCard(x: number, y: number, index: number, name: string, level: Level, stars: number, unlocked: boolean): void {
     const card = drawCard(this.add.graphics(), CARD.width, CARD.height, { radius: 24, borderWidth: 4 });
-    const parts: Phaser.GameObjects.GameObject[] = [card, this.drawMiniMap(level, 0, -60)];
+    const parts: Phaser.GameObjects.GameObject[] = [card, this.drawMiniMap(level, -76, -30)];
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
-    parts.push(this.add.text(0, 50, `Level ${index + 1}`, textStyle(20, { ...ink, color: '#8a7f85' })).setOrigin(0.5));
-    parts.push(this.add.text(0, 82, name, textStyle(32, { ...ink, weight: '700' })).setOrigin(0.5));
+    parts.push(this.add.text(86, -58, `Level ${index + 1}`, textStyle(20, { ...ink, color: '#8a7f85' })).setOrigin(0.5));
+    parts.push(this.add.text(0, 56, name, textStyle(30, { ...ink, weight: '700' })).setOrigin(0.5));
     for (let s = 0; s < 3; s++) {
       parts.push(
         this.add
-          .image((s - 1) * 46, 132, 'star')
-          .setDisplaySize(40, 40)
+          .image(86 + (s - 1) * 40, -18, 'star')
+          .setDisplaySize(36, 36)
           .setTint(s < stars ? 0xffd23f : 0xd8d2cc),
       );
     }
@@ -99,7 +100,7 @@ export class LevelSelectScene extends Phaser.Scene {
         .strokeRoundedRect(-34, -14, 68, 54, 10)
         .fillStyle(COLORS.ink)
         .fillCircle(0, 8, 7);
-      lock.y = -40;
+      lock.y = -8;
       parts.push(lock);
     }
 
@@ -210,21 +211,21 @@ export class LevelSelectScene extends Phaser.Scene {
       y: Math.max(0, Math.min(WORLD.height, p.y)) * scale - MAP.height / 2,
     });
     const g = this.add.graphics();
-    g.fillStyle(0x6db24c).fillRoundedRect(-MAP.width / 2, -MAP.height / 2, MAP.width, MAP.height, 12);
+    g.fillStyle(0x6db24c).fillRoundedRect(-MAP.width / 2, -MAP.height / 2, MAP.width, MAP.height, 8);
     for (const pond of level.ponds) {
       const c = clamp(pond.center);
       g.fillStyle(0x4aa3df).fillEllipse(c.x, c.y, pond.radiusX * 2 * scale, pond.radiusY * 2 * scale);
     }
     const path = level.path.map(clamp);
-    g.lineStyle(9, 0xc99d64).strokePoints(path);
+    g.lineStyle(5, 0xc99d64).strokePoints(path);
     g.fillStyle(0xc99d64);
-    path.forEach((p) => g.fillCircle(p.x, p.y, 4.5));
+    path.forEach((p) => g.fillCircle(p.x, p.y, 2.5));
     g.fillStyle(0xf3d480);
-    level.slots.map(clamp).forEach((p) => g.fillCircle(p.x, p.y, 4));
+    level.slots.map(clamp).forEach((p) => g.fillCircle(p.x, p.y, 2.5));
     const door = path[path.length - 1]!;
-    g.fillStyle(0xe0654c).fillTriangle(door.x - 9, door.y - 6, door.x + 9, door.y - 6, door.x, door.y - 16);
-    g.fillStyle(0xf3dfb6).fillRect(door.x - 7, door.y - 6, 14, 10);
-    g.lineStyle(3, COLORS.ink).strokeRoundedRect(-MAP.width / 2, -MAP.height / 2, MAP.width, MAP.height, 12);
+    g.fillStyle(0xe0654c).fillTriangle(door.x - 6, door.y - 4, door.x + 6, door.y - 4, door.x, door.y - 11);
+    g.fillStyle(0xf3dfb6).fillRect(door.x - 4.5, door.y - 4, 9, 7);
+    g.lineStyle(3, COLORS.ink).strokeRoundedRect(-MAP.width / 2, -MAP.height / 2, MAP.width, MAP.height, 8);
     return this.add.container(x, y, [g]);
   }
 }
