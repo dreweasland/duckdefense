@@ -239,6 +239,8 @@ export class GameScene extends Phaser.Scene {
   /** The open call-early card, if any, and its peas text (kept up to date as predators are chased off). */
   private callEarlyCard?: { popup: Phaser.GameObjects.Container; bonus: Phaser.GameObjects.Text };
   private craigButton!: Phaser.GameObjects.Container;
+  /** Whether Craig's blessing could be used at the last look (to notice when it comes back). */
+  private blessingReady = true;
   private craigGlow!: Phaser.GameObjects.Image;
   private peasText!: Phaser.GameObjects.Text;
   private heartsText!: Phaser.GameObjects.Text;
@@ -319,6 +321,7 @@ export class GameScene extends Phaser.Scene {
     this.panelReport = undefined;
     this.hintBubble = undefined;
     this.lastHintAt = -Infinity;
+    this.blessingReady = true;
     this.bannerShowing = false;
 
     this.drawWorld();
@@ -668,6 +671,9 @@ export class GameScene extends Phaser.Scene {
       this.repairButton.container.setAlpha(cost !== undefined && game.peas >= cost ? 1 : 0.5);
     }
     const blessing = canUseBlessing(game);
+    // Endless Pond: Craig says so when her blessing comes back.
+    if (blessing && !this.blessingReady) popSpeechBubble(this, CRAIG_BUTTON.x + 30, CRAIG_BUTTON.y - 60, "I'm ready again!", DEPTH.floatText);
+    this.blessingReady = blessing;
     this.craigButton.setVisible(!game.challenge?.noCraig);
     this.craigButton.setAlpha(blessing ? 1 : 0.35);
     this.craigGlow.setVisible(blessing);
@@ -991,7 +997,7 @@ export class GameScene extends Phaser.Scene {
     ];
     // Hawks. Chester can't peck them, but his Alarm Quack still freezes them.
     const freezesHawks = !stats.canHitFlying && !!stats.alarmQuack;
-    const hawkText = stats.canHitFlying ? 'Hits hawks' : freezesHawks ? "Freezes hawks, can't peck them" : "Can't hit hawks";
+    const hawkText = (stats.flyerDamage ?? 1) > 1 ? 'Extra strong against hawks' : stats.canHitFlying ? 'Hits hawks' : freezesHawks ? "Freezes hawks, can't peck them" : "Can't hit hawks";
     const helpsWithHawks = stats.canHitFlying || freezesHawks;
     lines.push(this.add.image(-126, 44, 'hawk').setDisplaySize(22, 22).setAlpha(helpsWithHawks ? 1 : 0.4));
     lines.push(

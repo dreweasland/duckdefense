@@ -111,6 +111,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
     splashRadius: 0,
     canHitFlying: true,
     wingFlap: { everyNthAttack: 5, pushBack: 50 },
+    flyerDamage: 2, // the chaser is the flock's hawk specialist: double damage to anything that flies
     upgrades: [
       { name: 'Speedy Potato', cost: 100, description: 'Pecks even faster.', changes: { attackInterval: 0.24 } },
       {

@@ -19,7 +19,7 @@ export type HintId =
 export const HINTS: Record<HintId, string> = {
   placeFirstDuck: 'Tap a nest to put a duck there. Then tap the green button!',
   callCraig: "Uh oh! Tap my picture and I'll protect the duck house for a while.",
-  hawks: "Hawks fly! Sunny and Potato can hit them. The others can't.",
+  hawks: "Hawks fly! Potato hits them hardest, and Sunny can too. The others can't.",
   minks: "Minks hide in the grass. Chester's quack helps everyone find them!",
   turtles: "That turtle's shell is tough! Sunny's big splash works best.",
   foxes: 'Foxes are super fast! Curtis slows them down.',

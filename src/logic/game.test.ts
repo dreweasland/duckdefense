@@ -3,9 +3,12 @@ import { CRAIG } from '../data/craig';
 import { BATTERY, FOUNTAIN, NIGHT } from '../data/dayNight';
 import { DIFFICULTIES } from '../data/difficulty';
 import { DUCKS, MOVE_SETTLE_TIME, SELL_REFUND } from '../data/ducks';
+import { ENDLESS } from '../data/endless';
 import { ENEMIES } from '../data/enemies';
 import { EARLY_CALL, type Wave } from '../data/waves';
 import {
+  canUseBlessing,
+  choosePerk,
   buyDuck,
   callNextWave,
   canCallEarly,
@@ -162,6 +165,22 @@ describe('day, night, and the solar battery', () => {
 });
 
 describe("Craig's Guardian Blessing", () => {
+  it('comes back every few waves in the Endless Pond, but never in a level', () => {
+    const waves = Array.from({ length: ENDLESS.craigEvery + 1 }, () => oneRaccoon);
+    for (const endless of [true, false]) {
+      const game = createGame({ path }, waves, 'easy', undefined, endless);
+      useBlessing(game);
+      for (let w = 0; w < ENDLESS.craigEvery; w++) {
+        expect(canUseBlessing(game)).toBe(false);
+        if (game.perkChoice) choosePerk(game, game.perkChoice[0]!);
+        startWave(game);
+        runUntilIdle(game);
+      }
+      expect(game.waveIndex).toBe(ENDLESS.craigEvery);
+      expect(canUseBlessing(game)).toBe(endless);
+    }
+  });
+
   it('can only be used once per level', () => {
     const game = createGame({ path }, [oneRaccoon], 'normal');
     expect(useBlessing(game)).toBe(true);

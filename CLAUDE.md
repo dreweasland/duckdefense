@@ -40,7 +40,7 @@ for the kids to tweak numbers in one data file.
 | Duck | Breed | Role | Ability |
 |---|---|---|---|
 | **Sunny** | Blue Swedish | The veteran | Steady all-rounder with a small splash-damage radius |
-| **Potato** | Black Swedish | The chaser | Fast attack. "Wing Flap" knockback, a nod to his signature untucked wing |
+| **Potato** | Black Swedish | The chaser | Fast attack, and double damage to anything that flies (he's the hawk specialist). "Wing Flap" knockback, a nod to his signature untucked wing |
 | **Chester** | Magpie | The elder | "Alarm Quack" briefly stuns every enemy in range, on a cooldown |
 | **Curtis** | Magpie | The unbothered one | Never scared (the others get scared by hawks and the Night Bandit). Predators near him slow to a trudge |
 
@@ -53,7 +53,8 @@ debuffs. Chasing the best loop layout is the strategy.
 ### Craig
 Craig was the family's first duck: a female mallard, named before anyone knew she was a
 hen. She appears as a spirit guide in the tutorial, and once per level you can call on her
-for a one-time **Guardian Blessing** that shields the duck house. Use she/her for Craig
+for a one-time **Guardian Blessing** that shields the duck house (in the Endless Pond
+it comes back after every 10th wave: `craigEvery` in `src/data/endless.ts`). Use she/her for Craig
 everywhere: dialogue, tooltips, code comments.
 
 ## Predators (enemies)

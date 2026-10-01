@@ -43,7 +43,7 @@ export interface Game {
   pending: ScheduledSpawn[];
   /** Solar battery charge, 0 to BATTERY.capacity. Powers the fountain. */
   battery: number;
-  /** Craig's Guardian Blessing can be used once per level. */
+  /** Craig's Guardian Blessing can be used once per level (in the Endless Pond, it comes back every few waves). */
   blessingUsed: boolean;
   /** Seconds of Craig's shield left (only counts down during waves). */
   shieldTime: number;
@@ -372,6 +372,7 @@ export function callNextWave(game: Game): number | undefined {
   const earned = earlyCallPeas(game);
   game.peas += earned;
   game.waveIndex++;
+  restCraigIfDue(game);
   offerPerksIfDue(game);
   beginWave(game);
   return earned;
@@ -386,6 +387,11 @@ function waveBonus(game: Game): number {
 /** The peas for chasing off a predator (Pea Picker and the like make them pay more). */
 export function killPeas(game: Game, kind: EnemyKind): number {
   return Math.round(ENEMIES[kind].peas * game.battle.mods.killPeas);
+}
+
+/** Endless Pond: after every few waves, Craig has rested and her blessing is ready again. */
+function restCraigIfDue(game: Game): void {
+  if (game.endless && game.waveIndex % ENDLESS.craigEvery === 0) game.blessingUsed = false;
 }
 
 /** Endless Pond: after every few waves, offer Pond Perks. Returns true if it just did. */
@@ -448,6 +454,7 @@ export function update(game: Game, dt: number): GameEvent[] {
     game.peas += bonus;
     events.push({ type: 'waveCleared', waveIndex: game.waveIndex, bonus });
     game.waveIndex++;
+    restCraigIfDue(game);
     if (game.waveIndex >= game.waves.length) {
       game.phase = 'won';
       events.push({ type: 'won' });
