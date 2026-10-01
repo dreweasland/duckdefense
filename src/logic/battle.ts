@@ -79,6 +79,8 @@ export interface Duck {
   targeting: Targeting;
   /** What this duck has done so far. */
   report: DuckReport;
+  /** Placed between waves and no wave has started since: it can still be sold for everything it cost. */
+  fresh: boolean;
 }
 
 export interface Fountain {
@@ -211,6 +213,7 @@ export function placeDuck(battle: Battle, kind: DuckKind, position: Point): Duck
     scaredTime: 0,
     targeting: DEFAULT_TARGETING,
     report: { damage: 0, chasedOff: 0, special: 0 },
+    fresh: false,
   };
   battle.ducks.push(duck);
   kindReport(battle, kind).placed++;

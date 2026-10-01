@@ -61,9 +61,12 @@ export function starsFor(heartsLeft: number, startingHearts: number): number {
   return 1;
 }
 
-/** Leaderboard score for a win: 100 per heart kept plus leftover peas, doubled on Normal. */
-export function scoreFor(heartsLeft: number, peasLeft: number, difficulty: Difficulty): number {
-  return (heartsLeft * 100 + peasLeft) * (difficulty === 'normal' ? 2 : 1);
+/**
+ * Leaderboard score for a win: 100 per heart kept plus peas (leftover ones and those spent
+ * on the ducks still out: see scorePeas in game.ts), doubled on Normal.
+ */
+export function scoreFor(heartsLeft: number, peas: number, difficulty: Difficulty): number {
+  return (heartsLeft * 100 + peas) * (difficulty === 'normal' ? 2 : 1);
 }
 
 /** The first level is always open; each level after unlocks when the one before is beaten. */

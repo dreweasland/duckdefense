@@ -19,6 +19,9 @@ import {
   setTargeting,
   wavePreview,
   sellValue,
+  refundFor,
+  scorePeas,
+  upgradeDuck,
   startWave,
   update,
   useBlessing,
@@ -202,11 +205,42 @@ describe('selling and moving ducks', () => {
   it('sells a duck for part of what it cost', () => {
     const game = createGame({ path }, [oneRaccoon], 'normal');
     const duck = buyDuck(game, 'sunny', { x: 0, y: 50 })!;
+    startWave(game);
     const before = game.peas;
     expect(sellDuck(game, duck.id)).toBe(sellValue('sunny'));
     expect(sellValue('sunny')).toBe(Math.floor(DUCKS.sunny.cost * SELL_REFUND));
     expect(game.peas).toBe(before + sellValue('sunny'));
     expect(game.battle.ducks).toHaveLength(0);
+  });
+
+  it('gives every pea back for a duck placed since the last wave (upgrades too)', () => {
+    const game = createGame({ path }, [oneRaccoon], 'normal');
+    const start = game.peas;
+    const duck = buyDuck(game, 'curtis', { x: 0, y: 50 })!;
+    upgradeDuck(game, duck.id);
+    expect(refundFor(duck)).toBe(DUCKS.curtis.cost + DUCKS.curtis.upgrades[0].cost);
+    sellDuck(game, duck.id);
+    expect(game.peas).toBe(start);
+  });
+
+  it('only gives part back once a wave has started, or for a duck placed during a wave', () => {
+    const game = createGame({ path }, [oneRaccoon], 'normal');
+    const early = buyDuck(game, 'curtis', { x: 0, y: 50 })!;
+    startWave(game);
+    const late = buyDuck(game, 'curtis', { x: 100, y: 50 })!;
+    expect(refundFor(early)).toBe(sellValue('curtis'));
+    expect(refundFor(late)).toBe(sellValue('curtis'));
+  });
+
+  it('counts peas spent on ducks toward the score, so selling never adds to it', () => {
+    const game = createGame({ path }, [oneRaccoon], 'normal');
+    const start = scorePeas(game);
+    const duck = buyDuck(game, 'sunny', { x: 0, y: 50 })!;
+    upgradeDuck(game, duck.id);
+    expect(scorePeas(game)).toBe(start);
+    startWave(game);
+    sellDuck(game, duck.id);
+    expect(scorePeas(game)).toBeLessThan(start);
   });
 
   it('frees the nest so another duck can go there', () => {

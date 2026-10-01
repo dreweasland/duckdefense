@@ -75,7 +75,14 @@ everywhere: dialogue, tooltips, code comments.
 - **Currency: peas.** Earned per kill and per wave cleared. Spent to place and upgrade ducks.
 - **Selling and moving:** Tap a placed duck to see its power and sell it (75% of its cost
   back) or move it to another empty nest (free, but it needs a second to settle). Both
-  numbers are in `src/data/ducks.ts`.
+  numbers are in `src/data/ducks.ts`. A duck placed between waves can be sold for every
+  pea it cost until the next wave starts, so a misplaced duck costs nothing.
+- **Score:** 100 per heart kept, plus peas left over and peas spent on the ducks still out
+  (`scorePeas` in `src/logic/game.ts`), doubled on Normal. Spending never costs score and
+  selling never adds any.
+- **Pause:** The pause button above the sound button (or Esc) freezes the game and opens
+  `PauseScene`: Play, Again, or Levels. Leaving an Endless Pond run this way still saves
+  the waves survived.
 - **Lives:** The duck house has hearts. Each predator that reaches it costs one (the Night Bandit costs five).
 - **Day/night cycle:** Night waves are harder. The **solar battery meter** powers the
   pond fountain, whose refreshing spray makes nearby ducks hit harder. It charges during

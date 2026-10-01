@@ -3,6 +3,7 @@ import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
 import { LeaderboardScene } from './scenes/LeaderboardScene';
 import { LevelSelectScene } from './scenes/LevelSelectScene';
+import { PauseScene } from './scenes/PauseScene';
 import { ResultScene } from './scenes/ResultScene';
 import { TitleScene } from './scenes/TitleScene';
 import { WardrobeScene } from './scenes/WardrobeScene';
@@ -27,7 +28,7 @@ const game = new Phaser.Game({
     width: initialSize.width,
     height: initialSize.height,
   },
-  scene: [BootScene, TitleScene, LevelSelectScene, GameScene, ResultScene, LeaderboardScene, WardrobeScene],
+  scene: [BootScene, TitleScene, LevelSelectScene, GameScene, PauseScene, ResultScene, LeaderboardScene, WardrobeScene],
 });
 
 // Phones and tablets held upright see a "turn me sideways" screen (see index.html);

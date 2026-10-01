@@ -175,14 +175,35 @@ export function canSell(game: Game): boolean {
 export function buyDuck(game: Game, kind: DuckKind, at: Point): Duck | undefined {
   if (!canBuy(game, kind)) return undefined;
   game.peas -= DUCKS[kind].cost;
-  return placeDuck(game.battle, kind, at);
+  const duck = placeDuck(game.battle, kind, at);
+  // Changed your mind? A duck placed between waves gives every pea back until the next wave starts.
+  duck.fresh = game.phase === 'building';
+  return duck;
 }
 
-/** Peas you'd get back for selling a duck: part of everything spent on it, upgrades and training included. */
-export function sellValue(kind: DuckKind, level = 0, training = 0, path = 0): number {
+/** Every pea spent on a duck: its price, upgrades, and training. */
+function spentOn(kind: DuckKind, level = 0, training = 0, path = 0): number {
   let spent = totalSpent(kind, level, path);
   for (let t = 0; t < training; t++) spent += trainingCostAt(t);
-  return Math.floor(spent * SELL_REFUND);
+  return spent;
+}
+
+/** Peas you'd usually get back for selling a duck: part of everything spent on it, upgrades and training included. */
+export function sellValue(kind: DuckKind, level = 0, training = 0, path = 0): number {
+  return Math.floor(spentOn(kind, level, training, path) * SELL_REFUND);
+}
+
+/** Peas you'd get back for selling this duck right now: everything if it was only just placed, otherwise part. */
+export function refundFor(duck: Duck): number {
+  return duck.fresh ? spentOn(duck.kind, duck.level, duck.training, duck.path) : sellValue(duck.kind, duck.level, duck.training, duck.path);
+}
+
+/**
+ * The peas that count toward the score: the ones left over plus everything spent on the
+ * ducks still out. (So spending peas never costs score, and selling ducks never adds any.)
+ */
+export function scorePeas(game: Game): number {
+  return game.battle.ducks.reduce((sum, d) => sum + spentOn(d.kind, d.level, d.training, d.path), game.peas);
 }
 
 /** Peas for training level `done + 1`. */
@@ -249,7 +270,7 @@ export function sellDuck(game: Game, duckId: number): number | undefined {
   const duck = findDuck(game.battle, duckId);
   if (!duck) return undefined;
   game.battle.ducks = game.battle.ducks.filter((d) => d !== duck);
-  const refund = sellValue(duck.kind, duck.level, duck.training, duck.path);
+  const refund = refundFor(duck);
   game.peas += refund;
   return refund;
 }
@@ -313,6 +334,7 @@ export function scheduleWave(wave: Wave): ScheduledSpawn[] {
 export function startWave(game: Game): boolean {
   if (game.phase !== 'building' || game.perkChoice) return false;
   game.phase = 'wave';
+  for (const duck of game.battle.ducks) duck.fresh = false;
   beginWave(game);
   return true;
 }

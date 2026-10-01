@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DUCK_ORDER, DUCKS, SELL_REFUND } from '../data/ducks';
 import type { Wave } from '../data/waves';
 import { createBattle, placeDuck, spawnEnemy, step } from './battle';
-import { buyDuck, canUpgrade, createGame, sellDuck, sellValue, upgradeDuck } from './game';
+import { buyDuck, canUpgrade, createGame, sellDuck, sellValue, startWave, upgradeDuck } from './game';
 import { makePath } from './path';
 import { MAX_UPGRADE_LEVEL, nameAt, nextUpgrade, statsAt, totalSpent, upgradeOptions } from './upgrades';
 
@@ -86,6 +86,7 @@ describe('buying upgrades', () => {
     game.peas = 10_000;
     const duck = buyDuck(game, 'potato', { x: 0, y: 50 })!;
     upgradeDuck(game, duck.id);
+    startWave(game);
     const before = game.peas;
     const spent = DUCKS.potato.cost + DUCKS.potato.upgrades[0].cost;
     expect(totalSpent('potato', 1)).toBe(spent);

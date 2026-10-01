@@ -24,7 +24,7 @@ export interface ResultSceneData {
   stars?: number; // only for a win
   score?: number;
   newBest?: boolean;
-  hearts?: number; // hearts and peas left, for posting to the leaderboard
+  hearts?: number; // hearts left and peas that count (see scorePeas), for posting to the leaderboard
   peas?: number;
   daily?: string; // the Daily Challenge date, if that's what was played
   report?: Partial<Record<DuckKind, KindReport>>; // what each kind of duck did (the damage report)

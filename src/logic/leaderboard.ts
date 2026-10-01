@@ -8,7 +8,7 @@ import { scoreFor } from './progress';
 // Rules for the public leaderboard, shared by the game and the server so both agree.
 
 export const NAME_MAX_LENGTH = 12;
-/** More leftover peas than this isn't possible in a real game. */
+/** More peas than this (leftover plus spent on ducks) isn't possible in a real game. */
 export const MAX_PEAS = 20_000;
 
 const profanity = new RegExpMatcher({ ...englishDataset.build(), ...englishRecommendedTransformers });
@@ -30,6 +30,7 @@ export interface ScoreSubmission {
   level: number;
   difficulty: Difficulty;
   hearts: number;
+  /** Peas left over plus peas spent on the ducks still out (scorePeas in game.ts). */
   peas: number;
   /** The Daily Challenge date (YYYY-MM-DD), for a daily score. Its level comes from the date. */
   daily?: string;

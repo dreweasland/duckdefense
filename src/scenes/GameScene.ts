@@ -32,7 +32,8 @@ import {
   upgradeDuck,
   moveDuck,
   sellDuck,
-  sellValue,
+  refundFor,
+  scorePeas,
   canUseBlessing,
   createGame,
   isNight,
@@ -59,6 +60,7 @@ import { HINT_GAP, HINTS, type HintId } from '../data/hints';
 import { pickHint, type HintMoment } from '../logic/hints';
 import { hatFor, newlyUnlocked, totalStars } from '../logic/hats';
 import { duckWithHat, hatImage, placeHat } from '../ui/hats';
+import type { PauseSceneData } from './PauseScene';
 import type { ResultSceneData } from './ResultScene';
 import { BACKDROP, COLORS, DEPTH, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
 import { drawBigButton, drawCard, drawPill, drawRoundButton, drawSoundButton, popSpeechBubble } from '../ui/widgets';
@@ -106,6 +108,7 @@ const REPAIR_BUTTON = {
 const CALL_EARLY = { x: 1110, y: 112 };
 const PREVIEW = { right: 1146, y: 112, chip: 58, gap: 4, maxWidth: 256 };
 const CRAIG_BUTTON = { x: 100, y: 640 };
+const PAUSE_BUTTON = { x: 1245, y: 615 }; // just above the sound button
 
 // How each walking predator looks: its picture's size, the shadow under it, and how it waddles.
 const GROUND_LOOKS: Record<Exclude<EnemyKind, 'hawk' | 'stormHawk'>, { width: number; height: number; shadow: number; wobble: number; wobbleTime: number }> = {
@@ -337,6 +340,7 @@ export class GameScene extends Phaser.Scene {
     this.callEarlyButton = this.drawCallEarlyButton();
     this.craigButton = this.drawCraigButton();
     drawSoundButton(this, 1245, 685, DEPTH.hud);
+    this.drawPauseButton();
     this.refreshHud();
     // A new player who hasn't placed a duck gets a nudge from Craig.
     this.time.delayedCall(7000, () => {
@@ -1263,9 +1267,10 @@ export class GameScene extends Phaser.Scene {
     const small = { width: 132, height: 54, fontSize: 26 };
     const sellable = canSell(this.state);
     parts.push(drawBigButton(this, sellable ? -74 : 0, 222, 'Move', COLORS.blue, COLORS.blueDark, () => this.startMove(duckId), small));
-    // Sell shows how many peas you get back (upgrades included). A Daily Challenge can turn it off.
+    // Sell shows how many peas you get back (upgrades included; everything, for a duck placed
+    // since the last wave). A Daily Challenge can turn it off.
     if (sellable) parts.push(
-      drawBigButton(this, 74, 222, `+${sellValue(duck.kind, duck.level, duck.training, duck.path)}`, COLORS.orange, COLORS.orangeDark, () => this.sell(duckId), {
+      drawBigButton(this, 74, 222, `+${refundFor(duck)}`, COLORS.orange, COLORS.orangeDark, () => this.sell(duckId), {
         ...small,
         icon: 'icon-pea',
       }),
@@ -1772,9 +1777,9 @@ export class GameScene extends Phaser.Scene {
           // Save progress: this unlocks the next level and keeps the best stars and score.
           // (A Daily Challenge win is saved on its own and doesn't unlock anything.)
           result.hearts = this.state.hearts;
-          result.peas = this.state.peas;
+          result.peas = scorePeas(this.state);
           result.stars = starsFor(this.state.hearts, challengeSettings(this.difficulty, this.daily?.challenge).hearts);
-          result.score = scoreFor(this.state.hearts, this.state.peas, this.difficulty);
+          result.score = scoreFor(this.state.hearts, result.peas, this.difficulty);
           const progress = loadProgress();
           const previousBest = this.daily
             ? (dailyRecord(progress, this.daily.date, this.difficulty)?.bestScore ?? 0)
@@ -2373,6 +2378,35 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: this.craigButton, y: CRAIG_BUTTON.y - 12, duration: 140, yoyo: true, repeat: 1, ease: 'Quad.Out' });
     playSound(this, 'hint');
     window.setTimeout(close, HINT_SHOW_MS);
+  }
+
+  /** A small round pause button (Esc works too). It opens the pause menu: play, again, or levels. */
+  private drawPauseButton(): void {
+    const bars = this.add.graphics().fillStyle(0xffffff).lineStyle(3, COLORS.ink);
+    for (const x of [-9, 3]) bars.fillRoundedRect(x, -10, 6, 20, 2).strokeRoundedRect(x, -10, 6, 20, 2);
+    const back = this.add.circle(0, 0, 26, COLORS.panel, 0.7).setStrokeStyle(3, 0xffffff, 0.35);
+    // Tap area bigger than the drawing, for fingers (but not reaching the sound button below).
+    back
+      .setInteractive({ hitArea: new Phaser.Geom.Circle(26, 26, 32), hitAreaCallback: Phaser.Geom.Circle.Contains, useHandCursor: true })
+      .on('pointerdown', () => this.pauseGame());
+    this.add.container(PAUSE_BUTTON.x, PAUSE_BUTTON.y, [back, bars]).setDepth(DEPTH.hud);
+    this.input.keyboard?.on('keydown-ESC', () => this.pauseGame());
+  }
+
+  /** Freezes the game (predators, ducks, timers, everything) and shows the pause menu over it. */
+  private pauseGame(): void {
+    if (isOver(this.state) || this.scene.isPaused()) return;
+    playSound(this, 'tap');
+    const data: PauseSceneData = {
+      again: { difficulty: this.difficulty, level: this.levelIndex, daily: this.daily?.date, endless: this.endless },
+      difficulty: this.difficulty,
+      // Leaving an Endless Pond run part-way still counts the waves survived so far.
+      onLeave: () => {
+        if (this.endless) saveProgress(recordEndless(loadProgress(), this.difficulty, this.state.waveIndex));
+      },
+    };
+    this.scene.launch('PauseScene', data);
+    this.scene.pause();
   }
 
   /** Craig's Guardian Blessing: tap her once per level to shield the duck house. */
