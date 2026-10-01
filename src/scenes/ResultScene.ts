@@ -27,6 +27,7 @@ export interface ResultSceneData {
   hearts?: number; // hearts left and peas that count (see scorePeas), for posting to the leaderboard
   peas?: number;
   daily?: string; // the Daily Challenge date, if that's what was played
+  streak?: number; // Daily Challenges won on days in a row, counting this one
   report?: Partial<Record<DuckKind, KindReport>>; // what each kind of duck did (the damage report)
   newHats?: HatKind[]; // hats this win unlocked
   endlessWaves?: number; // for an Endless Pond run: waves survived
@@ -80,7 +81,9 @@ export class ResultScene extends Phaser.Scene {
         endless
           ? `Your best: ${this.result.endlessBest ?? 0} ${this.result.endlessBest === 1 ? 'wave' : 'waves'}`
           : daily && won
-          ? "You beat today's Daily Challenge!"
+          ? (this.result.streak ?? 0) >= 2
+            ? `You beat today's Daily Challenge! ${this.result.streak} days in a row!`
+            : "You beat today's Daily Challenge!"
           : beatEverything
             ? 'You beat every level! The flock is so proud.'
             : won

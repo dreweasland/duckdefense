@@ -128,7 +128,8 @@ everywhere: dialogue, tooltips, code comments.
   `src/data/perks.ts`; `src/logic/perks.ts` turns them into multipliers the battle reads
   through `duckStats()`.
 - **Daily Challenge:** One level and one twist per UTC day, the same for everyone, with its
-  own leaderboard. Twists live in `src/data/challenges.ts`; the rules shared with the server
+  own leaderboard. Winning on days in a row builds a streak, shown on the Daily Challenge
+  button and the win screen from the second day (`dailyStreak` in `src/logic/progress.ts`). Twists live in `src/data/challenges.ts`; the rules shared with the server
   are in `src/logic/daily.ts`.
 - **Upgrades:** Two tiers per duck (e.g. Sunny → "Seasoned Sunny" → "Legendary Sunny"),
   then a **final upgrade where you pick one of two paths** and keep it (e.g. "Tidal Sunny",

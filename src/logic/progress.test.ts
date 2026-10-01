@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dailyRecord, emptyProgress, isUnlocked, parseProgress, recordDailyWin, recordEndless, recordWin, scoreFor, starsFor } from './progress';
+import { dailyRecord, dailyStreak, emptyProgress, isUnlocked, parseProgress, recordDailyWin, recordEndless, recordWin, scoreFor, starsFor } from './progress';
 
 describe('stars', () => {
   it('gives 3 stars for keeping almost every heart', () => {
@@ -50,6 +50,34 @@ describe('progress', () => {
   it('ignores corrupt or tampered saves', () => {
     expect(parseProgress('not json')).toEqual(emptyProgress());
     expect(parseProgress(JSON.stringify({ levels: { easy: { 0: { stars: 99 } } } }))).toEqual(emptyProgress());
+  });
+});
+
+describe('daily challenge streak', () => {
+  const win = (progress: ReturnType<typeof emptyProgress>, date: string) => recordDailyWin(progress, date, 'easy', 1, 100);
+
+  it('grows by one for each day in a row, and only once a day', () => {
+    let progress = win(emptyProgress(), '2026-09-29');
+    expect(dailyStreak(progress, '2026-09-29')).toBe(1);
+    progress = win(progress, '2026-09-30');
+    progress = recordDailyWin(progress, '2026-09-30', 'normal', 3, 500); // same day again
+    expect(dailyStreak(progress, '2026-09-30')).toBe(2);
+    progress = win(progress, '2026-10-01'); // across a month end
+    expect(dailyStreak(progress, '2026-10-01')).toBe(3);
+  });
+
+  it("still counts the next day before that day's challenge is won, then is lost", () => {
+    const progress = win(win(emptyProgress(), '2026-09-29'), '2026-09-30');
+    expect(dailyStreak(progress, '2026-10-01')).toBe(2);
+    expect(dailyStreak(progress, '2026-10-02')).toBe(0);
+    expect(dailyStreak(win(progress, '2026-10-02'), '2026-10-02')).toBe(1);
+  });
+
+  it('is saved, ignoring a broken one', () => {
+    const progress = win(win(emptyProgress(), '2026-09-29'), '2026-09-30');
+    expect(parseProgress(JSON.stringify(progress)).dailyStreak).toEqual({ count: 2, last: '2026-09-30' });
+    expect(parseProgress(JSON.stringify({ dailyStreak: { count: -3, last: 'soon' } })).dailyStreak).toBeUndefined();
+    expect(dailyStreak(emptyProgress(), '2026-09-30')).toBe(0);
   });
 });
 

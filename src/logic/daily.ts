@@ -28,6 +28,13 @@ function dayNumber(date: string): number | undefined {
   return Math.round(ms / DAY_MS);
 }
 
+/** How many days after `from` the date `to` is (1 = the next day), or undefined if either isn't a real date. */
+export function daysBetween(from: string, to: string): number | undefined {
+  const a = dayNumber(from);
+  const b = dayNumber(to);
+  return a === undefined || b === undefined ? undefined : b - a;
+}
+
 /** A well-mixed number from a day number, so neighbouring days don't look alike. */
 function mix(n: number): number {
   let h = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);

@@ -51,7 +51,7 @@ import { closestPointOnPolyline, type Ellipse, type Point } from '../logic/geome
 import { parseLevel, type Level } from '../logic/level';
 import { isFinalChoice, nameAt, nextUpgrade, statsAt, upgradeOptions } from '../logic/upgrades';
 import { challengeSettings, dailyFor } from '../logic/daily';
-import { dailyRecord, recordDailyWin, recordEndless, recordWin, scoreFor, starsFor } from '../logic/progress';
+import { dailyRecord, dailyStreak, recordDailyWin, recordEndless, recordWin, scoreFor, starsFor } from '../logic/progress';
 import { ENDLESS } from '../data/endless';
 import { endlessWaves } from '../logic/endless';
 import { loadProgress, saveProgress } from '../save';
@@ -1795,6 +1795,7 @@ export class GameScene extends Phaser.Scene {
             ? recordDailyWin(progress, this.daily.date, this.difficulty, result.stars, result.score)
             : recordWin(progress, this.difficulty, this.levelIndex, result.stars, result.score);
           saveProgress(saved);
+          if (this.daily) result.streak = dailyStreak(saved, this.daily.date);
           // New stars can unlock hats.
           result.newHats = newlyUnlocked(totalStars(progress), totalStars(saved));
         }

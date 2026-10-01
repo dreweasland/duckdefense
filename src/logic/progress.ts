@@ -1,6 +1,7 @@
 import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, type DuckKind } from '../data/ducks';
 import { HATS, type HatKind } from '../data/hats';
+import { daysBetween } from './daily';
 
 // Saved progress: which levels are beaten, stars, and best scores, per difficulty.
 
@@ -14,6 +15,8 @@ export interface Progress {
   levels: Record<Difficulty, Record<number, LevelRecord>>;
   /** The most recent Daily Challenge played, and the best result on each difficulty. */
   daily?: { date: string; results: Partial<Record<Difficulty, LevelRecord>> };
+  /** Daily Challenges won on days in a row: how many, and the last day one was won. */
+  dailyStreak?: { count: number; last: string };
   /** The hat each duck is wearing (picked in the Wardrobe). */
   hats?: Partial<Record<DuckKind, HatKind>>;
   /** The most Endless Pond waves survived on each difficulty. */
@@ -45,7 +48,28 @@ export function emptyProgress(): Progress {
 /** Records a Daily Challenge win, keeping the best for that day. An older day's results are dropped. */
 export function recordDailyWin(progress: Progress, date: string, difficulty: Difficulty, stars: number, score: number): Progress {
   const results = progress.daily?.date === date ? progress.daily.results : {};
-  return { ...progress, daily: { date, results: { ...results, [difficulty]: bestOf(results[difficulty], stars, score) } } };
+  return {
+    ...progress,
+    daily: { date, results: { ...results, [difficulty]: bestOf(results[difficulty], stars, score) } },
+    dailyStreak: nextStreak(progress.dailyStreak, date),
+  };
+}
+
+/** The streak after a win on `date`: one longer if yesterday was won too, the same if today already was, otherwise back to 1. */
+function nextStreak(streak: Progress['dailyStreak'], date: string): Progress['dailyStreak'] {
+  const gap = streak && daysBetween(streak.last, date);
+  if (streak && gap === 0) return streak;
+  return { count: streak && gap === 1 ? streak.count + 1 : 1, last: date };
+}
+
+/**
+ * How many days in a row the Daily Challenge has been won, as of `today`. It still counts
+ * if today's hasn't been won yet (there's time), but not once a whole day has been missed.
+ */
+export function dailyStreak(progress: Progress, today: string): number {
+  const streak = progress.dailyStreak;
+  const gap = streak && daysBetween(streak.last, today);
+  return streak && (gap === 0 || gap === 1) ? streak.count : 0;
 }
 
 /** The best result for a day's Daily Challenge on a difficulty, if it's been won. */
@@ -91,6 +115,7 @@ export function parseProgress(text: string | null): Progress {
     const data = JSON.parse(text) as {
       levels?: Partial<Record<Difficulty, Record<string, Partial<LevelRecord>>>>;
       daily?: { date?: unknown; results?: Partial<Record<Difficulty, Partial<LevelRecord>>> };
+      dailyStreak?: { count?: unknown; last?: unknown };
       hats?: Record<string, unknown>;
       endless?: Record<string, unknown>;
     };
@@ -109,6 +134,10 @@ export function parseProgress(text: string | null): Progress {
         if (parsed) results[difficulty] = parsed;
       }
       progress.daily = { date: daily.date, results };
+    }
+    const streak = data.dailyStreak;
+    if (streak && typeof streak.last === 'string' && daysBetween(streak.last, streak.last) === 0 && Number.isInteger(streak.count) && (streak.count as number) > 0) {
+      progress.dailyStreak = { count: streak.count as number, last: streak.last };
     }
     const hats: Partial<Record<DuckKind, HatKind>> = {};
     for (const kind of DUCK_ORDER) {

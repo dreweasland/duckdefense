@@ -6,7 +6,7 @@ import { LEVELS } from '../data/levels';
 import { parseLevel, type Level } from '../logic/level';
 import { ENDLESS } from '../data/endless';
 import { dailyDate, dailyFor } from '../logic/daily';
-import { dailyRecord, isUnlocked, type Progress } from '../logic/progress';
+import { dailyRecord, dailyStreak, isUnlocked, type Progress } from '../logic/progress';
 import { loadProgress } from '../save';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
 import { drawBackButton, drawCard, drawSoundButton, fadeToScene } from '../ui/widgets';
@@ -130,7 +130,10 @@ export class LevelSelectScene extends Phaser.Scene {
     if (!daily) return;
     const record = dailyRecord(progress, date, this.difficulty);
     const data: GameSceneData = { difficulty: this.difficulty, daily: date };
+    const streak = dailyStreak(progress, date);
     this.drawModeButton(x, y, {
+      // Days in a row the Daily Challenge has been won (it shows from the second day).
+      badge: streak >= 2 ? `${streak} days in a row!` : undefined,
       icon: this.add.image(0, 0, 'star').setDisplaySize(46, 46).setTint(COLORS.gold),
       title: 'Daily Challenge',
       subtitle: `${daily.challenge.name}  ·  ${LEVELS[daily.level]?.name ?? ''}`,
@@ -167,6 +170,8 @@ export class LevelSelectScene extends Phaser.Scene {
       fill: number;
       border: number;
       stars?: number;
+      /** A little pink tag on the top corner (the Daily Challenge streak). */
+      badge?: string;
       data: GameSceneData;
     },
   ): void {
@@ -190,6 +195,14 @@ export class LevelSelectScene extends Phaser.Scene {
       play.x = W / 2 - 44;
       parts.push(play);
       this.tweens.add({ targets: play, scale: 1.1, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+    }
+    if (options.badge) {
+      const label = this.add.text(0, 0, options.badge, textStyle(15, { weight: '700', strokeThickness: 3 })).setOrigin(0.5);
+      const w = label.width + 22;
+      const tag = this.add.graphics().fillStyle(COLORS.pink).fillRoundedRect(-w / 2, -13, w, 26, 13).lineStyle(3, COLORS.ink).strokeRoundedRect(-w / 2, -13, w, 26, 13);
+      const badge = this.add.container(W / 2 - w / 2 - 14, -H / 2 - 2, [tag, label]).setAngle(3);
+      this.tweens.add({ targets: badge, scale: 1.08, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+      parts.push(badge);
     }
     const hit = this.add.zone(0, 0, W, H).setInteractive({ useHandCursor: true });
     parts.push(hit);
