@@ -12,7 +12,7 @@ import { TARGETING, TARGETING_ORDER, type Targeting } from '../data/targeting';
 import { ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, HUD_AREAS } from '../data/layout';
 import { PERKS, type PerkId } from '../data/perks';
 import { LEVELS } from '../data/levels';
-import { chasePartner, duckStats, enemyPosition, inBrambles, inMud, isFlying, isHidden, isRefreshed, nestAt, type Enemy } from '../logic/battle';
+import { chasePartner, duckStats, enemyPosition, findDuck, inBrambles, inMud, isFlying, isHidden, isRefreshed, nestAt, type Duck, type Enemy } from '../logic/battle';
 import {
   buyDuck,
   callNextWave,
@@ -20,7 +20,8 @@ import {
   canCallEarly,
   canSell,
   choosePerk,
-  earlyBonus,
+  earlyCallPeas,
+  killPeas,
   repairCost,
   repairHouse,
   trainDuck,
@@ -81,6 +82,9 @@ const shownHints = new Set<HintId>();
 
 // Maps whose "On this map" key has been shown this visit (so it shows once per map).
 const shownMapKeys = new Set<string>();
+
+// Things that happen all the time in a battle and don't change the HUD.
+const QUIET_EVENTS: ReadonlySet<GameEvent['type']> = new Set(['attack', 'alarmQuack', 'scared']);
 
 type TileKind = 'mud' | 'brambles' | NestKind;
 const HINT_SHOW_MS = 6500; // how long a hint stays up (real time, even on fast-forward)
@@ -167,6 +171,8 @@ interface EnemySprite {
   dizzy: Phaser.GameObjects.Container;
   lastX: number;
   flashUntil: number;
+  /** Its waddle (or wing flap), which plays in slow motion in mud. */
+  waddle: Phaser.Tweens.Tween;
   /** When it next splashes in mud or gets prickled by brambles (so the effects come in little bursts). */
   nextTileFx: number;
 }
@@ -222,12 +228,12 @@ export class GameScene extends Phaser.Scene {
   /** Endless Pond: the "fix the duck house" button under the hearts, and its price. */
   private repairButton?: { container: Phaser.GameObjects.Container; cost: Phaser.GameObjects.Text; pea: Phaser.GameObjects.Image };
   private callEarlyButton!: { container: Phaser.GameObjects.Container; label: Phaser.GameObjects.Text };
-  /** The open call-early card, if any, and its peas text (kept up to date as predators are chased off). */
-  /** The open duck panel's report numbers, refreshed as the battle goes on. */
   /** Craig's hint bubble, and when (real time) she last gave one. */
   private hintBubble?: Phaser.GameObjects.Container;
   private lastHintAt = -Infinity;
+  /** The open duck panel's report numbers, refreshed as the battle goes on. */
   private panelReport?: { row: Phaser.GameObjects.Container; refresh: () => void };
+  /** The open call-early card, if any, and its peas text (kept up to date as predators are chased off). */
   private callEarlyCard?: { popup: Phaser.GameObjects.Container; bonus: Phaser.GameObjects.Text };
   private craigButton!: Phaser.GameObjects.Container;
   private craigGlow!: Phaser.GameObjects.Image;
@@ -380,7 +386,8 @@ export class GameScene extends Phaser.Scene {
     this.fx.sparkles.emitting = shielded;
 
     if (events.length > 0) {
-      this.refreshHud();
+      // Attacks, quacks, and scares happen constantly and change nothing the HUD shows.
+      if (events.some((e) => !QUIET_EVENTS.has(e.type))) this.refreshHud();
       if (this.panelReport?.row.active) this.panelReport.refresh();
     }
   }
@@ -634,7 +641,7 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: this.callEarlyButton.container, scale: 1, duration: 250, ease: 'Back.Out' });
     }
     this.callEarlyButton.container.setVisible(early);
-    const peas = early ? `+${game.waves[game.waveIndex]!.bonusPeas + earlyBonus(game)}` : '';
+    const peas = early ? `+${earlyCallPeas(game)}` : '';
     if (early) this.callEarlyButton.label.setText(peas);
     // The call-early card keeps its peas up to date, and closes if the chance has passed.
     const card = this.callEarlyCard;
@@ -732,13 +739,7 @@ export class GameScene extends Phaser.Scene {
         this.add.text(-186, -6, challenge.description, { ...textStyle(19, ink), wordWrap: { width: 372 } }).setOrigin(0, 0),
       ])
       .setDepth(DEPTH.hud + 5);
-    popup.setScale(0.8).setAlpha(0);
-    this.tweens.add({ targets: popup, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
-    this.popup = popup;
-    this.popupTimer = this.time.delayedCall(6000, () => {
-      if (this.popup !== popup) return;
-      this.tweens.add({ targets: popup, alpha: 0, duration: 250, onComplete: () => this.popup === popup && this.closePopup() });
-    });
+    this.showPopup(popup, 6000);
   }
 
   /** What a predator does and which duck is best against it, shown when you tap it in the preview. */
@@ -765,13 +766,7 @@ export class GameScene extends Phaser.Scene {
         this.add.text(-16, 70, best.name, textStyle(19, { ...ink, weight: '700' })).setOrigin(0, 0.5),
       ])
       .setDepth(DEPTH.hud + 5);
-    popup.setScale(0.8).setAlpha(0);
-    this.tweens.add({ targets: popup, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
-    this.popup = popup;
-    this.popupTimer = this.time.delayedCall(6000, () => {
-      if (this.popup !== popup) return;
-      this.tweens.add({ targets: popup, alpha: 0, duration: 250, onComplete: () => this.popup === popup && this.closePopup() });
-    });
+    this.showPopup(popup, 6000);
   }
 
   private drawPicker(): void {
@@ -904,9 +899,7 @@ export class GameScene extends Phaser.Scene {
     this.closePopup();
     const duck = buyDuck(this.state, this.selected, nest.slot);
     if (!duck) {
-      // Not enough peas: wiggle the pea counter.
-      playSound(this, 'noPeas');
-      this.tweens.add({ targets: this.peasText, x: '+=6', duration: 50, yoyo: true, repeat: 3 });
+      this.wigglePeas();
       return;
     }
     playSound(this, 'place');
@@ -918,7 +911,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawPlacedDuck(id: number, kind: DuckKind, at: Point): void {
-    const placed = this.state.battle.ducks.find((d) => d.id === id);
+    const placed = findDuck(this.state.battle, id);
     const reach = placed ? duckStats(this.state.battle, placed).range : DUCKS[kind].range;
     const range = this.add.circle(at.x, at.y, reach).setStrokeStyle(2, 0xffffff, 0.22);
     range.setDepth(DEPTH.path + 0.5);
@@ -1023,6 +1016,53 @@ export class GameScene extends Phaser.Scene {
     return text;
   }
 
+  /** Pops something into view (cards, panels). */
+  private popIn(target: Phaser.GameObjects.Container): void {
+    target.setScale(0.8).setAlpha(0);
+    this.tweens.add({ targets: target, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
+  }
+
+  /** Shows an info card as the open popup. It fades away on its own after `life` milliseconds. */
+  private showPopup(popup: Phaser.GameObjects.Container, life: number): void {
+    this.popIn(popup);
+    this.popup = popup;
+    this.popupTimer = this.time.delayedCall(life, () => {
+      if (this.popup !== popup) return;
+      this.tweens.add({ targets: popup, alpha: 0, duration: 250, onComplete: () => this.popup === popup && this.closePopup() });
+    });
+  }
+
+  /** An invisible sheet over the whole screen that catches taps (to close a panel, or cancel a move). */
+  private tapCatcher(depth: number, onTap: () => void): Phaser.GameObjects.Zone {
+    const zone = this.add
+      .zone(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height)
+      .setInteractive()
+      .setDepth(depth);
+    zone.on('pointerdown', onTap);
+    return zone;
+  }
+
+  /** Not enough peas: wiggle the pea counter. */
+  private wigglePeas(): void {
+    playSound(this, 'noPeas');
+    this.tweens.add({ targets: this.peasText, x: '+=6', duration: 50, yoyo: true, repeat: 3 });
+  }
+
+  /** A button showing a price in peas: green if you can afford it, grey if not. */
+  private priceButton(
+    x: number,
+    y: number,
+    cost: number,
+    affordable: boolean,
+    onTap: () => void,
+    size: { width: number; height: number; fontSize: number } = { width: 276, height: 54, fontSize: 26 },
+  ): Phaser.GameObjects.Container {
+    return drawBigButton(this, x, y, `${cost}`, affordable ? COLORS.green : 0xb8b0a8, affordable ? COLORS.greenDark : 0x8a8079, onTap, {
+      ...size,
+      icon: 'icon-pea',
+    });
+  }
+
   private closePopup(): void {
     this.popupTimer?.remove();
     this.popupTimer = undefined;
@@ -1039,13 +1079,7 @@ export class GameScene extends Phaser.Scene {
     this.closePopup();
     const card = drawCard(this.add.graphics(), 310, 196, { radius: 18 });
     const popup = this.add.container(196, 214, [card, ...this.duckInfoLines(kind)]).setDepth(DEPTH.hud + 5);
-    popup.setScale(0.8).setAlpha(0);
-    this.tweens.add({ targets: popup, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
-    this.popup = popup;
-    this.popupTimer = this.time.delayedCall(4000, () => {
-      if (this.popup !== popup) return;
-      this.tweens.add({ targets: popup, alpha: 0, duration: 250, onComplete: () => this.popup === popup && this.closePopup() });
-    });
+    this.showPopup(popup, 4000);
   }
 
   /** The kinds of special tiles on this map, in a fixed order. */
@@ -1106,13 +1140,7 @@ export class GameScene extends Phaser.Scene {
         this.add.text(-142, -6, text, { ...textStyle(17, ink), wordWrap: { width: 284 } }).setOrigin(0, 0),
       ])
       .setDepth(DEPTH.hud + 5);
-    popup.setScale(0.8).setAlpha(0);
-    this.tweens.add({ targets: popup, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
-    this.popup = popup;
-    this.popupTimer = this.time.delayedCall(5000, () => {
-      if (this.popup !== popup) return;
-      this.tweens.add({ targets: popup, alpha: 0, duration: 250, onComplete: () => this.popup === popup && this.closePopup() });
-    });
+    this.showPopup(popup, 5000);
   }
 
   /** "On this map": a key to the special tiles, shown when a level starts. Tap anywhere to close it. */
@@ -1137,13 +1165,7 @@ export class GameScene extends Phaser.Scene {
       );
     });
     const popup = this.add.container(WORLD.width / 2, 250 + H / 2 - 60, parts).setDepth(DEPTH.hud + 5);
-    popup.setScale(0.8).setAlpha(0);
-    this.tweens.add({ targets: popup, scale: 1, alpha: 1, duration: 200, ease: 'Back.Out' });
-    this.popup = popup;
-    this.popupTimer = this.time.delayedCall(9000, () => {
-      if (this.popup !== popup) return;
-      this.tweens.add({ targets: popup, alpha: 0, duration: 300, onComplete: () => this.popup === popup && this.closePopup() });
-    });
+    this.showPopup(popup, 9000);
   }
 
   /** What the solar fountain does, shown when you tap it. */
@@ -1171,18 +1193,12 @@ export class GameScene extends Phaser.Scene {
           .setOrigin(0, 0),
       ])
       .setDepth(DEPTH.hud + 5);
-    popup.setScale(0.8).setAlpha(0);
-    this.tweens.add({ targets: popup, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
-    this.popup = popup;
-    this.popupTimer = this.time.delayedCall(5000, () => {
-      if (this.popup !== popup) return;
-      this.tweens.add({ targets: popup, alpha: 0, duration: 250, onComplete: () => this.popup === popup && this.closePopup() });
-    });
+    this.showPopup(popup, 5000);
   }
 
   /** The panel for a placed duck: its power, Pecking Loop status, and Move / Sell buttons. */
   private openDuckPanel(duckId: number): void {
-    const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+    const duck = findDuck(this.state.battle, duckId);
     const sprite = this.duckSprites.get(duckId);
     if (!duck || !sprite) return;
     this.cancelMove();
@@ -1193,11 +1209,7 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: sprite.art, scale: sprite.art.scale * 1.12, duration: 90, yoyo: true });
 
     // Taps anywhere outside the panel close it.
-    const scrim = this.add
-      .zone(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height)
-      .setInteractive()
-      .setDepth(DEPTH.hud + 4);
-    scrim.on('pointerdown', () => this.closePopup());
+    const scrim = this.tapCatcher(DEPTH.hud + 4, () => this.closePopup());
 
     const partner = chasePartner(this.state.battle, duck)?.kind;
     const H = 530; // panel height; content is laid out from its center
@@ -1224,16 +1236,7 @@ export class GameScene extends Phaser.Scene {
           this.add
             .text(x, 122, option.description, { ...textStyle(12, ink), align: 'center', wordWrap: { width: 126 } })
             .setOrigin(0.5, 0.5),
-          drawBigButton(
-            this,
-            x,
-            167,
-            `${option.cost}`,
-            affordable ? COLORS.green : 0xb8b0a8,
-            affordable ? COLORS.greenDark : 0x8a8079,
-            () => this.upgrade(duckId, path),
-            { width: 118, height: 32, fontSize: 18, icon: 'icon-pea' },
-          ),
+          this.priceButton(x, 167, option.cost, affordable, () => this.upgrade(duckId, path), { width: 118, height: 32, fontSize: 18 }),
         );
       });
     } else if (next) {
@@ -1241,16 +1244,7 @@ export class GameScene extends Phaser.Scene {
       parts.push(
         this.add.text(-138, 68, `Upgrade: ${next.name}`, textStyle(20, { ...ink, weight: '700' })).setOrigin(0, 0.5),
         this.add.text(-138, 94, next.description, { ...textStyle(16, ink), wordWrap: { width: 276 } }).setOrigin(0, 0.5),
-        drawBigButton(
-          this,
-          0,
-          146,
-          `${next.cost}`,
-          affordable ? COLORS.green : 0xb8b0a8,
-          affordable ? COLORS.greenDark : 0x8a8079,
-          () => this.upgrade(duckId),
-          { width: 276, height: 54, fontSize: 26, icon: 'icon-pea' },
-        ),
+        this.priceButton(0, 146, next.cost, affordable, () => this.upgrade(duckId)),
       );
     } else if (trainingCost(this.state, duckId) !== undefined) {
       // Endless Pond: keep training a fully upgraded duck.
@@ -1260,16 +1254,7 @@ export class GameScene extends Phaser.Scene {
       parts.push(
         this.add.text(-138, 68, `Train: level ${duck.training + 1}`, textStyle(20, { ...ink, weight: '700' })).setOrigin(0, 0.5),
         this.add.text(-138, 94, `Hits ${boost}% harder every time you train.`, { ...textStyle(16, ink), wordWrap: { width: 276 } }).setOrigin(0, 0.5),
-        drawBigButton(
-          this,
-          0,
-          146,
-          `${cost}`,
-          affordable ? COLORS.green : 0xb8b0a8,
-          affordable ? COLORS.greenDark : 0x8a8079,
-          () => this.train(duckId),
-          { width: 276, height: 54, fontSize: 26, icon: 'icon-pea' },
-        ),
+        this.priceButton(0, 146, cost, affordable, () => this.train(duckId)),
       );
     } else {
       parts.push(this.add.text(0, 110, 'Fully upgraded!', textStyle(26, { color: COLORS.goldCss, weight: '700' })).setOrigin(0.5));
@@ -1298,8 +1283,7 @@ export class GameScene extends Phaser.Scene {
       y = Math.max(H / 2 + margin, Math.min(WORLD.height - H / 2 - margin, at.y));
     }
     const panel = this.add.container(x, y, parts).setDepth(DEPTH.hud + 5);
-    panel.setScale(0.8).setAlpha(0);
-    this.tweens.add({ targets: panel, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
+    this.popIn(panel);
     const container = this.add.container(0, 0, [scrim, panel]).setDepth(DEPTH.hud + 4);
     this.popup = container;
   }
@@ -1318,7 +1302,7 @@ export class GameScene extends Phaser.Scene {
     const back = this.add.graphics().fillStyle(COLORS.ink, 0.06).fillRoundedRect(-140, -24, 280, 48, 12);
     const row = this.add.container(x, y, [back, ...values.flatMap((v) => [v.value, v.label])]);
     const refresh = () => {
-      const report = this.state.battle.ducks.find((d) => d.id === duckId)?.report;
+      const report = findDuck(this.state.battle, duckId)?.report;
       if (!report) return;
       [report.chasedOff, report.special, Math.round(report.damage)].forEach((n, i) => values[i]!.value.setText(n.toLocaleString()));
     };
@@ -1334,7 +1318,7 @@ export class GameScene extends Phaser.Scene {
     const row = this.add.container(x, y);
     const cards: { targeting: Targeting; card: Phaser.GameObjects.Graphics }[] = [];
     const refresh = () => {
-      const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+      const duck = findDuck(this.state.battle, duckId);
       for (const { targeting, card } of cards) {
         const on = duck?.targeting === targeting;
         drawCard(card, W, H, { radius: 12, fill: on ? 0xfff0b3 : COLORS.cream, border: on ? COLORS.gold : COLORS.ink, borderWidth: on ? 5 : 2 });
@@ -1383,18 +1367,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   private upgrade(duckId: number, path = 0): void {
-    const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+    const duck = findDuck(this.state.battle, duckId);
     const sprite = this.duckSprites.get(duckId);
     if (!duck || !sprite) return;
     if (!upgradeDuck(this.state, duckId, path)) {
-      // Not enough peas: wiggle the counter and show the panel again.
-      playSound(this, 'noPeas');
-      this.tweens.add({ targets: this.peasText, x: '+=6', duration: 50, yoyo: true, repeat: 3 });
+      // Not enough peas: show the panel again.
+      this.wigglePeas();
       this.openDuckPanel(duckId);
       return;
     }
     playSound(this, 'upgrade');
-    this.showDuckLevel(sprite, duck.kind, duck.level);
+    this.showDuckLevel(sprite, duck);
     const { x, y } = duck.position;
     this.fx.sparkles.explode(24, x, y - 30);
     this.ring(x, y - 30, 60, COLORS.gold, 400);
@@ -1406,12 +1389,11 @@ export class GameScene extends Phaser.Scene {
 
   /** Endless Pond: train a fully upgraded duck to hit harder. */
   private train(duckId: number): void {
-    const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+    const duck = findDuck(this.state.battle, duckId);
     const sprite = this.duckSprites.get(duckId);
     if (!duck || !sprite) return;
     if (!trainDuck(this.state, duckId)) {
-      playSound(this, 'noPeas');
-      this.tweens.add({ targets: this.peasText, x: '+=6', duration: 50, yoyo: true, repeat: 3 });
+      this.wigglePeas();
       this.openDuckPanel(duckId);
       return;
     }
@@ -1437,14 +1419,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Upgraded ducks grow a little, wear gold chevrons, and reach as far as their new stats. */
-  private showDuckLevel(sprite: DuckSprite, kind: DuckKind, level: number): void {
+  private showDuckLevel(sprite: DuckSprite, duck: Duck): void {
+    const { level } = duck;
     // Stop any bounce first, or it would finish by snapping back to the old size.
     this.tweens.killTweensOf(sprite.art);
     const size = sprite.baseSize * (1 + 0.07 * level);
     sprite.art.setDisplaySize(size, size).setY(-size * 0.28);
     this.tweens.add({ targets: sprite.art, y: sprite.art.y - 3, duration: 1000, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
-    const duck = [...this.state.battle.ducks].find((d) => this.duckSprites.get(d.id) === sprite);
-    sprite.range.setRadius(duck ? duckStats(this.state.battle, duck).range : statsAt(kind, level).range);
+    sprite.range.setRadius(duckStats(this.state.battle, duck).range);
     const g = sprite.badge.clear();
     for (let i = 0; i < level; i++) {
       const cy = 16 - i * 9;
@@ -1455,7 +1437,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private sell(duckId: number): void {
-    const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+    const duck = findDuck(this.state.battle, duckId);
     const sprite = this.duckSprites.get(duckId);
     this.closePopup();
     if (!duck || !sprite) return;
@@ -1489,12 +1471,7 @@ export class GameScene extends Phaser.Scene {
     if (!sprite) return;
     const marks: Phaser.GameObjects.GameObject[] = [];
     // Taps anywhere else cancel (this sits below the nests and ducks, so they still get taps).
-    const scrim = this.add
-      .zone(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height)
-      .setInteractive()
-      .setDepth(DEPTH.path + 0.8);
-    scrim.on('pointerdown', () => this.cancelMove());
-    marks.push(scrim);
+    marks.push(this.tapCatcher(DEPTH.path + 0.8, () => this.cancelMove()));
     for (const nest of this.nests) {
       if (nest.duckId !== undefined) continue;
       const ring = this.add
@@ -1522,7 +1499,7 @@ export class GameScene extends Phaser.Scene {
       this.tweens.killTweensOf(mark);
       mark.destroy();
     }
-    const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+    const duck = findDuck(this.state.battle, duckId);
     const sprite = this.duckSprites.get(duckId);
     if (duck && sprite) this.tweens.add({ targets: sprite.root, y: duck.position.y, duration: 120 });
   }
@@ -1564,7 +1541,7 @@ export class GameScene extends Phaser.Scene {
     });
     range.setPosition(target.x, target.y);
     // A hill nest changes how far it reaches.
-    const moved = this.state.battle.ducks.find((d) => d.id === duckId);
+    const moved = findDuck(this.state.battle, duckId);
     if (moved) range.setRadius(duckStats(this.state.battle, moved).range);
     this.announceNest(target);
     this.drawPeckingLoop();
@@ -1598,6 +1575,7 @@ export class GameScene extends Phaser.Scene {
     const root = this.add.container(pos.x, pos.y);
     let art: Phaser.GameObjects.Image;
     let ripple: Phaser.GameObjects.Ellipse | undefined;
+    let waddle: Phaser.Tweens.Tween;
     if (flying) {
       // Hawks cast a shadow below them, and point where they're diving.
       const size = FLYING_SIZES[enemy.kind as keyof typeof FLYING_SIZES] ?? 88;
@@ -1607,7 +1585,7 @@ export class GameScene extends Phaser.Scene {
         .image(0, 0, enemy.kind)
         .setDisplaySize(size, size)
         .setRotation(Math.atan2(to!.y - from!.y, to!.x - from!.x) + Math.PI / 2);
-      this.tweens.add({ targets: art, scaleX: art.scaleX * 0.8, duration: 170, yoyo: true, repeat: -1 });
+      waddle = this.tweens.add({ targets: art, scaleX: art.scaleX * 0.8, duration: 170, yoyo: true, repeat: -1 });
       root.setDepth(DEPTH.effects - 1);
     } else {
       const look = GROUND_LOOKS[enemy.kind as keyof typeof GROUND_LOOKS];
@@ -1617,7 +1595,7 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: ripple, scale: 1.15, alpha: 0.5, duration: 400, yoyo: true, repeat: -1 });
       root.add(ripple);
       art = this.add.image(0, 0, enemy.kind).setDisplaySize(look.width, look.height).setOrigin(0.5, 0.85);
-      this.tweens.add({ targets: art, angle: { from: -look.wobble, to: look.wobble }, duration: look.wobbleTime, yoyo: true, repeat: -1 });
+      waddle = this.tweens.add({ targets: art, angle: { from: -look.wobble, to: look.wobble }, duration: look.wobbleTime, yoyo: true, repeat: -1 });
       // Turtles climb out of the pond with a splash.
       if (ENEMIES[enemy.kind].fromPond) this.fx.splash.explode(16, pos.x, pos.y - 10);
     }
@@ -1640,7 +1618,7 @@ export class GameScene extends Phaser.Scene {
     // Fade in, so a predator entering near the edge of a wide screen doesn't pop into view.
     root.setAlpha(0);
     this.tweens.add({ targets: root, alpha: 1, duration: 300 });
-    this.enemySprites.set(enemy.id, { root, art, ripple, hpBar, hpFill, dizzy, lastX: pos.x, flashUntil: 0, nextTileFx: 0 });
+    this.enemySprites.set(enemy.id, { root, art, ripple, hpBar, hpFill, dizzy, lastX: pos.x, flashUntil: 0, waddle, nextTileFx: 0 });
   }
 
   private syncEnemySprites(time: number): void {
@@ -1684,7 +1662,7 @@ export class GameScene extends Phaser.Scene {
   private showTileEffects(enemy: Enemy, sprite: EnemySprite, time: number): boolean {
     const muddy = inMud(this.state.battle, enemy);
     const prickly = inBrambles(this.state.battle, enemy);
-    for (const tween of this.tweens.getTweensOf(sprite.art)) tween.timeScale = muddy ? 0.4 : 1;
+    sprite.waddle.timeScale = muddy ? 0.4 : 1;
     if (!(muddy || prickly) || time < sprite.nextTileFx || this.state.phase !== 'wave') return muddy;
     sprite.nextTileFx = time + (muddy ? 320 : 450);
     const { x, y } = sprite.root;
@@ -1749,7 +1727,7 @@ export class GameScene extends Phaser.Scene {
       case 'defeated':
         playSound(this, 'chasedOff');
         this.removeEnemySprite(event.enemy.id, 'defeated');
-        this.flyPea(event.position, ENEMIES[event.enemy.kind].peas);
+        this.flyPea(event.position, killPeas(this.state, event.enemy.kind));
         if (ENEMIES[event.enemy.kind].boss) {
           playSound(this, 'bossDefeated');
           this.showBossGone(event.position, `${ENEMIES[event.enemy.kind].name} ran away!`);
@@ -1815,16 +1793,18 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private duckSprite(duckId: number): { sprite: DuckSprite; kind: DuckKind; level: number; path: number; position: Point } | undefined {
-    const duck = this.state.battle.ducks.find((d) => d.id === duckId);
+  /** A placed duck and its picture, if it's still on the map. */
+  private duckSprite(duckId: number): { sprite: DuckSprite; duck: Duck } | undefined {
+    const duck = findDuck(this.state.battle, duckId);
     const sprite = this.duckSprites.get(duckId);
-    return duck && sprite ? { sprite, kind: duck.kind, level: duck.level, path: duck.path, position: duck.position } : undefined;
+    return duck && sprite ? { sprite, duck } : undefined;
   }
 
   private showAttack(duckId: number, target: Point, hitIds: number[], wingFlap: boolean): void {
     const found = this.duckSprite(duckId);
     if (!found) return;
-    const { sprite, kind, level, path, position } = found;
+    const { sprite, duck } = found;
+    const { kind, position } = duck;
     sprite.art.setFlipX(target.x < position.x);
 
     const flash = () => {
@@ -1836,6 +1816,7 @@ export class GameScene extends Phaser.Scene {
 
     if (kind === 'sunny') {
       // A water ball, then a splash.
+      const { splashRadius } = duckStats(this.state.battle, duck);
       const from = { x: position.x + (sprite.art.flipX ? -30 : 30), y: position.y - 36 };
       const ball = this.add.image(from.x, from.y, 'dot').setTint(0x5bb3e8).setDisplaySize(14, 14).setDepth(DEPTH.effects);
       this.tweens.add({
@@ -1848,7 +1829,7 @@ export class GameScene extends Phaser.Scene {
           playSound(this, 'splash');
           flash();
           this.fx.splash.explode(12, target.x, target.y - 20);
-          this.ring(target.x, target.y - 20, statsAt(kind, level, path).splashRadius, COLORS.water, 250);
+          this.ring(target.x, target.y - 20, splashRadius, COLORS.water, 250);
         },
       });
     } else {
@@ -1875,10 +1856,10 @@ export class GameScene extends Phaser.Scene {
   private showAlarmQuack(duckId: number): void {
     const found = this.duckSprite(duckId);
     if (!found) return;
-    const { sprite, kind, level, path, position } = found;
+    const { sprite, duck } = found;
+    const { position } = duck;
     this.tweens.add({ targets: sprite.art, scale: sprite.art.scale * 1.2, duration: 100, yoyo: true });
-    const quacker = this.state.battle.ducks.find((d) => d.id === duckId);
-    const range = quacker ? duckStats(this.state.battle, quacker).range : statsAt(kind, level, path).range;
+    const { range } = duckStats(this.state.battle, duck);
     this.ring(position.x, position.y - 30, range, COLORS.gold, 500);
     this.time.delayedCall(120, () => this.ring(position.x, position.y - 30, range * 0.7, COLORS.gold, 450));
     this.fx.stars.explode(10, position.x, position.y - 40);
@@ -1891,13 +1872,13 @@ export class GameScene extends Phaser.Scene {
     // A few bubbles at most, so a big scare doesn't flood the screen.
     duckIds.slice(0, 3).forEach((id) => {
       const found = this.duckSprite(id);
-      if (found) popSpeechBubble(this, found.position.x, found.position.y - 70, 'Eek!', DEPTH.floatText);
+      if (found) popSpeechBubble(this, found.duck.position.x, found.duck.position.y - 70, 'Eek!', DEPTH.floatText);
     });
     for (const id of fearlessIds) {
       const found = this.duckSprite(id);
       if (!found) continue;
       playSound(this, 'nope');
-      popSpeechBubble(this, found.position.x, found.position.y - 70, 'Meh.', DEPTH.floatText);
+      popSpeechBubble(this, found.duck.position.x, found.duck.position.y - 70, 'Meh.', DEPTH.floatText);
     }
   }
 
@@ -2229,13 +2210,7 @@ export class GameScene extends Phaser.Scene {
     });
     const area = ENDLESS_PERKS_AREA;
     const popup = this.add.container(area.x + W / 2, area.y + area.height + 16 + H / 2, parts).setDepth(DEPTH.hud + 5);
-    popup.setScale(0.8).setAlpha(0);
-    this.tweens.add({ targets: popup, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
-    this.popup = popup;
-    this.popupTimer = this.time.delayedCall(5000, () => {
-      if (this.popup !== popup) return;
-      this.tweens.add({ targets: popup, alpha: 0, duration: 250, onComplete: () => this.popup === popup && this.closePopup() });
-    });
+    this.showPopup(popup, 5000);
   }
 
   /** Endless Pond: under the hearts, spend peas to fix the duck house (one heart back). */
@@ -2311,11 +2286,7 @@ export class GameScene extends Phaser.Scene {
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
 
     // Taps anywhere outside the card close it.
-    const scrim = this.add
-      .zone(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height)
-      .setInteractive()
-      .setDepth(DEPTH.hud + 4);
-    scrim.on('pointerdown', () => this.closePopup());
+    const scrim = this.tapCatcher(DEPTH.hud + 4, () => this.closePopup());
 
     const parts: Phaser.GameObjects.GameObject[] = [
       drawCard(this.add.graphics(), W, H, { radius: 18 }),
@@ -2338,8 +2309,7 @@ export class GameScene extends Phaser.Scene {
     // Just below the button, kept on screen.
     const x = Math.min(WORLD.width - W / 2 - 10, CALL_EARLY.x - 20);
     const panel = this.add.container(x, CALL_EARLY.y + 50 + H / 2, parts).setDepth(DEPTH.hud + 5);
-    panel.setScale(0.8).setAlpha(0);
-    this.tweens.add({ targets: panel, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
+    this.popIn(panel);
     const popup = this.add.container(0, 0, [scrim, panel]).setDepth(DEPTH.hud + 4);
     this.popup = popup;
     this.callEarlyCard = { popup, bonus };

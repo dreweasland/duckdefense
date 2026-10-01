@@ -1,5 +1,5 @@
 import { englishDataset, englishRecommendedTransformers, RegExpMatcher } from 'obscenity';
-import type { Difficulty } from '../data/difficulty';
+import { isDifficulty, type Difficulty } from '../data/difficulty';
 import { LEVEL_COUNT } from '../data/levelCount';
 import { ENDLESS, ENDLESS_LEVEL } from '../data/endless';
 import { challengeSettings, dailyFor, isPostableDate } from './daily';
@@ -44,7 +44,7 @@ export function checkSubmission(body: unknown, now: Date = new Date()): Submissi
   let { level } = body as Record<string, unknown>;
   const nameCheck = checkName(typeof name === 'string' ? name : '');
   if (!nameCheck.ok) return nameCheck;
-  if (difficulty !== 'easy' && difficulty !== 'normal') return { ok: false, reason: 'Unknown difficulty.' };
+  if (!isDifficulty(difficulty)) return { ok: false, reason: 'Unknown difficulty.' };
 
   // An Endless Pond run: the score is how many waves were survived.
   if (endless === true) {

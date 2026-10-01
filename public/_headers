@@ -1,0 +1,9 @@
+# Extra response headers for the game's static files (Cloudflare reads this file).
+
+# Built files have a fingerprint in their name, so browsers can keep them for good.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

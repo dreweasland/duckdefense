@@ -9,7 +9,7 @@ import { dailyDate, dailyFor } from '../logic/daily';
 import { dailyRecord, isUnlocked, type Progress } from '../logic/progress';
 import { loadProgress } from '../save';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
-import { drawCard, drawRoundButton, drawSoundButton } from '../ui/widgets';
+import { drawBackButton, drawCard, drawSoundButton, fadeToScene } from '../ui/widgets';
 import type { GameSceneData } from './GameScene';
 
 export interface LevelSelectSceneData {
@@ -58,25 +58,10 @@ export class LevelSelectScene extends Phaser.Scene {
     this.drawEndlessButton(cx + (MODE_BUTTON.width + MODE_BUTTON.gap) / 2, 648, progress);
 
     // Back to the title screen.
-    const arrow = this.add
-      .graphics()
-      .fillStyle(0xffffff)
-      .fillTriangle(8, -16, 8, 16, -16, 0)
-      .lineStyle(4, COLORS.ink)
-      .strokeTriangle(8, -16, 8, 16, -16, 0);
-    const back = drawRoundButton(this, 70, 70, 40, COLORS.blue, COLORS.blueDark, [arrow]);
-    back.hit.on('pointerdown', () => {
-      playSound(this, 'tap');
-      this.go('TitleScene');
-    });
+    drawBackButton(this, () => fadeToScene(this, 'TitleScene'));
 
     drawSoundButton(this, WORLD.width - 40, WORLD.height - 40, 100);
     this.cameras.main.fadeIn(250, 0, 0, 0);
-  }
-
-  private go(scene: string, data?: object): void {
-    this.cameras.main.fadeOut(220, 0, 0, 0);
-    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start(scene, data));
   }
 
   private drawLevelCard(x: number, y: number, index: number, name: string, level: Level, stars: number, unlocked: boolean): void {
@@ -133,7 +118,7 @@ export class LevelSelectScene extends Phaser.Scene {
       playSound(this, 'tap');
       this.tweens.add({ targets: container, scale: 0.95, duration: 80, yoyo: true });
       const data: GameSceneData = { difficulty: this.difficulty, level: index };
-      this.go('GameScene', data);
+      fadeToScene(this, 'GameScene', data);
     });
   }
 
@@ -213,7 +198,7 @@ export class LevelSelectScene extends Phaser.Scene {
     hit.on('pointerdown', () => {
       playSound(this, 'tap');
       this.tweens.add({ targets: container, scale: 0.96, duration: 80, yoyo: true });
-      this.go('GameScene', options.data);
+      fadeToScene(this, 'GameScene', options.data);
     });
   }
 

@@ -227,8 +227,21 @@ function credit(battle: Battle, duck: Duck, stat: keyof DuckReport, amount: numb
   kindReport(battle, duck.kind)[stat] += amount;
 }
 
+// Where each predator was last worked out to be, so asking again before it moves is free
+// (every duck asks about every predator, many times a second).
+const positions = new WeakMap<Enemy, { path: Path; distance: number; point: Point }>();
+
+/** Where a predator is right now. Don't change the point: it's shared until the predator moves. */
 export function enemyPosition(enemy: Enemy): Point {
-  return pointAt(enemy.path, enemy.distance);
+  const known = positions.get(enemy);
+  if (known && known.distance === enemy.distance && known.path === enemy.path) return known.point;
+  const point = pointAt(enemy.path, enemy.distance);
+  positions.set(enemy, { path: enemy.path, distance: enemy.distance, point });
+  return point;
+}
+
+export function findDuck(battle: Battle, duckId: number): Duck | undefined {
+  return battle.ducks.find((d) => d.id === duckId);
 }
 
 export function isFlying(enemy: Enemy): boolean {
@@ -362,20 +375,35 @@ export function isScared(duck: Duck): boolean {
   return duck.scaredTime > 0;
 }
 
+interface SlowZone {
+  duck: Duck;
+  range: number;
+  slow: number;
+}
+
+/** Every duck that slows predators (Curtis), with how far it reaches and how much it slows. */
+function slowZones(battle: Battle): SlowZone[] {
+  const zones: SlowZone[] = [];
+  for (const duck of battle.ducks) {
+    const stats = duckStats(battle, duck);
+    if (stats.slowZone) zones.push({ duck, range: stats.range, slow: stats.slowZone.slow });
+  }
+  return zones;
+}
+
 /**
  * How much a ground predator is slowed right now (1 = not at all). Only Curtis slows
  * predators; if two Curtises overlap, the stronger slow wins. Hawks fly over it.
  */
-function slowFor(battle: Battle, enemy: Enemy): number {
-  if (isFlying(enemy)) return 1;
+function slowFor(battle: Battle, enemy: Enemy, zones: readonly SlowZone[]): number {
+  if (zones.length === 0 || isFlying(enemy)) return 1;
   const at = enemyPosition(enemy);
   let factor = 1;
   let slower: Duck | undefined;
-  for (const duck of battle.ducks) {
-    const stats = duckStats(battle, duck);
-    if (stats.slowZone && distance(at, duck.position) <= stats.range && stats.slowZone.slow < factor) {
-      factor = stats.slowZone.slow;
-      slower = duck;
+  for (const zone of zones) {
+    if (zone.slow < factor && distance(at, zone.duck.position) <= zone.range) {
+      factor = zone.slow;
+      slower = zone.duck;
     }
   }
   // The damage report counts each predator once for the Curtis doing the slowing.
@@ -432,11 +460,12 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
   for (const duck of battle.ducks) duck.scaredTime = Math.max(0, duck.scaredTime - dt);
 
   // 1. Predators head for the house, unless something has frozen them.
+  const zones = slowZones(battle);
   for (const enemy of battle.enemies) {
     enemy.pushRecovery = Math.max(0, enemy.pushRecovery - dt);
     enemy.freezeRecovery = Math.max(0, enemy.freezeRecovery - dt);
     enemy.revealedTime = Math.max(0, enemy.revealedTime - dt);
-    const curtisSlow = slowFor(battle, enemy);
+    const curtisSlow = slowFor(battle, enemy, zones);
     enemy.slowed = curtisSlow < 1; // (the dusty ring is for Curtis; mud shows for itself)
     const slow = curtisSlow * (inMud(battle, enemy) ? TILES.mud.speed : 1);
     // Brambles prickle ground predators the whole time they're in them.

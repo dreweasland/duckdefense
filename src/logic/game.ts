@@ -6,7 +6,7 @@ import { DUCKS, MOVE_SETTLE_TIME, SELL_REFUND, type DuckKind } from '../data/duc
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import type { Targeting } from '../data/targeting';
 import { EARLY_CALL, type Wave } from '../data/waves';
-import { createBattle, placeDuck, spawnEnemy, step, type Battle, type BattleEvent, type Duck, type Enemy } from './battle';
+import { createBattle, findDuck, placeDuck, spawnEnemy, step, type Battle, type BattleEvent, type Duck, type Enemy } from './battle';
 import type { NestKind } from '../data/tiles';
 import { distance, type Ellipse, type Point } from './geometry';
 import { ENDLESS } from '../data/endless';
@@ -192,7 +192,7 @@ function trainingCostAt(done: number): number {
 
 /** What the next level of training costs for a duck, or undefined if it can't train (yet). */
 export function trainingCost(game: Game, duckId: number): number | undefined {
-  const duck = game.battle.ducks.find((d) => d.id === duckId);
+  const duck = findDuck(game.battle, duckId);
   if (!game.endless || !duck || upgradeOptions(duck.kind, duck.level).length > 0) return undefined;
   return trainingCostAt(duck.training);
 }
@@ -200,9 +200,10 @@ export function trainingCost(game: Game, duckId: number): number | undefined {
 /** Endless Pond only: once a duck has both upgrades, train it to hit harder. */
 export function trainDuck(game: Game, duckId: number): boolean {
   const cost = trainingCost(game, duckId);
-  if (isOver(game) || cost === undefined || game.peas < cost) return false;
+  const duck = findDuck(game.battle, duckId);
+  if (isOver(game) || !duck || cost === undefined || game.peas < cost) return false;
   game.peas -= cost;
-  game.battle.ducks.find((d) => d.id === duckId)!.training++;
+  duck.training++;
   return true;
 }
 
@@ -227,7 +228,7 @@ export function repairHouse(game: Game): boolean {
  * final upgrade, `path` picks which of the two (0 or 1).
  */
 export function canUpgrade(game: Game, duckId: number, path = 0): boolean {
-  const duck = game.battle.ducks.find((d) => d.id === duckId);
+  const duck = findDuck(game.battle, duckId);
   const upgrade = duck && nextUpgrade(duck.kind, duck.level, path);
   return !isOver(game) && !!upgrade && game.peas >= upgrade.cost;
 }
@@ -235,7 +236,7 @@ export function canUpgrade(game: Game, duckId: number, path = 0): boolean {
 /** Buys a duck's next upgrade (for the final one, the path picked). Returns false if it's maxed out or you can't afford it. */
 export function upgradeDuck(game: Game, duckId: number, path = 0): boolean {
   if (!canUpgrade(game, duckId, path)) return false;
-  const duck = game.battle.ducks.find((d) => d.id === duckId)!;
+  const duck = findDuck(game.battle, duckId)!;
   game.peas -= nextUpgrade(duck.kind, duck.level, path)!.cost;
   if (isFinalChoice(duck.kind, duck.level)) duck.path = path;
   duck.level++;
@@ -245,7 +246,7 @@ export function upgradeDuck(game: Game, duckId: number, path = 0): boolean {
 /** Sells a duck for part of its cost. Returns the peas refunded, or undefined if it can't be sold. */
 export function sellDuck(game: Game, duckId: number): number | undefined {
   if (!canSell(game)) return undefined;
-  const duck = game.battle.ducks.find((d) => d.id === duckId);
+  const duck = findDuck(game.battle, duckId);
   if (!duck) return undefined;
   game.battle.ducks = game.battle.ducks.filter((d) => d !== duck);
   const refund = sellValue(duck.kind, duck.level, duck.training, duck.path);
@@ -260,7 +261,7 @@ export function isSpotTaken(game: Game, at: Point): boolean {
 /** Moves a duck to an empty spot. It needs a moment to settle before it attacks again. */
 export function moveDuck(game: Game, duckId: number, to: Point): boolean {
   if (isOver(game) || isSpotTaken(game, to)) return false;
-  const duck = game.battle.ducks.find((d) => d.id === duckId);
+  const duck = findDuck(game.battle, duckId);
   if (!duck) return false;
   duck.position = { ...to };
   duck.cooldown = Math.max(duck.cooldown, MOVE_SETTLE_TIME);
@@ -270,7 +271,7 @@ export function moveDuck(game: Game, duckId: number, to: Point): boolean {
 
 /** Changes which predator a duck goes after. Works during waves too. */
 export function setTargeting(game: Game, duckId: number, targeting: Targeting): boolean {
-  const duck = game.battle.ducks.find((d) => d.id === duckId);
+  const duck = findDuck(game.battle, duckId);
   if (isOver(game) || !duck) return false;
   duck.targeting = targeting;
   return true;
@@ -312,11 +313,17 @@ export function scheduleWave(wave: Wave): ScheduledSpawn[] {
 export function startWave(game: Game): boolean {
   if (game.phase !== 'building' || game.perkChoice) return false;
   game.phase = 'wave';
-  game.waveTime = 0;
-  game.pending = scheduleWave(game.waves[game.waveIndex]!);
-  game.battle.night = isNight(game);
-  game.battle.enemyHealth = game.waves[game.waveIndex]!.health ?? 1;
+  beginWave(game);
   return true;
+}
+
+/** Lines up the predators for the wave at `waveIndex` and sets how it plays (night, tougher predators). */
+function beginWave(game: Game): void {
+  const wave = game.waves[game.waveIndex]!;
+  game.waveTime = 0;
+  game.pending = scheduleWave(wave);
+  game.battle.night = wave.time === 'night';
+  game.battle.enemyHealth = wave.health ?? 1;
 }
 
 /** Whether you can send the next wave now: every predator in this wave is out, and there's another wave. */
@@ -329,20 +336,22 @@ export function earlyBonus(game: Game): number {
   return EARLY_CALL.peasPerPredator * game.battle.enemies.length;
 }
 
+/** Everything you'd earn for calling the next wave now: this wave's bonus plus the early bonus. */
+export function earlyCallPeas(game: Game): number {
+  return waveBonus(game) + earlyBonus(game);
+}
+
 /**
  * Sends the next wave while this one is still going. Pays this wave's bonus now, plus the
  * early bonus. Returns the peas earned, or undefined if you can't call early right now.
  */
 export function callNextWave(game: Game): number | undefined {
   if (!canCallEarly(game)) return undefined;
-  const earned = waveBonus(game) + earlyBonus(game);
+  const earned = earlyCallPeas(game);
   game.peas += earned;
   game.waveIndex++;
   offerPerksIfDue(game);
-  game.waveTime = 0;
-  game.pending = scheduleWave(game.waves[game.waveIndex]!);
-  game.battle.night = isNight(game);
-  game.battle.enemyHealth = game.waves[game.waveIndex]!.health ?? 1;
+  beginWave(game);
   return earned;
 }
 
@@ -350,6 +359,11 @@ export function callNextWave(game: Game): number | undefined {
 function waveBonus(game: Game): number {
   const wave = game.waves[game.waveIndex]!;
   return Math.round(wave.bonusPeas * (wave.time === 'day' ? game.battle.mods.dayBonus : 1));
+}
+
+/** The peas for chasing off a predator (Pea Picker and the like make them pay more). */
+export function killPeas(game: Game, kind: EnemyKind): number {
+  return Math.round(ENEMIES[kind].peas * game.battle.mods.killPeas);
 }
 
 /** Endless Pond: after every few waves, offer Pond Perks. Returns true if it just did. */
@@ -397,7 +411,7 @@ export function update(game: Game, dt: number): GameEvent[] {
       continue;
     }
     events.push(event);
-    if (event.type === 'defeated') game.peas += Math.round(ENEMIES[event.enemy.kind].peas * game.battle.mods.killPeas);
+    if (event.type === 'defeated') game.peas += killPeas(game, event.enemy.kind);
     if (event.type === 'reachedHouse') game.hearts = Math.max(0, game.hearts - ENEMIES[event.enemy.kind].hearts);
   }
 

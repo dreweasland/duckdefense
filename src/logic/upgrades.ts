@@ -13,8 +13,21 @@ function boughtUpgrades(kind: DuckKind, level: number, path = 0): Upgrade[] {
   return bought;
 }
 
-/** Base stats with each bought upgrade's changes layered on, in order. */
+// Stats already worked out, by "kind:level:path". The battle asks many times a second.
+const statsCache = new Map<string, DuckStats>();
+
+/** Base stats with each bought upgrade's changes layered on, in order. Don't change the result: it's shared. */
 export function statsAt(kind: DuckKind, level: number, path = 0): DuckStats {
+  const key = `${kind}:${level}:${path}`;
+  let stats = statsCache.get(key);
+  if (!stats) {
+    stats = buildStats(kind, level, path);
+    statsCache.set(key, stats);
+  }
+  return stats;
+}
+
+function buildStats(kind: DuckKind, level: number, path: number): DuckStats {
   let stats = DUCKS[kind];
   for (const upgrade of boughtUpgrades(kind, level, path)) {
     const { wingFlap, alarmQuack, slowZone, ...simple } = upgrade.changes;

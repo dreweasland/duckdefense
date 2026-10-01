@@ -8,7 +8,7 @@ import { playSound } from '../audio/sfx';
 import { hatFor } from '../logic/hats';
 import { loadProgress } from '../save';
 import { duckWithHat } from '../ui/hats';
-import { drawBigButton, drawRoundButton, drawSoundButton } from '../ui/widgets';
+import { drawBigButton, drawRoundButton, drawSoundButton, fadeToScene } from '../ui/widgets';
 import type { LeaderboardSceneData } from './LeaderboardScene';
 import type { LevelSelectSceneData } from './LevelSelectScene';
 
@@ -52,8 +52,7 @@ export class TitleScene extends Phaser.Scene {
     // Picking a difficulty starts the game. Easy is green and comes first.
     const start = (difficulty: Difficulty) => {
       const data: LevelSelectSceneData = { difficulty };
-      this.cameras.main.fadeOut(250, 0, 0, 0);
-      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('LevelSelectScene', data));
+      fadeToScene(this, 'LevelSelectScene', data, 250);
     };
     drawBigButton(this, cx - 170, 610, DIFFICULTIES.easy.label, COLORS.green, COLORS.greenDark, () => start('easy')).setDepth(100);
     drawBigButton(this, cx + 170, 610, DIFFICULTIES.normal.label, COLORS.orange, COLORS.orangeDark, () => start('normal')).setDepth(100);
@@ -67,8 +66,7 @@ export class TitleScene extends Phaser.Scene {
     scores.hit.on('pointerdown', () => {
       playSound(this, 'tap');
       const data: LeaderboardSceneData = { back: { scene: 'TitleScene' } };
-      this.cameras.main.fadeOut(220, 0, 0, 0);
-      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('LeaderboardScene', data));
+      fadeToScene(this, 'LeaderboardScene', data);
     });
     // The Wardrobe: dress up the ducks.
     const hat = this.add.image(0, 2, 'hat-party').setDisplaySize(52, 47);
@@ -76,8 +74,7 @@ export class TitleScene extends Phaser.Scene {
     wardrobe.container.setDepth(100);
     wardrobe.hit.on('pointerdown', () => {
       playSound(this, 'tap');
-      this.cameras.main.fadeOut(220, 0, 0, 0);
-      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('WardrobeScene'));
+      fadeToScene(this, 'WardrobeScene');
     });
     this.cameras.main.fadeIn(300, 0, 0, 0);
   }

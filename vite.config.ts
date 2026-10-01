@@ -9,5 +9,10 @@ export default defineConfig({
     outDir: 'dist',
     // Phaser is one big chunk; don't warn about it on every build.
     chunkSizeWarningLimit: 2000,
+    // Keep Phaser in its own file: it rarely changes, so players' browsers keep their
+    // copy when only the game's code is updated.
+    rolldownOptions: {
+      output: { codeSplitting: { groups: [{ name: 'phaser', test: /node_modules[\\/]phaser/ }] } },
+    },
   },
 });

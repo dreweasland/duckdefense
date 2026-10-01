@@ -26,6 +26,18 @@ export function recordEndless(progress: Progress, difficulty: Difficulty, waves:
   return { ...progress, endless: { ...progress.endless, [difficulty]: best } };
 }
 
+/** A result folded into the record so far: the most stars and the best score. */
+function bestOf(previous: LevelRecord | undefined, stars: number, score: number): LevelRecord {
+  return { stars: Math.max(stars, previous?.stars ?? 0), bestScore: Math.max(score, previous?.bestScore ?? 0) };
+}
+
+/** A saved record, if it makes sense (1 to 3 stars). */
+function parseRecord(record: Partial<LevelRecord> | undefined): LevelRecord | undefined {
+  const stars = Number(record?.stars);
+  const bestScore = Number(record?.bestScore);
+  return stars >= 1 && stars <= 3 ? { stars, bestScore: Number.isFinite(bestScore) ? bestScore : 0 } : undefined;
+}
+
 export function emptyProgress(): Progress {
   return { version: 1, levels: { easy: {}, normal: {} } };
 }
@@ -33,12 +45,7 @@ export function emptyProgress(): Progress {
 /** Records a Daily Challenge win, keeping the best for that day. An older day's results are dropped. */
 export function recordDailyWin(progress: Progress, date: string, difficulty: Difficulty, stars: number, score: number): Progress {
   const results = progress.daily?.date === date ? progress.daily.results : {};
-  const previous = results[difficulty];
-  const record: LevelRecord = {
-    stars: Math.max(stars, previous?.stars ?? 0),
-    bestScore: Math.max(score, previous?.bestScore ?? 0),
-  };
-  return { ...progress, daily: { date, results: { ...results, [difficulty]: record } } };
+  return { ...progress, daily: { date, results: { ...results, [difficulty]: bestOf(results[difficulty], stars, score) } } };
 }
 
 /** The best result for a day's Daily Challenge on a difficulty, if it's been won. */
@@ -66,11 +73,7 @@ export function isUnlocked(progress: Progress, difficulty: Difficulty, level: nu
 
 /** Records a win, keeping the best stars and score. Returns a new Progress. */
 export function recordWin(progress: Progress, difficulty: Difficulty, level: number, stars: number, score: number): Progress {
-  const previous = progress.levels[difficulty][level];
-  const record: LevelRecord = {
-    stars: Math.max(stars, previous?.stars ?? 0),
-    bestScore: Math.max(score, previous?.bestScore ?? 0),
-  };
+  const record = bestOf(progress.levels[difficulty][level], stars, score);
   return {
     ...progress,
     levels: { ...progress.levels, [difficulty]: { ...progress.levels[difficulty], [level]: record } },
@@ -91,20 +94,16 @@ export function parseProgress(text: string | null): Progress {
     for (const difficulty of ['easy', 'normal'] as const) {
       for (const [key, record] of Object.entries(data.levels?.[difficulty] ?? {})) {
         const level = Number(key);
-        const stars = Number(record?.stars);
-        const bestScore = Number(record?.bestScore);
-        if (Number.isInteger(level) && level >= 0 && stars >= 1 && stars <= 3) {
-          progress.levels[difficulty][level] = { stars, bestScore: Number.isFinite(bestScore) ? bestScore : 0 };
-        }
+        const parsed = parseRecord(record);
+        if (Number.isInteger(level) && level >= 0 && parsed) progress.levels[difficulty][level] = parsed;
       }
     }
     const daily = data.daily;
     if (daily && typeof daily.date === 'string') {
       const results: Partial<Record<Difficulty, LevelRecord>> = {};
       for (const difficulty of ['easy', 'normal'] as const) {
-        const stars = Number(daily.results?.[difficulty]?.stars);
-        const bestScore = Number(daily.results?.[difficulty]?.bestScore);
-        if (stars >= 1 && stars <= 3) results[difficulty] = { stars, bestScore: Number.isFinite(bestScore) ? bestScore : 0 };
+        const parsed = parseRecord(daily.results?.[difficulty]);
+        if (parsed) results[difficulty] = parsed;
       }
       progress.daily = { date: daily.date, results };
     }

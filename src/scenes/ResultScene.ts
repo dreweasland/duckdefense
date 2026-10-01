@@ -12,7 +12,7 @@ import { topDuck, type KindReport } from '../logic/battle';
 import { playSound } from '../audio/sfx';
 import { askForName } from '../ui/nameForm';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
-import { drawBigButton, drawCard } from '../ui/widgets';
+import { drawBigButton, drawCard, fadeToScene } from '../ui/widgets';
 import type { GameSceneData } from './GameScene';
 import type { LeaderboardSceneData } from './LeaderboardScene';
 import type { LevelSelectSceneData } from './LevelSelectScene';
@@ -186,10 +186,7 @@ export class ResultScene extends Phaser.Scene {
         .setDepth(60);
     }
 
-    const go = (scene: string, data?: object) => {
-      this.cameras.main.fadeOut(250, 0, 0, 0);
-      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start(scene, data));
-    };
+    const go = (scene: string, data?: object) => fadeToScene(this, scene, data, 250);
     const again: GameSceneData = { difficulty, level, daily, endless };
     const levels: LevelSelectSceneData = { difficulty };
     const y = 560;
@@ -311,8 +308,7 @@ export class ResultScene extends Phaser.Scene {
           highlightId: posted.id,
           back: { scene: 'LevelSelectScene', data: { difficulty } },
         };
-        this.cameras.main.fadeOut(250, 0, 0, 0);
-        this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('LeaderboardScene', data));
+        fadeToScene(this, 'LeaderboardScene', data, 250);
       },
       { width: 150, height: 56, fontSize: 24, icon: 'icon-trophy' },
     );

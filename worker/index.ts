@@ -11,6 +11,7 @@ import { checkSubmission } from '../src/logic/leaderboard';
 import { LEVEL_COUNT } from '../src/data/levelCount';
 import { ENDLESS_LEVEL } from '../src/data/endless';
 import { dailyFor } from '../src/logic/daily';
+import { isDifficulty } from '../src/data/difficulty';
 
 interface Env {
   DB: D1Database;
@@ -23,6 +24,8 @@ const TOP_SCORES = 10;
 // Each player (by IP) can post at most this many scores per this many seconds.
 const RATE_LIMIT = { max: 3, seconds: 60 };
 const MAX_BODY_BYTES = 1000;
+// The rows on one board: a level's scores, or one day's Daily Challenge scores.
+const BOARD_FILTER = { level: 'level = ? AND daily IS NULL', daily: 'daily = ?' } as const;
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -47,49 +50,44 @@ export default {
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
   });
 }
 
 async function listScores(url: URL, env: Env): Promise<Response> {
   const difficulty = url.searchParams.get('difficulty');
-  if (difficulty !== 'easy' && difficulty !== 'normal') return json({ error: 'Unknown difficulty.' }, 400);
+  if (!isDifficulty(difficulty)) return json({ error: 'Unknown difficulty.' }, 400);
 
+  // Which board: a day's Daily Challenge, or a level's (Endless Pond runs have their own level number).
+  let board: { column: 'daily'; value: string } | { column: 'level'; value: number };
   const dailyParam = url.searchParams.get('daily');
   if (dailyParam !== null) {
     const daily = dailyFor(dailyParam);
     if (!daily) return json({ error: 'Unknown day.' }, 400);
-    const { results } = await env.DB.prepare(
-      `SELECT id, name, score, hearts, created_at AS createdAt FROM scores
-       WHERE daily = ? AND difficulty = ?
-       ORDER BY score DESC, created_at ASC
-       LIMIT ?`,
-    )
-      .bind(daily.date, difficulty, TOP_SCORES)
-      .all();
-    return json({ scores: results });
+    board = { column: 'daily', value: daily.date };
+  } else {
+    const level = url.searchParams.get('endless') === '1' ? ENDLESS_LEVEL : Number(url.searchParams.get('level'));
+    const realLevel = Number.isInteger(level) && level >= 0 && level < LEVEL_COUNT;
+    if (!realLevel && level !== ENDLESS_LEVEL) return json({ error: 'Unknown level.' }, 400);
+    board = { column: 'level', value: level };
   }
-
-  // Endless Pond runs are stored under their own level number.
-  const level = url.searchParams.get('endless') === '1' ? ENDLESS_LEVEL : Number(url.searchParams.get('level'));
-  const realLevel = Number.isInteger(level) && level >= 0 && level < LEVEL_COUNT;
-  if (!realLevel && level !== ENDLESS_LEVEL) return json({ error: 'Unknown level.' }, 400);
   const { results } = await env.DB.prepare(
     `SELECT id, name, score, hearts, created_at AS createdAt FROM scores
-     WHERE level = ? AND difficulty = ? AND daily IS NULL
+     WHERE ${BOARD_FILTER[board.column]} AND difficulty = ?
      ORDER BY score DESC, created_at ASC
      LIMIT ?`,
   )
-    .bind(level, difficulty, TOP_SCORES)
+    .bind(board.value, difficulty, TOP_SCORES)
     .all();
   return json({ scores: results });
 }
 
 async function postScore(request: Request, env: Env): Promise<Response> {
-  if (Number(request.headers.get('Content-Length') ?? 0) > MAX_BODY_BYTES) return json({ error: 'Too big.' }, 413);
+  const text = await readBody(request, MAX_BODY_BYTES);
+  if (text === undefined) return json({ error: 'Too big.' }, 413);
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(text);
   } catch {
     return json({ error: 'Bad request.' }, 400);
   }
@@ -116,9 +114,7 @@ async function postScore(request: Request, env: Env): Promise<Response> {
     .first<{ id: number }>();
   // Rank among scores on the same board: this level's, or this day's Daily Challenge.
   const better = await env.DB.prepare(
-    daily === null
-      ? `SELECT COUNT(*) AS count FROM scores WHERE level = ? AND difficulty = ? AND daily IS NULL AND score > ?`
-      : `SELECT COUNT(*) AS count FROM scores WHERE daily = ? AND difficulty = ? AND score > ?`,
+    `SELECT COUNT(*) AS count FROM scores WHERE ${BOARD_FILTER[daily === null ? 'level' : 'daily']} AND difficulty = ? AND score > ?`,
   )
     .bind(daily ?? entry.level, entry.difficulty, entry.score)
     .first<{ count: number }>();
@@ -127,14 +123,44 @@ async function postScore(request: Request, env: Env): Promise<Response> {
 
 async function deleteScore(id: number, request: Request, env: Env): Promise<Response> {
   // Without a configured token (or with the wrong one), act like the route doesn't exist.
-  if (!env.ADMIN_TOKEN || request.headers.get('Authorization') !== `Bearer ${env.ADMIN_TOKEN}`) {
+  const sent = request.headers.get('Authorization') ?? '';
+  if (!env.ADMIN_TOKEN || !(await sameSecret(sent, `Bearer ${env.ADMIN_TOKEN}`))) {
     return json({ error: 'Not found.' }, 404);
   }
   const result = await env.DB.prepare('DELETE FROM scores WHERE id = ?').bind(id).run();
   return json({ deleted: result.meta.changes });
 }
 
+/**
+ * Reads a request's body as text, or undefined if it's more than `maxBytes`. Stops reading
+ * as soon as it's too big (the Content-Length header can be missing or wrong, so it isn't trusted).
+ */
+async function readBody(request: Request, maxBytes: number): Promise<string | undefined> {
+  if (Number(request.headers.get('Content-Length') ?? 0) > maxBytes) return undefined;
+  if (!request.body) return '';
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return text + decoder.decode();
+    bytes += value.byteLength;
+    if (bytes > maxBytes) return undefined;
+    text += decoder.decode(value, { stream: true });
+  }
+}
+
+async function sha256(text: string): Promise<ArrayBuffer> {
+  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+}
+
 async function hash(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return [...new Uint8Array(await sha256(text))].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Compares two secrets without giving away (by how long it takes) how much of a guess was right. */
+async function sameSecret(a: string, b: string): Promise<boolean> {
+  const [hashA, hashB] = await Promise.all([sha256(a), sha256(b)]);
+  return crypto.subtle.timingSafeEqual(hashA, hashB);
 }

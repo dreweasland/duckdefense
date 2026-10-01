@@ -6,7 +6,7 @@ import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
 import { LEVELS } from '../data/levels';
 import { dailyDate, dailyFor } from '../logic/daily';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
-import { drawCard, drawRoundButton } from '../ui/widgets';
+import { drawBackButton, drawCard, fadeToScene } from '../ui/widgets';
 
 export interface LeaderboardSceneData {
   level?: number;
@@ -77,18 +77,7 @@ export class LeaderboardScene extends Phaser.Scene {
       this.drawTab(cx + (i - 0.5) * 170, 192, 150, DIFFICULTIES[difficulty].label, () => this.difficulty === difficulty, () => (this.difficulty = difficulty));
     });
 
-    const arrow = this.add
-      .graphics()
-      .fillStyle(0xffffff)
-      .fillTriangle(8, -16, 8, 16, -16, 0)
-      .lineStyle(4, COLORS.ink)
-      .strokeTriangle(8, -16, 8, 16, -16, 0);
-    const backButton = drawRoundButton(this, 70, 70, 40, COLORS.blue, COLORS.blueDark, [arrow]);
-    backButton.hit.on('pointerdown', () => {
-      playSound(this, 'tap');
-      this.cameras.main.fadeOut(220, 0, 0, 0);
-      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start(this.back.scene, this.back.data));
-    });
+    drawBackButton(this, () => fadeToScene(this, this.back.scene, this.back.data));
 
     this.cameras.main.fadeIn(250, 0, 0, 0);
     void this.loadScores();

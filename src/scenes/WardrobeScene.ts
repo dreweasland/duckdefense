@@ -7,7 +7,7 @@ import { hatFor, isHatUnlocked, totalStars, wearHat } from '../logic/hats';
 import { loadProgress, saveProgress } from '../save';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
 import { duckWithHat } from '../ui/hats';
-import { drawCard, drawPill, drawRoundButton, drawSoundButton, popSpeechBubble } from '../ui/widgets';
+import { drawBackButton, drawCard, drawPill, drawSoundButton, fadeToScene, popSpeechBubble } from '../ui/widgets';
 
 // The Wardrobe: tap a duck, then tap a hat to put it on. Stars from winning levels unlock hats.
 
@@ -42,18 +42,7 @@ export class WardrobeScene extends Phaser.Scene {
     this.add.image(WORLD.width - 148, 62, 'star').setDisplaySize(34, 34).setTint(COLORS.gold);
     this.add.text(WORLD.width - 126, 62, String(this.stars), textStyle(30)).setOrigin(0, 0.5);
 
-    const arrow = this.add
-      .graphics()
-      .fillStyle(0xffffff)
-      .fillTriangle(8, -16, 8, 16, -16, 0)
-      .lineStyle(4, COLORS.ink)
-      .strokeTriangle(8, -16, 8, 16, -16, 0);
-    const back = drawRoundButton(this, 70, 70, 40, COLORS.blue, COLORS.blueDark, [arrow]);
-    back.hit.on('pointerdown', () => {
-      playSound(this, 'tap');
-      this.cameras.main.fadeOut(220, 0, 0, 0);
-      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('TitleScene'));
-    });
+    drawBackButton(this, () => fadeToScene(this, 'TitleScene'));
     drawSoundButton(this, WORLD.width - 40, WORLD.height - 40, 100);
 
     this.drawDucks();

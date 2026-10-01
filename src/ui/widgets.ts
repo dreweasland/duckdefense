@@ -110,10 +110,10 @@ export function drawSoundButton(scene: Phaser.Scene, x: number, y: number, depth
       useHandCursor: true,
     })
     .on('pointerdown', () => {
-    setMuted(scene, !isMuted());
-    draw();
-    playSound(scene, 'tap');
-  });
+      setMuted(scene, !isMuted());
+      draw();
+      playSound(scene, 'tap');
+    });
   return scene.add.container(x, y, [back, icon]).setDepth(depth);
 }
 
@@ -134,6 +134,26 @@ export function drawRoundButton(
   const container = scene.add.container(x, y, [shadow, edge, face, shine, ...content]);
   face.setInteractive({ useHandCursor: true });
   return { container, hit: face };
+}
+
+/** Fades the screen to black, then starts another scene. */
+export function fadeToScene(scene: Phaser.Scene, key: string, data?: object, duration = 220): void {
+  scene.cameras.main.fadeOut(duration, 0, 0, 0);
+  scene.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => scene.scene.start(key, data));
+}
+
+/** The round blue "back" arrow in the top-left corner. */
+export function drawBackButton(scene: Phaser.Scene, onTap: () => void): void {
+  const arrow = scene.add
+    .graphics()
+    .fillStyle(0xffffff)
+    .fillTriangle(8, -16, 8, 16, -16, 0)
+    .lineStyle(4, COLORS.ink)
+    .strokeTriangle(8, -16, 8, 16, -16, 0);
+  drawRoundButton(scene, 70, 70, 40, COLORS.blue, COLORS.blueDark, [arrow]).hit.on('pointerdown', () => {
+    playSound(scene, 'tap');
+    onTap();
+  });
 }
 
 /** A white speech bubble with dark text, pointing down at (x, y). Fades up and away. */

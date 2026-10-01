@@ -2,6 +2,11 @@
 
 export type Difficulty = 'easy' | 'normal';
 
+/** Whether something (from a web address or a saved game, say) is one of the difficulties. */
+export function isDifficulty(value: unknown): value is Difficulty {
+  return value === 'easy' || value === 'normal';
+}
+
 export interface DifficultySettings {
   label: string;
   startingPeas: number; // peas at the start of the level

@@ -20,6 +20,8 @@ game mechanics come from how they actually behave.
   domain to www. Cloudflare Workers Builds (connected to the GitHub repo) builds and
   deploys on push to `main`. A GitHub Actions CI workflow runs tests and the build on
   pushes and PRs, but does not deploy.
+  `public/_headers` sets response headers for the static files (long caching for the
+  fingerprinted files in `/assets/`).
 - **Backend:** The same Worker (`worker/index.ts`) serves a small leaderboard API backed by
   D1 (`migrations/`). Name and score rules shared with the game live in
   `src/logic/leaderboard.ts`. Run it locally with `npm run dev:api` alongside `npm run dev`.
