@@ -166,12 +166,16 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind): Enemy {
   const stats = ENEMIES[kind];
   let path = battle.path;
   if (stats.flying) {
-    const from = battle.sky[battle.flyersSpawned % Math.max(1, battle.sky.length)];
+    const house = housePosition(battle);
+    // Flyers take turns at the sky points. A flying boss always takes the longest way in,
+    // so the flock gets a fair go at it (from a near point, too few nests can reach it).
+    const from = stats.boss
+      ? battle.sky.reduce<Point | undefined>((far, p) => (!far || distance(p, house) > distance(far, house) ? p : far), undefined)
+      : battle.sky[battle.flyersSpawned++ % Math.max(1, battle.sky.length)];
     if (!from) {
       throw new Error(`A ${stats.name} needs somewhere to fly in from: add a "sky" layer with points to the map`);
     }
-    battle.flyersSpawned++;
-    path = makePath([from, housePosition(battle)]);
+    path = makePath([from, house]);
   } else if (stats.fromPond) {
     if (!battle.pond) throw new Error(`A ${stats.name} needs a pond to climb out of: add a "pond" layer to the map`);
     path = joinPath(battle.pond, battle.path);

@@ -180,6 +180,17 @@ describe('hawks', () => {
     expect(enemyPosition(spawnEnemy(battle, 'hawk'))).toEqual({ x: 1500, y: 0 });
   });
 
+  it('flying bosses always take the longest way in, whoever flew last', () => {
+    const near = { x: 900, y: -100 };
+    const far = { x: 0, y: -800 };
+    const battle = createBattle(makePath([{ x: 0, y: 0 }, { x: 1000, y: 0 }]), { sky: [near, far] });
+    expect(enemyPosition(spawnEnemy(battle, 'stormHawk'))).toEqual(far);
+    expect(enemyPosition(spawnEnemy(battle, 'stormHawk'))).toEqual(far);
+    // Ordinary hawks still take turns, and the boss doesn't use up a turn.
+    expect(enemyPosition(spawnEnemy(battle, 'hawk'))).toEqual(near);
+    expect(enemyPosition(spawnEnemy(battle, 'hawk'))).toEqual(far);
+  });
+
   it('need a sky layer on the map', () => {
     expect(() => spawnEnemy(newBattle(), 'hawk')).toThrow('"sky"');
   });

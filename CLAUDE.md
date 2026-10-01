@@ -66,7 +66,7 @@ everywhere: dialogue, tooltips, code comments.
 | Hawk | Flying | Ignores the path and dives straight at the house. Only some ducks can hit it. Scares ducks it swoops over |
 | Snapping Turtle | From the pond | Slow, huge health. Climbs out of the pond and cuts across to the path. Its shell (armor) blocks part of every hit, so big splashes beat little pecks |
 | **Boss: The Night Bandit** | Ground path | A masked mega-raccoon at the end of each world. Whistles up raccoon minions, scaring nearby ducks |
-| **Boss: The Storm Hawk** | Flying | Endless Pond. A giant hawk that calls in hawks and scares ducks it swoops near. Only Sunny and Potato can hit it |
+| **Boss: The Storm Hawk** | Flying | Endless Pond. A giant hawk that calls in hawks and scares ducks it swoops near. Only Sunny and Potato can hit it. Always flies in from the sky point farthest from the house |
 | **Boss: The Silver Fox** | Ground path | Endless Pond. Fast, barely freezes, calls in foxes. Curtis's slow is the answer |
 | **Boss: Old Snapper** | From the pond | Endless Pond. A huge mossy turtle with a thick shell (little pecks do 1 damage) that can't be pushed back |
 
