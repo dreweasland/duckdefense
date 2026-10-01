@@ -48,7 +48,8 @@ export const ENDLESS = {
   groups: [
     { enemy: 'raccoon', from: 1, count: 4, perWave: 1.2, every: 1.3 },
     { enemy: 'fox', from: 3, count: 2, perWave: 0.5, every: 1.1, after: 2 },
-    { enemy: 'hawk', from: 4, count: 1, perWave: 0.35, every: 2.5, after: 4 },
+    // Hawks grow slower than they used to: only Sunny and Potato can hit them, so late waves were all about hawks.
+    { enemy: 'hawk', from: 4, count: 1, perWave: 0.25, every: 2.5, after: 4 },
     { enemy: 'mink', from: 6, count: 2, perWave: 0.4, every: 1.6, after: 3 },
     { enemy: 'turtle', from: 8, count: 1, perWave: 0.15, every: 5, after: 2 },
   ] satisfies EndlessGroup[],
