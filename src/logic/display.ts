@@ -41,3 +41,22 @@ export function renderScaleFor(screenWidth: number, screenHeight: number, device
   // Round up to a quarter so textures don't end up a hair too small, but keep a sane floor.
   return Math.max(0.75, Math.min(2, Math.ceil(scale * 4) / 4));
 }
+
+/**
+ * A number short enough to fit in a small space: 9,876 stays as it is, then 12.3K, 4.56M,
+ * 1.2B. (Long Endless Pond runs rack up damage in the millions.)
+ */
+export function shortNumber(n: number): string {
+  const whole = Math.round(n);
+  if (Math.abs(whole) < 10_000) return whole.toLocaleString('en-US');
+  for (const [size, letter] of [[1e9, 'B'], [1e6, 'M'], [1e3, 'K']] as const) {
+    if (Math.abs(whole) >= size) {
+      const value = whole / size;
+      // Three digits in all: 1.23M, 12.3M, 123M. Cut, don't round up, so 999,999 isn't "1000K".
+      const places = Math.abs(value) >= 100 ? 0 : Math.abs(value) >= 10 ? 1 : 2;
+      const cut = Math.trunc(value * 10 ** places) / 10 ** places;
+      return `${cut}${letter}`;
+    }
+  }
+  return String(whole);
+}

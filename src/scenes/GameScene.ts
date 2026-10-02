@@ -47,6 +47,7 @@ import {
   type GameEvent,
   type PreviewEntry,
 } from '../logic/game';
+import { shortNumber } from '../logic/display';
 import { closestPointOnPolyline, type Ellipse, type Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
 import { isFinalChoice, nameAt, nextUpgrade, statsAt, upgradeOptions } from '../logic/upgrades';
@@ -1316,7 +1317,7 @@ export class GameScene extends Phaser.Scene {
     const refresh = () => {
       const report = findDuck(this.state.battle, duckId)?.report;
       if (!report) return;
-      [report.chasedOff, report.special, Math.round(report.damage)].forEach((n, i) => values[i]!.value.setText(n.toLocaleString()));
+      [report.chasedOff, report.special, report.damage].forEach((n, i) => values[i]!.value.setText(shortNumber(n)));
     };
     refresh();
     this.panelReport = { row, refresh };

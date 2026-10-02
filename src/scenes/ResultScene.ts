@@ -9,6 +9,7 @@ import { duckWithHat } from '../ui/hats';
 import { LEVELS } from '../data/levels';
 import { postScore } from '../api';
 import { topDuck, type KindReport } from '../logic/battle';
+import { shortNumber } from '../logic/display';
 import { playSound } from '../audio/sfx';
 import { askForName } from '../ui/nameForm';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
@@ -33,6 +34,9 @@ export interface ResultSceneData {
   endlessWaves?: number; // for an Endless Pond run: waves survived
   endlessBest?: number; // and the most ever survived on this difficulty
 }
+
+// The ducks' damage reports sit 190 apart; each one's text is kept this narrow so neighbours never touch.
+const REPORT_COLUMN = 178;
 
 const POND = { center: { x: WORLD.width / 2, y: 610 }, radiusX: 420, radiusY: 95 };
 
@@ -222,11 +226,15 @@ export class ResultScene extends Phaser.Scene {
     const name = stats.placed > 1 ? `${DUCKS[kind].name} ×${stats.placed}` : DUCKS[kind].name;
     const lines = [
       this.add.text(x, y, name, textStyle(15, { ...ink, color: '#8a7f85' })),
-      this.add.text(x, y + 19, `Chased off ${stats.chasedOff}`, textStyle(17, { ...ink, weight: '700' })),
-      this.add.text(x, y + 39, `${Math.round(stats.damage).toLocaleString()} damage · ${DUCKS[kind].power.stat} ${stats.special}`, textStyle(13, ink)),
+      this.add.text(x, y + 19, `Chased off ${shortNumber(stats.chasedOff)}`, textStyle(17, { ...ink, weight: '700' })),
+      this.add.text(x, y + 39, `${shortNumber(stats.damage)} damage · ${DUCKS[kind].power.stat} ${shortNumber(stats.special)}`, textStyle(13, ink)),
     ];
-    lines.forEach((line) => line.setOrigin(0.5, 0).setDepth(51));
-    if (top) this.drawCrown(x - lines[0]!.width / 2 - 26, y + 7).setDepth(51);
+    lines.forEach((line) => {
+      line.setOrigin(0.5, 0).setDepth(51);
+      // Whatever the numbers, a duck's lines stay inside its own column.
+      if (line.width > REPORT_COLUMN) line.setScale(REPORT_COLUMN / line.width);
+    });
+    if (top) this.drawCrown(x - lines[0]!.displayWidth / 2 - 26, y + 7).setDepth(51);
   }
 
   /** The big line for an Endless Pond run. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_CANVAS_PIXELS, WORLD_SIZE, renderScaleFor, viewSizeFor } from './display';
+import { MAX_CANVAS_PIXELS, WORLD_SIZE, renderScaleFor, shortNumber, viewSizeFor } from './display';
 
 // Screen sizes in CSS pixels, with device pixel ratios, for common devices.
 const DEVICES = [
@@ -62,5 +62,17 @@ describe('render scale', () => {
 
   it("doesn't waste pixels on low-resolution screens", () => {
     expect(renderScaleFor(1366, 768, 1)).toBeLessThan(2);
+  });
+});
+
+describe('shortNumber', () => {
+  it('leaves small numbers alone and shortens big ones to three digits', () => {
+    expect(shortNumber(0)).toBe('0');
+    expect(shortNumber(9876.4)).toBe('9,876');
+    expect(shortNumber(12_345)).toBe('12.3K');
+    expect(shortNumber(999_999)).toBe('999K');
+    expect(shortNumber(4_567_890)).toBe('4.56M');
+    expect(shortNumber(123_456_789)).toBe('123M');
+    expect(shortNumber(1_200_000_000)).toBe('1.2B');
   });
 });
