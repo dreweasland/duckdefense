@@ -127,6 +127,12 @@ everywhere: dialogue, tooltips, code comments.
   up to a limit. Offers come from the wave number (no randomness). Perks are listed in
   `src/data/perks.ts`; `src/logic/perks.ts` turns them into multipliers the battle reads
   through `duckStats()`.
+  **Boss rewards** (Endless only): after a boss wave the pick is from bigger perks that
+  change a rule, each taken once: Craig's Watch (her blessing returns every 5 waves), Soggy
+  Splash (Sunny's splashes slow predators), Sky Quack (Chester's quack blows hawks back),
+  Prickly Curtis (predators near him lose health), Dizzy Flap (Potato's flap stuns), and New
+  Nests (two more nests, at `ENDLESS.bonusNests`). They're the perks marked `boss: true` in
+  `src/data/perks.ts`; once all are taken, boss waves offer the usual perks again.
 - **Daily Challenge:** One level and one twist per UTC day, the same for everyone, with its
   own leaderboard. Winning on days in a row builds a streak, shown on the Daily Challenge
   button and the win screen from the second day (`dailyStreak` in `src/logic/progress.ts`). Twists live in `src/data/challenges.ts`; the rules shared with the server

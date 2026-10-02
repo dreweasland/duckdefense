@@ -12,6 +12,7 @@ import { distance, type Ellipse, type Point } from './geometry';
 import { ENDLESS } from '../data/endless';
 import { PERKS, type PerkId } from '../data/perks';
 import { offerPerks, perkMods, type PerksTaken } from './perks';
+import { bossCount } from './endless';
 import { challengeSettings, challengeWaves } from './daily';
 import { isFinalChoice, nextUpgrade, totalSpent, upgradeOptions } from './upgrades';
 import type { Level } from './level';
@@ -391,13 +392,15 @@ export function killPeas(game: Game, kind: EnemyKind): number {
 
 /** Endless Pond: after every few waves, Craig has rested and her blessing is ready again. */
 function restCraigIfDue(game: Game): void {
-  if (game.endless && game.waveIndex % ENDLESS.craigEvery === 0) game.blessingUsed = false;
+  const every = game.battle.mods.craigEvery || ENDLESS.craigEvery;
+  if (game.endless && game.waveIndex % every === 0) game.blessingUsed = false;
 }
 
 /** Endless Pond: after every few waves, offer Pond Perks. Returns true if it just did. */
 function offerPerksIfDue(game: Game): boolean {
   if (!game.endless || game.perkChoice || game.waveIndex === 0 || game.waveIndex % ENDLESS.perkEvery !== 0) return false;
-  const offer = offerPerks(game.perks, game.waveIndex);
+  // (waveIndex is now the number of the wave just finished.)
+  const offer = offerPerks(game.perks, game.waveIndex, bossCount(game.waveIndex) > 0);
   if (offer.length === 0) return false;
   game.perkChoice = offer;
   return true;

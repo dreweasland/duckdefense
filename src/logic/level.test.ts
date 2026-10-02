@@ -123,6 +123,25 @@ describe('the Endless Pond map', () => {
   });
 });
 
+describe("the Endless Pond's extra nests (the New Nests boss reward)", () => {
+  const level = parseLevel(LEVELS[ENDLESS.level]!.map);
+  const path = makePath(level.path);
+  const samples = Array.from({ length: Math.ceil(path.length / 5) + 1 }, (_, i) => pointAt(path, i * 5));
+  const door = level.path[level.path.length - 1]!;
+
+  it('are clear of the path, the pond, the other nests, the duck house, and the buttons', () => {
+    const nests = ENDLESS.bonusNests;
+    nests.forEach((nest, i) => {
+      for (const p of samples) expect(distance(nest, p)).toBeGreaterThan(55);
+      for (const other of [...level.slots, ...nests.slice(i + 1)]) expect(distance(nest, other)).toBeGreaterThanOrEqual(75);
+      for (const pond of level.ponds) expect(inEllipse(nest, { ...pond, radiusX: pond.radiusX + 40, radiusY: pond.radiusY + 40 })).toBe(false);
+      for (const area of [...HUD_AREAS, ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, houseBox(door)]) {
+        expect(circleHitsArea(nest, NEST_RADIUS, area), JSON.stringify(nest)).toBe(false);
+      }
+    });
+  });
+});
+
 describe('parseLevel', () => {
   const map = (slot: object) =>
     JSON.stringify({

@@ -34,6 +34,11 @@ export const ENDLESS = {
   minEvery: 0.35, // but never closer than this many seconds apart
   bonusPeas: { first: 50, perWave: 4 }, // peas for clearing a wave
   perkEvery: 5, // after every 5th wave, pick a Pond Perk (see src/data/perks.ts)
+  // The New Nests boss reward opens these (spots on the Backyard Pond map, clear of the path and buttons).
+  bonusNests: [
+    { x: 350, y: 665 },
+    { x: 940, y: 665 },
+  ],
   craigEvery: 10, // after every 10th wave, Craig's Guardian Blessing is ready again (if it was used)
   // Training: once a duck has both upgrades, it can keep training to hit harder.
   training: {

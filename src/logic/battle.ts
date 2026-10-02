@@ -7,6 +7,7 @@ import { CHASES, PECKING_LOOP } from '../data/synergy';
 import { TILES, type NestKind } from '../data/tiles';
 import { distance, inEllipse, type Ellipse, type Point } from './geometry';
 import { joinPath, makePath, pointAt, type Path } from './path';
+import { BOSS_PRICKLE } from '../data/perks';
 import { NO_MODS, type Mods } from './perks';
 import { statsAt } from './upgrades';
 
@@ -39,6 +40,8 @@ export interface Enemy {
   slowedBy: number[];
   /** While frozen by Wise Old Chester, it takes this much more damage (0.5 = +50%). */
   weakness: number;
+  /** Seconds it stays soaked (and slowed) after one of Sunny's splashes, with the Soggy Splash boss reward. */
+  soakedTime: number;
 }
 
 /**
@@ -198,6 +201,7 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind): Enemy {
     revealedTime: 0,
     slowedBy: [],
     weakness: 0,
+    soakedTime: 0,
   };
   battle.enemies.push(enemy);
   return enemy;
@@ -402,8 +406,8 @@ function slowZones(battle: Battle): SlowZone[] {
  * How much a ground predator is slowed right now (1 = not at all). Only Curtis slows
  * predators; if two Curtises overlap, the stronger slow wins. Hawks fly over it.
  */
-function slowFor(battle: Battle, enemy: Enemy, zones: readonly SlowZone[]): number {
-  if (zones.length === 0 || isFlying(enemy)) return 1;
+function slowFor(battle: Battle, enemy: Enemy, zones: readonly SlowZone[]): { factor: number; by?: Duck } {
+  if (zones.length === 0 || isFlying(enemy)) return { factor: 1 };
   const at = enemyPosition(enemy);
   let factor = 1;
   let slower: Duck | undefined;
@@ -418,7 +422,7 @@ function slowFor(battle: Battle, enemy: Enemy, zones: readonly SlowZone[]): numb
     enemy.slowedBy.push(slower.id);
     credit(battle, slower, 'special', 1);
   }
-  return factor;
+  return { factor, by: slower };
 }
 
 /** Whether a duck is in the powered fountain's refreshing spray (it hits harder). */
@@ -472,9 +476,16 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     enemy.pushRecovery = Math.max(0, enemy.pushRecovery - dt);
     enemy.freezeRecovery = Math.max(0, enemy.freezeRecovery - dt);
     enemy.revealedTime = Math.max(0, enemy.revealedTime - dt);
-    const curtisSlow = slowFor(battle, enemy, zones);
+    enemy.soakedTime = Math.max(0, enemy.soakedTime - dt);
+    const { factor: curtisSlow, by: curtis } = slowFor(battle, enemy, zones);
     enemy.slowed = curtisSlow < 1; // (the dusty ring is for Curtis; mud shows for itself)
-    const slow = curtisSlow * (inMud(battle, enemy) ? TILES.mud.speed : 1);
+    const slow = curtisSlow * (inMud(battle, enemy) ? TILES.mud.speed : 1) * (enemy.soakedTime > 0 ? battle.mods.soakSpeed : 1);
+    // Prickly Curtis (a boss reward): predators in his zone lose a share of their full health.
+    if (curtis && battle.mods.prickle > 0) {
+      const before = enemy.hp;
+      enemy.hp -= enemy.maxHp * battle.mods.prickle * (ENEMIES[enemy.kind].boss ? BOSS_PRICKLE : 1) * dt;
+      credit(battle, curtis, 'damage', before - Math.max(0, enemy.hp));
+    }
     // Brambles prickle ground predators the whole time they're in them.
     if (inBrambles(battle, enemy)) enemy.hp -= TILES.brambles.damagePerSecond * dt;
     if (enemy.stopTime > 0) {
@@ -539,6 +550,10 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
           enemy.stopTime = Math.max(enemy.stopTime, stun);
           enemy.freezeRecovery = stun * (1 + FREEZE_RECOVERY);
           if (stats.alarmQuack.weaken) enemy.weakness = Math.max(enemy.weakness, stats.alarmQuack.weaken);
+          // Sky Quack (a boss reward): the quack blows flyers back the way they came.
+          if (battle.mods.quackPush > 0 && enemyStats.flying) {
+            enemy.distance = Math.max(0, enemy.distance - battle.mods.quackPush * (1 - (enemyStats.pushResistance ?? 0)));
+          }
         }
         // The quack flushes every sneaky predator in range out of the grass, on guard or not.
         for (const enemy of inRange) {
@@ -580,6 +595,8 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
       enemy.hp -= damageTo(enemy, damage * flyer * weakened);
       credit(battle, duck, 'damage', before - Math.max(0, enemy.hp));
       if (enemy.hp <= 0) credit(battle, duck, 'chasedOff', 1);
+      // Soggy Splash (a boss reward): Sunny's splashes leave predators soaked and slow.
+      if (stats.splashRadius > 0 && battle.mods.soakTime > 0) enemy.soakedTime = battle.mods.soakTime;
     }
     if (stats.splashRadius > 0) credit(battle, duck, 'special', hit.length - 1);
     duck.cooldown = attackInterval(battle, duck);
@@ -598,6 +615,10 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
         const push = pushBack * (1 - (ENEMIES[enemy.kind].pushResistance ?? 0));
         enemy.distance = Math.max(0, enemy.distance - push);
         enemy.pushRecovery = WING_FLAP_RECOVERY;
+        // Dizzy Flap (a boss reward): flapped predators see stars for a moment.
+        if (battle.mods.flapStun > 0) {
+          enemy.stopTime = Math.max(enemy.stopTime, battle.mods.flapStun * (1 - (ENEMIES[enemy.kind].stunResistance ?? 0)));
+        }
       }
       credit(battle, duck, 'special', blown.length);
     }

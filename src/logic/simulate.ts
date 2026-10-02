@@ -3,6 +3,7 @@
 import type { Challenge } from '../data/challenges';
 import type { Difficulty } from '../data/difficulty';
 import { DUCKS, type DuckKind } from '../data/ducks';
+import { ENDLESS } from '../data/endless';
 import type { LevelInfo } from '../data/levels';
 import {
   buyDuck,
@@ -89,9 +90,14 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | n
       .sort((a, b) => trainingCost(game, a.id)! - trainingCost(game, b.id)!)[0];
   const anyUpgradeLeft = () => game.battle.ducks.some((d) => nextUpgrade(d.kind, d.level));
 
+  let usedBonusNests = false;
   while (!isOver(game) && game.waveIndex < (strategy.maxWaves ?? Infinity)) {
     // Endless Pond: take the first Pond Perk on offer.
     if (game.perkChoice) choosePerk(game, game.perkChoice[0]!);
+    if (game.battle.mods.bonusNests && !usedBonusNests) {
+      usedBonusNests = true;
+      slots.push(...ENDLESS.bonusNests);
+    }
     for (;;) {
       const canPlace = !!kind && slots.length > 0 && canBuy(game, kind);
       const upgrade = upgrades === 'none' ? undefined : cheapestUpgrade();

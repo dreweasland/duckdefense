@@ -450,7 +450,8 @@ export class GameScene extends Phaser.Scene {
 
     scatterDecor(
       this,
-      { path: this.level.path, slots: this.level.slots, ponds: this.level.ponds, house: door, blocked: HUD_AREAS },
+      // (The Endless Pond keeps bushes and rocks off the spots where the New Nests boss reward goes.)
+      { path: this.level.path, slots: [...this.level.slots, ...(this.endless ? ENDLESS.bonusNests : [])], ponds: this.level.ponds, house: door, blocked: HUD_AREAS },
       seed + 2,
     );
   }
@@ -1660,6 +1661,7 @@ export class GameScene extends Phaser.Scene {
       // A quick red "ouch" tint when hit (keeps the art readable even when hit constantly).
       if (time < sprite.flashUntil) sprite.art.setTint(0xff9a9a);
       else if (enemy.stopTime > 0 && enemy.weakness > 0) sprite.art.setTint(0xd2b4ff); // Wise Old Chester's weakness
+      else if (enemy.soakedTime > 0) sprite.art.setTint(0x9fd0ff); // soaked by a Soggy Splash
       else if (muddy) sprite.art.setTint(0xc4a07c); // splattered with mud
       else sprite.art.clearTint();
     }
@@ -1672,7 +1674,8 @@ export class GameScene extends Phaser.Scene {
    */
   private showTileEffects(enemy: Enemy, sprite: EnemySprite, time: number): boolean {
     const muddy = inMud(this.state.battle, enemy);
-    const prickly = inBrambles(this.state.battle, enemy);
+    // (Prickly Curtis, a boss reward, prickles predators in his slow zone just like brambles.)
+    const prickly = inBrambles(this.state.battle, enemy) || (this.state.battle.mods.prickle > 0 && enemy.slowed);
     sprite.waddle.timeScale = muddy ? 0.4 : 1;
     if (!(muddy || prickly) || time < sprite.nextTileFx || this.state.phase !== 'wave') return muddy;
     sprite.nextTileFx = time + (muddy ? 320 : 450);
@@ -2129,7 +2132,11 @@ export class GameScene extends Phaser.Scene {
     const dim = this.add
       .rectangle(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height, 0x000000, 0.45)
       .setInteractive(); // blocks taps on the map underneath
-    const title = this.add.text(WORLD.width / 2, 200, 'Pick a Pond Perk!', textStyle(52, { weight: '700', strokeThickness: 10 })).setOrigin(0.5);
+    // After a boss wave the offer is boss rewards: big perks that change a rule.
+    const reward = offer.some((id) => PERKS[id].boss);
+    const title = this.add
+      .text(WORLD.width / 2, 200, reward ? 'Boss reward! Pick one!' : 'Pick a Pond Perk!', textStyle(52, { weight: '700', strokeThickness: 10, color: reward ? COLORS.goldCss : '#ffffff' }))
+      .setOrigin(0.5);
     const parts: Phaser.GameObjects.GameObject[] = [dim, title];
     const W = 250;
     const H = 250;
@@ -2140,7 +2147,7 @@ export class GameScene extends Phaser.Scene {
       icon.setScale(Math.min(70 / icon.width, 70 / icon.height));
       if (perk.tint !== undefined) icon.setTint(perk.tint);
       const cardParts: Phaser.GameObjects.GameObject[] = [
-        drawCard(this.add.graphics(), W, H, { radius: 22, border: COLORS.gold, borderWidth: 5 }),
+        drawCard(this.add.graphics(), W, H, { radius: 22, border: reward ? COLORS.pink : COLORS.gold, borderWidth: reward ? 7 : 5 }),
         icon,
         this.add.text(0, 6, perk.name, textStyle(26, { ...ink, weight: '700' })).setOrigin(0.5),
         this.add.text(0, 60, perk.description, { ...textStyle(18, ink), align: 'center', wordWrap: { width: W - 30 } }).setOrigin(0.5),
@@ -2171,6 +2178,14 @@ export class GameScene extends Phaser.Scene {
     // Reach may have changed: redraw every duck's range circle.
     for (const duck of this.state.battle.ducks) this.duckSprites.get(duck.id)?.range.setRadius(duckStats(this.state.battle, duck).range);
     if (PERKS[id].effect.hearts) this.tweens.add({ targets: this.heartsPill, scale: 1.25, duration: 120, yoyo: true });
+    // New Nests: the extra nests pop up, ready for ducks.
+    if (PERKS[id].effect.nests) {
+      for (const slot of ENDLESS.bonusNests) {
+        this.drawNest(slot);
+        this.fx.puff.explode(10, slot.x, slot.y);
+        this.fx.stars.explode(8, slot.x, slot.y - 10);
+      }
+    }
     this.showBanner(`${PERKS[id].name}!`);
     this.refreshHud();
   }
@@ -2200,7 +2215,7 @@ export class GameScene extends Phaser.Scene {
     playSound(this, 'tap');
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const W = 340;
-    const rowH = 34;
+    const rowH = Math.min(34, 520 / Math.max(1, taken.length)); // squeeze up when there are lots, to stay on screen
     const H = 70 + Math.max(1, taken.length) * rowH;
     const parts: Phaser.GameObjects.GameObject[] = [
       drawCard(this.add.graphics(), W, H, { radius: 18 }),
