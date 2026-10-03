@@ -1,4 +1,5 @@
 import type { EnemyKind } from './enemies';
+import type { VariantKind } from './variants';
 
 // A wave is one or more groups of predators. Each group sends `count` predators,
 // one every `every` seconds, starting `after` seconds into the wave (default 0).
@@ -9,6 +10,7 @@ export interface SpawnGroup {
   count: number;
   every: number;
   after?: number;
+  variant?: VariantKind; // a twist on them, like 'armored' (see src/data/variants.ts)
 }
 
 // Calling the next wave early: once every predator in a wave has shown up, you can send the
@@ -139,6 +141,7 @@ export const LEVEL3_WAVES: Wave[] = [
       { enemy: 'raccoon', count: 14, every: 0.6 },
       { enemy: 'fox', count: 4, every: 1, after: 3 },
       { enemy: 'turtle', count: 2, every: 6, after: 2 },
+      { enemy: 'skunk', count: 2, every: 4, after: 6 }, // the first skunks! (don't splash them)
     ],
     bonusPeas: 100,
   },
@@ -148,6 +151,7 @@ export const LEVEL3_WAVES: Wave[] = [
       { enemy: 'raccoon', count: 12, every: 0.7 },
       { enemy: 'mink', count: 5, every: 1.4, after: 3 },
       { enemy: 'hawk', count: 6, every: 1.8, after: 4 },
+      { enemy: 'skunk', count: 2, every: 5, after: 2 },
     ],
     bonusPeas: 110,
   },
@@ -206,13 +210,15 @@ export const LEVEL4_WAVES: Wave[] = [
       { enemy: 'raccoon', count: 12, every: 0.9 },
       { enemy: 'mink', count: 4, every: 2, after: 3 },
       { enemy: 'hawk', count: 6, every: 1.8, after: 4 },
+      { enemy: 'skunk', count: 2, every: 4, after: 5 },
     ],
     bonusPeas: 110,
   },
   {
     time: 'day',
     groups: [
-      { enemy: 'raccoon', count: 14, every: 0.7 },
+      { enemy: 'raccoon', count: 10, every: 0.7 },
+      { enemy: 'raccoon', count: 4, every: 1.5, after: 8, variant: 'armored' }, // the first armored raccoons!
       { enemy: 'fox', count: 5, every: 1.2, after: 4 },
       { enemy: 'hawk', count: 8, every: 1.5, after: 3 },
     ],
@@ -280,6 +286,7 @@ export const LEVEL5_WAVES: Wave[] = [
     groups: [
       { enemy: 'raccoon', count: 12, every: 0.9 },
       { enemy: 'fox', count: 10, every: 1, after: 3 },
+      { enemy: 'skunk', count: 2, every: 5, after: 4 },
     ],
     bonusPeas: 110,
   },
@@ -287,7 +294,8 @@ export const LEVEL5_WAVES: Wave[] = [
     time: 'day',
     groups: [
       { enemy: 'raccoon', count: 14, every: 0.8 },
-      { enemy: 'fox', count: 8, every: 0.9, after: 4 },
+      { enemy: 'fox', count: 5, every: 0.9, after: 4 },
+      { enemy: 'fox', count: 3, every: 1.5, after: 10, variant: 'rabid' }, // rabid foxes: even faster!
       { enemy: 'hawk', count: 5, every: 2, after: 3 },
       { enemy: 'turtle', count: 1, every: 1, after: 6 },
     ],
@@ -341,6 +349,7 @@ export const LEVEL6_WAVES: Wave[] = [
     time: 'night',
     groups: [
       { enemy: 'raccoon', count: 12, every: 0.9 },
+      { enemy: 'raccoon', count: 3, every: 2, after: 12, variant: 'regrow' }, // regrowing raccoons: keep pecking!
       { enemy: 'mink', count: 3, every: 1.8, after: 3 },
       { enemy: 'turtle', count: 1, every: 1, after: 4 },
     ],
@@ -350,9 +359,11 @@ export const LEVEL6_WAVES: Wave[] = [
     time: 'day',
     groups: [
       { enemy: 'raccoon', count: 14, every: 0.8 },
+      { enemy: 'raccoon', count: 3, every: 2, after: 12, variant: 'armored' },
       { enemy: 'fox', count: 5, every: 1.1, after: 3 },
       { enemy: 'hawk', count: 4, every: 2, after: 4 },
       { enemy: 'turtle', count: 2, every: 6, after: 2 },
+      { enemy: 'skunk', count: 3, every: 4, after: 5 },
     ],
     bonusPeas: 150,
   },

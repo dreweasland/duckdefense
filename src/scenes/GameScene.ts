@@ -8,12 +8,13 @@ import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { CHASES } from '../data/synergy';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
+import { VARIANTS, type VariantKind } from '../data/variants';
 import { GAME_SPEEDS } from '../data/gameSpeed';
 import { TARGETING, TARGETING_ORDER, type Targeting } from '../data/targeting';
 import { ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, HUD_AREAS } from '../data/layout';
 import { PERKS, type PerkId } from '../data/perks';
 import { LEVELS } from '../data/levels';
-import { chasePartner, duckStats, enemyPosition, findDuck, inBrambles, inMud, isFlying, isHidden, isRefreshed, nestAt, type Duck, type Enemy } from '../logic/battle';
+import { chasePartner, duckStats, enemyName, enemyPosition, enemyStats, findDuck, inBrambles, inMud, isFlying, isHidden, isRefreshed, nestAt, type Duck, type Enemy } from '../logic/battle';
 import {
   buyDuck,
   callNextWave,
@@ -118,6 +119,7 @@ const GROUND_LOOKS: Record<Exclude<EnemyKind, 'hawk' | 'stormHawk'>, { width: nu
   raccoon: { width: 92, height: 67, shadow: 64, wobble: 4, wobbleTime: 220 },
   fox: { width: 100, height: 68, shadow: 66, wobble: 5, wobbleTime: 140 },
   mink: { width: 88, height: 44, shadow: 60, wobble: 3, wobbleTime: 160 },
+  skunk: { width: 94, height: 60, shadow: 64, wobble: 4, wobbleTime: 200 },
   turtle: { width: 110, height: 75, shadow: 90, wobble: 2, wobbleTime: 520 },
   bandit: { width: 150, height: 112, shadow: 124, wobble: 3, wobbleTime: 380 },
   silverFox: { width: 150, height: 102, shadow: 104, wobble: 4, wobbleTime: 150 },
@@ -717,7 +719,7 @@ export class GameScene extends Phaser.Scene {
       const x = PREVIEW.right - (entries.length - i) * (chip + PREVIEW.gap) + PREVIEW.gap + chip / 2;
       const container = this.drawPreviewChip(entry, x, PREVIEW.y, scale);
       const hit = this.add.zone(0, 0, PREVIEW.chip, 52).setInteractive({ useHandCursor: true });
-      hit.on('pointerdown', () => this.showEnemyInfo(entry.enemy));
+      hit.on('pointerdown', () => this.showEnemyInfo(entry.enemy, true, entry.variant));
       container.add(hit);
       container.setAlpha(0);
       this.tweens.add({ targets: container, alpha: 1, duration: 250, delay: i * 70 });
@@ -737,7 +739,7 @@ export class GameScene extends Phaser.Scene {
   private drawPreviewChip(entry: PreviewEntry, x: number, y: number, scale = 1): Phaser.GameObjects.Container {
     const parts: Phaser.GameObjects.GameObject[] = [
       drawPill(this, 0, 0, PREVIEW.chip, 48),
-      this.enemyIcon(entry.enemy, 0, -4, 40, 30),
+      this.enemyIcon(entry.enemy, 0, -4, 40, 30, entry.variant),
       this.add.text(PREVIEW.chip / 2 - 5, 13, `×${entry.count}`, textStyle(17, { weight: '700' })).setOrigin(1, 0.5),
     ];
     if (entry.isNew) {
@@ -752,9 +754,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** A predator's picture, fit inside a box (hawks look down from above, so they get a square). */
-  private enemyIcon(kind: EnemyKind, x: number, y: number, maxWidth: number, maxHeight: number): Phaser.GameObjects.Image {
+  private enemyIcon(kind: EnemyKind, x: number, y: number, maxWidth: number, maxHeight: number, variant?: VariantKind): Phaser.GameObjects.Image {
     const image = this.add.image(x, y, kind);
     const fit = Math.min(maxWidth / image.width, maxHeight / image.height);
+    if (variant) image.setTint(VARIANTS[variant].tint);
     return image.setScale(fit);
   }
 
@@ -777,27 +780,34 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** What a predator does and which duck is best against it, shown when you tap it in the preview. */
-  private showEnemyInfo(kind: EnemyKind, tapped = true): void {
+  private showEnemyInfo(kind: EnemyKind, tapped = true, variant?: VariantKind): void {
     this.cancelMove();
     this.closePopup();
     if (tapped) playSound(this, 'tap');
     const stats = ENEMIES[kind];
+    const twist = variant && VARIANTS[variant];
+    const name = enemyName({ kind, variant });
     const best = DUCKS[stats.beatenBy];
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
-    const card = drawCard(this.add.graphics(), 330, 196, { radius: 18 });
+    // A variant's words go under the predator's own, so the card grows a little.
+    const extra = twist ? 44 : 0;
+    const card = drawCard(this.add.graphics(), 330, 196 + extra, { radius: 18 });
     const popup = this.add
-      .container(WORLD.width - 190, 270, [
+      .container(WORLD.width - 190, 270 + extra / 2, [
         card,
-        this.enemyIcon(kind, -118, -56, 70, 56),
-        this.add.text(-74, -62, stats.name, textStyle(stats.name.length > 12 ? 22 : 26, { ...ink, weight: '700' })).setOrigin(0, 0.5),
-        this.add.image(-66, -32, 'icon-heart').setDisplaySize(18, 18),
-        this.add.text(-52, -32, `${stats.hearts}`, textStyle(16, { ...ink, color: '#c0392b', weight: '700' })).setOrigin(0, 0.5),
+        this.enemyIcon(kind, -118, -56 - extra / 2, 70, 56, variant),
+        this.add.text(-74, -62 - extra / 2, name, textStyle(name.length > 12 ? 22 : 26, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        this.add.image(-66, -32 - extra / 2, 'icon-heart').setDisplaySize(18, 18),
+        this.add.text(-52, -32 - extra / 2, `${stats.hearts}`, textStyle(16, { ...ink, color: '#c0392b', weight: '700' })).setOrigin(0, 0.5),
         this.add
-          .text(-148, -10, stats.description, { ...textStyle(16, ink), wordWrap: { width: 296 } })
+          .text(-148, -10 - extra / 2, twist ? `${stats.description}\n${twist.name}: ${twist.description}` : stats.description, {
+            ...textStyle(16, ink),
+            wordWrap: { width: 296 },
+          })
           .setOrigin(0, 0),
-        this.add.text(-148, 70, 'Best duck:', textStyle(17, { ...ink, color: '#2a8c44', weight: '700' })).setOrigin(0, 0.5),
-        this.add.image(-40, 66, `duck-${stats.beatenBy}`).setDisplaySize(40, 40),
-        this.add.text(-16, 70, best.name, textStyle(19, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-148, 70 + extra / 2, 'Best duck:', textStyle(17, { ...ink, color: '#2a8c44', weight: '700' })).setOrigin(0, 0.5),
+        this.add.image(-40, 66 + extra / 2, `duck-${stats.beatenBy}`).setDisplaySize(40, 40),
+        this.add.text(-16, 70 + extra / 2, best.name, textStyle(19, { ...ink, weight: '700' })).setOrigin(0, 0.5),
       ])
       .setDepth(DEPTH.hud + 5);
     this.showPopup(popup, 6000);
@@ -1684,14 +1694,15 @@ export class GameScene extends Phaser.Scene {
 
       // A dusty ring at its feet while Curtis slows it.
       sprite.ripple?.setVisible(enemy.slowed);
-      // Minks hiding in the grass are hard to see until Chester's quack flushes them out.
-      if (ENEMIES[enemy.kind].sneaky) sprite.art.setAlpha(isHidden(enemy) ? HIDDEN_ALPHA : 1);
+      // Minks (and sneaky variants) hiding in the grass are hard to see until Chester's quack flushes them out.
+      if (enemyStats(enemy).sneaky) sprite.art.setAlpha(isHidden(enemy) ? HIDDEN_ALPHA : 1);
       const muddy = this.showTileEffects(enemy, sprite, time);
       // A quick red "ouch" tint when hit (keeps the art readable even when hit constantly).
       if (time < sprite.flashUntil) sprite.art.setTint(0xff9a9a);
       else if (enemy.stopTime > 0 && enemy.weakness > 0) sprite.art.setTint(0xd2b4ff); // Wise Old Chester's weakness
       else if (enemy.soakedTime > 0) sprite.art.setTint(0x9fd0ff); // soaked by a Soggy Splash
       else if (muddy) sprite.art.setTint(0xc4a07c); // splattered with mud
+      else if (enemy.variant) sprite.art.setTint(VARIANTS[enemy.variant].tint); // a variant wears its colour
       else sprite.art.clearTint();
     }
   }
@@ -1767,10 +1778,15 @@ export class GameScene extends Phaser.Scene {
       case 'scared':
         this.showScared(event.duckIds, event.fearlessIds);
         break;
+      case 'sprayed':
+        playSound(this, 'noPeas');
+        this.fx.puff.explode(18, event.position.x, event.position.y - 20);
+        popSpeechBubble(this, event.position.x, event.position.y - 60, 'Pffft!', DEPTH.floatText);
+        break;
       case 'defeated':
         playSound(this, 'chasedOff');
         this.removeEnemySprite(event.enemy.id, 'defeated');
-        this.flyPea(event.position, killPeas(this.state, event.enemy.kind));
+        this.flyPea(event.position, killPeas(this.state, event.enemy));
         if (ENEMIES[event.enemy.kind].boss) {
           playSound(this, 'bossDefeated');
           this.showBossGone(event.position, `${ENEMIES[event.enemy.kind].name} ran away!`);

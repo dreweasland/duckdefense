@@ -21,6 +21,7 @@ import {
   sellDuck,
   setTargeting,
   wavePreview,
+  killPeas,
   sellValue,
   refundFor,
   scorePeas,
@@ -31,6 +32,7 @@ import {
   type GameEvent,
 } from './game';
 import { makePath } from './path';
+import { VARIANTS } from '../data/variants';
 
 // A short straight path so predators arrive quickly.
 const path = makePath([{ x: 0, y: 0 }, { x: 200, y: 0 }]);
@@ -402,5 +404,34 @@ describe('calling the next wave early', () => {
     expect(game.phase).toBe('won');
     // The first wave's bonus was paid when it was called, so only the last wave reports clearing.
     expect(events.filter((e) => e.type === 'waveCleared')).toEqual([{ type: 'waveCleared', waveIndex: 1, bonus: 25 }]);
+  });
+});
+
+describe('predator variants in waves', () => {
+  const twisted: Wave = {
+    time: 'day',
+    groups: [
+      { enemy: 'raccoon', count: 2, every: 1 },
+      { enemy: 'raccoon', count: 1, every: 1, variant: 'armored' },
+    ],
+    bonusPeas: 0,
+  };
+
+  it('are listed apart in the wave preview and arrive with their twist', () => {
+    expect(wavePreview([twisted], 0)).toEqual([
+      { enemy: 'raccoon', count: 2, isNew: true },
+      { enemy: 'raccoon', variant: 'armored', count: 1, isNew: true },
+    ]);
+    const game = createGame({ path }, [twisted], 'easy');
+    startWave(game);
+    update(game, 0);
+    update(game, 0.5);
+    expect(game.battle.enemies.map((e) => e.variant)).toEqual([undefined, 'armored']);
+  });
+
+  it('drop more peas', () => {
+    const game = createGame({ path }, [twisted], 'easy');
+    expect(killPeas(game, { kind: 'raccoon', variant: 'armored' })).toBe(Math.round(ENEMIES.raccoon.peas * VARIANTS.armored.peas));
+    expect(killPeas(game, { kind: 'raccoon' })).toBe(ENEMIES.raccoon.peas);
   });
 });

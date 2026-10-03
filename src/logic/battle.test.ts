@@ -4,7 +4,8 @@ import { ENEMIES } from '../data/enemies';
 import { ENDLESS } from '../data/endless';
 import { FOUNTAIN, NIGHT } from '../data/dayNight';
 import { PECKING_LOOP } from '../data/synergy';
-import { attackInterval, createBattle, topDuck, damageTo, duckStats, enemyPosition, isFlying, isHidden, isRefreshed, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
+import { attackInterval, createBattle, topDuck, damageTo, duckStats, enemyName, enemyPosition, enemyStats, isFlying, isHidden, isRefreshed, placeDuck, spawnEnemy, step, type BattleEvent } from './battle';
+import { VARIANTS } from '../data/variants';
 import { statsAt } from './upgrades';
 import { perkMods } from './perks';
 import { TILES } from '../data/tiles';
@@ -901,5 +902,91 @@ describe('special map tiles', () => {
     expect(duckStats(battle, onHill).range).toBeCloseTo(DUCKS.sunny.range * (1 + TILES.nests.hill.range));
     expect(duckStats(battle, byWater).damage).toBeCloseTo(DUCKS.sunny.damage * (1 + TILES.nests.water.damage));
     expect(duckStats(battle, plain)).toMatchObject({ range: DUCKS.sunny.range, damage: DUCKS.sunny.damage });
+  });
+});
+
+describe('skunks', () => {
+  const { sprays } = ENEMIES.skunk;
+
+  it("spray when a splash hits them, scaring the splasher and every duck nearby (but not Curtis), then need a moment before spraying again", () => {
+    const battle = newBattle();
+    const skunk = spawnEnemy(battle, 'skunk');
+    skunk.speed = 0;
+    skunk.distance = 1000;
+    const splasher = placeDuck(battle, 'sunny', { x: 1000, y: sprays!.radius + 20 }); // splashing from outside the spray: still gets it
+    const near = placeDuck(battle, 'potato', { x: 1000 + sprays!.radius - 5, y: 0 });
+    const far = placeDuck(battle, 'chester', { x: 1000 + sprays!.radius + 5, y: 0 });
+    const curtis = placeDuck(battle, 'curtis', { x: 1000, y: -100 });
+    const events = step(battle, 0);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'sprayed', enemyId: skunk.id }));
+    expect(events).toContainEqual(expect.objectContaining({ type: 'scared', enemyId: skunk.id, duckIds: [splasher.id, near.id], fearlessIds: [curtis.id] }));
+    expect(far.scaredTime).toBe(0);
+    expect(skunk.sprayTime).toBe(sprays!.every);
+    // Splashed again straight away: no second spray yet.
+    splasher.scaredTime = 0;
+    splasher.cooldown = 0;
+    expect(step(battle, 0).some((e) => e.type === 'sprayed')).toBe(false);
+  });
+
+  it("don't spray when pecked (Potato is the answer)", () => {
+    const battle = newBattle();
+    const skunk = spawnEnemy(battle, 'skunk');
+    skunk.speed = 0;
+    skunk.distance = 1000;
+    placeDuck(battle, 'potato', { x: 1000, y: 50 });
+    const events = step(battle, 0);
+    expect(events.some((e) => e.type === 'attack')).toBe(true);
+    expect(events.some((e) => e.type === 'sprayed' || e.type === 'scared')).toBe(false);
+  });
+});
+
+describe('predator variants', () => {
+  it('arrive with their twist on speed and health, and a name to match', () => {
+    const battle = newBattle();
+    const rabid = spawnEnemy(battle, 'fox', 'rabid');
+    expect(rabid.speed).toBeCloseTo(ENEMIES.fox.speed * VARIANTS.rabid.speed!);
+    expect(rabid.maxHp).toBeCloseTo(ENEMIES.fox.maxHp * VARIANTS.rabid.health!);
+    expect(enemyName(rabid)).toBe('Rabid Fox');
+    expect(enemyName(spawnEnemy(battle, 'fox'))).toBe('Fox');
+  });
+
+  it('armored: every hit does less, on top of any shell it already has', () => {
+    const battle = newBattle();
+    const raccoon = spawnEnemy(battle, 'raccoon', 'armored');
+    expect(damageTo(raccoon, 12)).toBe(12 - VARIANTS.armored.armor!);
+    const pondBattle = createBattle(makePath([{ x: 0, y: 0 }, { x: 2000, y: 0 }]), { pondAt: { x: 500, y: 200 } });
+    const turtle = spawnEnemy(pondBattle, 'turtle', 'armored');
+    expect(enemyStats(turtle).armor).toBe(ENEMIES.turtle.armor! + VARIANTS.armored.armor!);
+  });
+
+  it('sneaky: hides in the grass like a mink', () => {
+    const battle = newBattle();
+    const raccoon = spawnEnemy(battle, 'raccoon', 'sneaky');
+    expect(isHidden(raccoon)).toBe(true);
+    expect(isHidden(spawnEnemy(battle, 'raccoon'))).toBe(false);
+  });
+
+  it('regrowing: heals once nothing has hit it for a moment, but not while being pecked', () => {
+    const { regrow } = VARIANTS.regrow;
+    const battle = newBattle();
+    const raccoon = spawnEnemy(battle, 'raccoon', 'regrow');
+    raccoon.speed = 0;
+    raccoon.hp = raccoon.maxHp / 2;
+    step(battle, regrow!.after - 0.1);
+    expect(raccoon.hp).toBe(raccoon.maxHp / 2); // too soon
+    step(battle, 1);
+    expect(raccoon.hp).toBeCloseTo(raccoon.maxHp / 2 + raccoon.maxHp * regrow!.perSecond * 1);
+    // A hit resets the clock.
+    raccoon.distance = 1000;
+    placeDuck(battle, 'potato', { x: 1000, y: 50 });
+    step(battle, 0);
+    expect(raccoon.sinceHit).toBe(0);
+  });
+
+  it("bosses don't get twists", () => {
+    const battle = newBattle();
+    const bandit = spawnEnemy(battle, 'bandit', 'rabid');
+    expect(bandit.variant).toBeUndefined();
+    expect(bandit.speed).toBe(ENEMIES.bandit.speed);
   });
 });

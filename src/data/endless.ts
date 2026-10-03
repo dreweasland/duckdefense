@@ -1,5 +1,6 @@
 import type { EnemyKind } from './enemies';
 import { LEVEL_COUNT } from './levelCount';
+import type { VariantKind } from './variants';
 
 // The Endless Pond: waves keep coming, bigger and tougher each time, until the duck
 // house runs out of hearts, on whichever map you pick. Your score is how many waves you
@@ -31,6 +32,13 @@ export const ENDLESS = {
   // builds on itself, so late waves get tough fast, even for a strong flock.
   healthGrowth: 1.045,
   spacingPerWave: 0.03, // and arrive this much closer together
+  // Predator variants (src/data/variants.ts) start showing up: from this wave, one group a wave
+  // gets a twist, and one more group every `moreEvery` waves. Groups and twists take turns.
+  variants: {
+    from: 12,
+    moreEvery: 10,
+    kinds: ['armored', 'rabid', 'sneaky', 'regrow'] satisfies VariantKind[],
+  },
   minEvery: 0.35, // but never closer than this many seconds apart
   bonusPeas: { first: 50, perWave: 4 }, // peas for clearing a wave
   perkEvery: 5, // after every 5th wave, pick a Pond Perk (see src/data/perks.ts)
@@ -56,6 +64,7 @@ export const ENDLESS = {
     { enemy: 'hawk', from: 4, count: 1, perWave: 0.25, every: 2.5, after: 4 },
     { enemy: 'mink', from: 6, count: 2, perWave: 0.4, every: 1.6, after: 3 },
     { enemy: 'turtle', from: 8, count: 1, perWave: 0.15, every: 5, after: 2 },
+    { enemy: 'skunk', from: 9, count: 1, perWave: 0.3, every: 3, after: 5 },
   ] satisfies EndlessGroup[],
 };
 

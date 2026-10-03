@@ -1,5 +1,5 @@
 import type { DuckKind } from './ducks';
-import type { EnemyKind } from './enemies';
+import type { SpawnGroup } from './waves';
 
 // Daily Challenge twists. Every day, everyone gets the same level with the same twist,
 // and a leaderboard just for that day. Add a new twist to the end of the list and it
@@ -18,7 +18,7 @@ export interface Challenge {
   noCraig?: boolean; // Craig takes the day off
   maxDucks?: number; // only this many ducks can be out at once (sell one to place another)
   // Added to every wave, on top of the level's usual predators.
-  extra?: { enemy: EnemyKind; count: number; every: number; after?: number };
+  extra?: SpawnGroup;
 }
 
 export const CHALLENGES: Challenge[] = [
@@ -73,5 +73,15 @@ export const CHALLENGES: Challenge[] = [
     name: 'Mink Mischief',
     description: 'Sneaky minks join every wave. Chester can find them!',
     extra: { enemy: 'mink', count: 2, every: 2, after: 2 },
+  },
+  {
+    name: 'Skunk Alert',
+    description: "Skunks join every wave. Don't splash them! Potato pecks them off.",
+    extra: { enemy: 'skunk', count: 2, every: 3, after: 3 },
+  },
+  {
+    name: 'Hard Hats',
+    description: 'Armored raccoons join every wave. Little pecks bounce off, so hit hard.',
+    extra: { enemy: 'raccoon', count: 3, every: 2, after: 2, variant: 'armored' },
   },
 ];

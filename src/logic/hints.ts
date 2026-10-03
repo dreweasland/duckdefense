@@ -16,6 +16,7 @@ export type HintMoment = { type: 'heartLost'; enemy: EnemyKind } | { type: 'noDu
 const COUNTER_HINTS: Partial<Record<EnemyKind, { hint: HintId; answered: (kinds: DuckKind[]) => boolean }>> = {
   hawk: { hint: 'hawks', answered: (kinds) => kinds.some((k) => DUCKS[k].canHitFlying) },
   mink: { hint: 'minks', answered: (kinds) => kinds.includes('chester') },
+  skunk: { hint: 'skunks', answered: (kinds) => kinds.includes('potato') },
   turtle: { hint: 'turtles', answered: (kinds) => kinds.includes('sunny') },
   fox: { hint: 'foxes', answered: (kinds) => kinds.includes('curtis') },
   bandit: { hint: 'bandit', answered: (kinds) => kinds.includes('curtis') },

@@ -4,6 +4,7 @@ import type { Challenge } from '../data/challenges';
 import type { Difficulty } from '../data/difficulty';
 import { DUCKS, MOVE_SETTLE_TIME, SELL_REFUND, type DuckKind } from '../data/ducks';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
+import { VARIANTS, type VariantKind } from '../data/variants';
 import type { Targeting } from '../data/targeting';
 import { EARLY_CALL, type Wave } from '../data/waves';
 import { createBattle, findDuck, placeDuck, spawnEnemy, step, type Battle, type BattleEvent, type Duck, type Enemy } from './battle';
@@ -26,6 +27,7 @@ import { makePath, type Path } from './path';
 export type GamePhase = 'building' | 'wave' | 'won' | 'lost';
 
 export interface ScheduledSpawn {
+  variant?: VariantKind;
   time: number; // seconds after the wave starts
   enemy: EnemyKind;
 }
@@ -310,6 +312,7 @@ export function setTargeting(game: Game, duckId: number, targeting: Targeting): 
 
 export interface PreviewEntry {
   enemy: EnemyKind;
+  variant?: VariantKind;
   count: number;
   /** True the first time this kind of predator shows up in the level. */
   isNew: boolean;
@@ -322,9 +325,9 @@ export function wavePreview(waves: readonly Wave[], waveIndex: number): PreviewE
   const seenBefore = new Set(waves.slice(0, waveIndex).flatMap((w) => w.groups.map((g) => g.enemy)));
   const entries: PreviewEntry[] = [];
   for (const spawn of scheduleWave(wave)) {
-    const entry = entries.find((e) => e.enemy === spawn.enemy);
+    const entry = entries.find((e) => e.enemy === spawn.enemy && e.variant === spawn.variant);
     if (entry) entry.count++;
-    else entries.push({ enemy: spawn.enemy, count: 1, isNew: !seenBefore.has(spawn.enemy) });
+    else entries.push({ enemy: spawn.enemy, ...(spawn.variant && { variant: spawn.variant }), count: 1, isNew: !seenBefore.has(spawn.enemy) });
   }
   return entries;
 }
@@ -334,7 +337,7 @@ export function scheduleWave(wave: Wave): ScheduledSpawn[] {
   const spawns: ScheduledSpawn[] = [];
   for (const group of wave.groups) {
     for (let i = 0; i < group.count; i++) {
-      spawns.push({ time: (group.after ?? 0) + i * group.every, enemy: group.enemy });
+      spawns.push({ time: (group.after ?? 0) + i * group.every, enemy: group.enemy, ...(group.variant && { variant: group.variant }) });
     }
   }
   return spawns.sort((a, b) => a.time - b.time);
@@ -395,8 +398,9 @@ function waveBonus(game: Game): number {
 }
 
 /** The peas for chasing off a predator (Pea Picker and the like make them pay more). */
-export function killPeas(game: Game, kind: EnemyKind): number {
-  return Math.round(ENEMIES[kind].peas * game.battle.mods.killPeas);
+export function killPeas(game: Game, enemy: Pick<Enemy, 'kind' | 'variant'>): number {
+  const twist = enemy.variant ? VARIANTS[enemy.variant].peas : 1;
+  return Math.round(ENEMIES[enemy.kind].peas * twist * game.battle.mods.killPeas);
 }
 
 /** Endless Pond: after every few waves, Craig has rested and her blessing is ready again. */
@@ -440,7 +444,7 @@ export function update(game: Game, dt: number): GameEvent[] {
   game.shieldTime = Math.max(0, game.shieldTime - dt);
   while (game.pending.length > 0 && game.pending[0]!.time <= game.waveTime) {
     const spawn = game.pending.shift()!;
-    events.push({ type: 'spawned', enemy: spawnEnemy(game.battle, spawn.enemy) });
+    events.push({ type: 'spawned', enemy: spawnEnemy(game.battle, spawn.enemy, spawn.variant) });
   }
 
   const shielded = game.shieldTime > 0;
@@ -451,7 +455,7 @@ export function update(game: Game, dt: number): GameEvent[] {
       continue;
     }
     events.push(event);
-    if (event.type === 'defeated') game.peas += killPeas(game, event.enemy.kind);
+    if (event.type === 'defeated') game.peas += killPeas(game, event.enemy);
     if (event.type === 'reachedHouse') game.hearts = Math.max(0, game.hearts - ENEMIES[event.enemy.kind].hearts);
   }
 

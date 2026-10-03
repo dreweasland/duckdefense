@@ -1,7 +1,8 @@
 import { FOUNTAIN, NIGHT } from '../data/dayNight';
 import { ENDLESS } from '../data/endless';
 import { FREEZE_RECOVERY, WING_FLAP_RECOVERY, type DuckKind, type DuckStats } from '../data/ducks';
-import { ENEMIES, type EnemyKind } from '../data/enemies';
+import { ENEMIES, type EnemyKind, type EnemyStats } from '../data/enemies';
+import { VARIANTS, type VariantKind } from '../data/variants';
 import { DEFAULT_TARGETING, type Targeting } from '../data/targeting';
 import { CHASES, PECKING_LOOP } from '../data/synergy';
 import { TILES, type NestKind } from '../data/tiles';
@@ -14,6 +15,8 @@ import { statsAt } from './upgrades';
 export interface Enemy {
   id: number;
   kind: EnemyKind;
+  /** A twist on it, like 'armored' (see src/data/variants.ts). */
+  variant?: VariantKind;
   hp: number;
   maxHp: number;
   /** Pixels per second, after difficulty and night multipliers. */
@@ -42,6 +45,10 @@ export interface Enemy {
   weakness: number;
   /** Seconds it stays soaked (and slowed) after one of Sunny's splashes, with the Soggy Splash boss reward. */
   soakedTime: number;
+  /** Seconds since a duck last hit it (a regrowing predator heals once this is long enough). */
+  sinceHit: number;
+  /** Seconds before a skunk can spray again. */
+  sprayTime: number;
 }
 
 /**
@@ -127,6 +134,8 @@ export type BattleEvent =
   /** A predator scared some ducks. Fearless ducks (Curtis) in range shrug it off. */
   | { type: 'scared'; enemyId: number; duckIds: number[]; fearlessIds: number[] }
   | { type: 'summoned'; enemyId: number; minions: Enemy[] }
+  /** A skunk was splashed and sprayed. */
+  | { type: 'sprayed'; enemyId: number; position: Point }
   | { type: 'defeated'; enemy: Enemy; position: Point }
   | { type: 'reachedHouse'; enemy: Enemy };
 
@@ -165,8 +174,10 @@ export function housePosition(battle: Battle): Point {
   return battle.path.points[battle.path.points.length - 1]!;
 }
 
-export function spawnEnemy(battle: Battle, kind: EnemyKind): Enemy {
+export function spawnEnemy(battle: Battle, kind: EnemyKind, variant?: VariantKind): Enemy {
   const stats = ENEMIES[kind];
+  // Bosses are themselves; a twist on any other predator changes its health and speed on arrival.
+  const twist = variant && !stats.boss ? VARIANTS[variant] : undefined;
   let path = battle.path;
   if (stats.flying) {
     const house = housePosition(battle);
@@ -183,13 +194,14 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind): Enemy {
     if (!battle.pond) throw new Error(`A ${stats.name} needs a pond to climb out of: add a "pond" layer to the map`);
     path = joinPath(battle.pond, battle.path);
   }
-  const maxHp = stats.maxHp * battle.enemyHealth;
+  const maxHp = stats.maxHp * battle.enemyHealth * (twist?.health ?? 1);
   const enemy: Enemy = {
     id: battle.nextId++,
     kind,
+    ...(twist && { variant }),
     hp: maxHp,
     maxHp,
-    speed: stats.speed * battle.enemySpeed * (battle.night ? NIGHT.enemySpeed : 1),
+    speed: stats.speed * battle.enemySpeed * (battle.night ? NIGHT.enemySpeed : 1) * (twist?.speed ?? 1),
     path,
     distance: 0,
     stopTime: 0,
@@ -202,6 +214,8 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind): Enemy {
     slowedBy: [],
     weakness: 0,
     soakedTime: 0,
+    sinceHit: 0,
+    sprayTime: 0,
   };
   battle.enemies.push(enemy);
   return enemy;
@@ -259,6 +273,24 @@ export function isFlying(enemy: Enemy): boolean {
   return ENEMIES[enemy.kind].flying;
 }
 
+/** A predator's stats with its variant's twist on top: extra armor, or hiding in the grass. */
+export function enemyStats(enemy: Enemy): EnemyStats {
+  const base = ENEMIES[enemy.kind];
+  const twist = enemy.variant && VARIANTS[enemy.variant];
+  if (!twist) return base;
+  return {
+    ...base,
+    ...(twist.armor && { armor: (base.armor ?? 0) + twist.armor }),
+    ...(twist.sneaky && !base.sneaky && { sneaky: twist.sneaky }),
+  };
+}
+
+/** "Armored Raccoon", or just "Raccoon". */
+export function enemyName(enemy: Pick<Enemy, 'kind' | 'variant'>): string {
+  const base = ENEMIES[enemy.kind].name;
+  return enemy.variant ? `${VARIANTS[enemy.variant].name} ${base}` : base;
+}
+
 function enemiesInRange(battle: Battle, from: Point, range: number): Enemy[] {
   return battle.enemies.filter((e) => e.hp > 0 && distance(enemyPosition(e), from) <= range);
 }
@@ -303,12 +335,12 @@ export function inBrambles(battle: Battle, enemy: Enemy): boolean {
 
 /** Whether a sneaky predator is hiding right now (an Alarm Quack flushes it out for a while). */
 export function isHidden(enemy: Enemy): boolean {
-  return !!ENEMIES[enemy.kind].sneaky && enemy.revealedTime <= 0;
+  return !!enemyStats(enemy).sneaky && enemy.revealedTime <= 0;
 }
 
 /** Whether a duck at `from` with this reach can see a predator to aim at it. Hiding predators must be close. */
 function canSpot(enemy: Enemy, from: Point, range: number): boolean {
-  const sneaky = ENEMIES[enemy.kind].sneaky;
+  const sneaky = enemyStats(enemy).sneaky;
   return !sneaky || !isHidden(enemy) || distance(enemyPosition(enemy), from) <= range * sneaky.spotRange;
 }
 
@@ -353,7 +385,7 @@ export function pickTarget(
 
 /** How much a hit takes off a predator: armor (the turtle's shell) blocks some, but every hit does at least 1. */
 export function damageTo(enemy: Enemy, damage: number): number {
-  const armor = ENEMIES[enemy.kind].armor ?? 0;
+  const armor = enemyStats(enemy).armor ?? 0;
   return armor > 0 ? Math.max(1, damage - armor) : damage;
 }
 
@@ -439,7 +471,10 @@ export function isGuarded(battle: Battle, duck: Duck): boolean {
   });
 }
 
-/** Scares the ducks within `radius` of a point (fearless ducks, and ducks a Guardian keeps calm, just shrug). */
+/**
+ * Scares the ducks within `radius` of a point, and `also` that duck wherever it is (fearless
+ * ducks, and ducks a Guardian keeps calm, just shrug).
+ */
 function scareDucks(
   battle: Battle,
   enemy: Enemy,
@@ -447,11 +482,12 @@ function scareDucks(
   radius: number,
   time: number,
   onlyOnce: boolean,
+  also?: Duck,
 ): BattleEvent | undefined {
   const duckIds: number[] = [];
   const fearlessIds: number[] = [];
   for (const duck of battle.ducks) {
-    if (distance(duck.position, at) > radius) continue;
+    if (duck !== also && distance(duck.position, at) > radius) continue;
     if (onlyOnce && enemy.scared.includes(duck.id)) continue;
     enemy.scared.push(duck.id);
     if (statsAt(duck.kind, duck.level, duck.path).fearless || isGuarded(battle, duck)) {
@@ -477,6 +513,13 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     enemy.freezeRecovery = Math.max(0, enemy.freezeRecovery - dt);
     enemy.revealedTime = Math.max(0, enemy.revealedTime - dt);
     enemy.soakedTime = Math.max(0, enemy.soakedTime - dt);
+    enemy.sprayTime = Math.max(0, enemy.sprayTime - dt);
+    enemy.sinceHit += dt;
+    // A regrowing predator heals once the ducks have left it alone for a moment.
+    const regrow = enemy.variant && VARIANTS[enemy.variant].regrow;
+    if (regrow && enemy.sinceHit >= regrow.after && enemy.hp < enemy.maxHp) {
+      enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * regrow.perSecond * dt);
+    }
     const { factor: curtisSlow, by: curtis } = slowFor(battle, enemy, zones);
     enemy.slowed = curtisSlow < 1; // (the dusty ring is for Curtis; mud shows for itself)
     const slow = curtisSlow * (inMud(battle, enemy) ? TILES.mud.speed : 1) * (enemy.soakedTime > 0 ? battle.mods.soakSpeed : 1);
@@ -557,7 +600,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
         }
         // The quack flushes every sneaky predator in range out of the grass, on guard or not.
         for (const enemy of inRange) {
-          const sneaky = ENEMIES[enemy.kind].sneaky;
+          const sneaky = enemyStats(enemy).sneaky;
           if (sneaky) enemy.revealedTime = Math.max(enemy.revealedTime, sneaky.revealTime);
         }
         duck.abilityCooldown = stats.alarmQuack.cooldown;
@@ -593,10 +636,21 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
       const flyer = isFlying(enemy) ? (stats.flyerDamage ?? 1) : 1;
       const weakened = enemy.stopTime > 0 ? 1 + enemy.weakness : 1;
       enemy.hp -= damageTo(enemy, damage * flyer * weakened);
+      enemy.sinceHit = 0;
       credit(battle, duck, 'damage', before - Math.max(0, enemy.hp));
       if (enemy.hp <= 0) credit(battle, duck, 'chasedOff', 1);
       // Soggy Splash (a boss reward): Sunny's splashes leave predators soaked and slow.
       if (stats.splashRadius > 0 && battle.mods.soakTime > 0) enemy.soakedTime = battle.mods.soakTime;
+      // A splashed skunk sprays: the duck that splashed it and every duck nearby run off scared
+      // (not Curtis). Pecks don't set it off.
+      const sprays = ENEMIES[enemy.kind].sprays;
+      if (sprays && stats.splashRadius > 0 && enemy.hp > 0 && enemy.sprayTime === 0) {
+        enemy.sprayTime = sprays.every;
+        const at = enemyPosition(enemy);
+        events.push({ type: 'sprayed', enemyId: enemy.id, position: at });
+        const scared = scareDucks(battle, enemy, at, sprays.radius, sprays.time, false, duck);
+        if (scared) events.push(scared);
+      }
     }
     if (stats.splashRadius > 0) credit(battle, duck, 'special', hit.length - 1);
     duck.cooldown = attackInterval(battle, duck);

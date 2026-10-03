@@ -401,6 +401,38 @@ function minkSvg(): string {
   );
 }
 
+/** A skunk trotting right with its big striped tail up (ready to spray), 220 x 140. */
+function skunkSvg(): string {
+  const defs = vGrad('skunk', '#3a3340', '#1e1a22');
+  return svg(
+    220,
+    140,
+    defs,
+    [
+      // Big bushy tail, raised from the rump: black with a white stripe down the middle.
+      `<g transform="translate(26 4)">` +
+        `<path d="M34 96 C4 80 0 36 30 18 C44 10 66 14 70 34 C72 48 60 56 54 70 C50 80 46 90 34 96 Z" fill="url(#skunk)" ${stroke()}/>` +
+        `<path d="M36 84 C18 70 18 40 36 26 C46 20 58 26 58 38 C58 48 48 54 44 64 C42 72 40 78 36 84 Z" fill="#f4efe8"/>` +
+        `</g>`,
+      // Legs.
+      `<rect x="70" y="100" width="16" height="26" rx="7" fill="#1e1a22" ${stroke(4)}/>`,
+      `<rect x="96" y="102" width="16" height="24" rx="7" fill="#1e1a22" ${stroke(4)}/>`,
+      `<rect x="142" y="102" width="16" height="24" rx="7" fill="#1e1a22" ${stroke(4)}/>`,
+      `<rect x="164" y="100" width="16" height="26" rx="7" fill="#1e1a22" ${stroke(4)}/>`,
+      // Low, rounded body with the white stripe running along its back.
+      `<path d="M56 94 C56 66 84 52 120 52 C156 52 184 64 186 90 C188 104 176 112 160 112 C130 114 86 114 66 110 C58 108 56 100 56 94 Z" fill="url(#skunk)" ${stroke()}/>`,
+      `<path d="M66 82 C90 62 150 60 178 78 C150 68 94 70 66 82 Z" fill="#f4efe8"/>`,
+      // Head with a white blaze, round ears, a shiny nose, and a beady eye.
+      `<circle cx="178" cy="60" r="9" fill="#2a2430" ${stroke(4)}/>`,
+      `<circle cx="198" cy="58" r="8" fill="#2a2430" ${stroke(4)}/>`,
+      `<path d="M168 82 C166 62 184 50 204 58 C214 62 218 74 214 84 C208 94 184 96 174 92 C170 90 168 86 168 82 Z" fill="url(#skunk)" ${stroke()}/>`,
+      `<path d="M178 60 C186 56 196 56 204 60 C198 70 190 76 184 82 C180 76 178 68 178 60 Z" fill="#f4efe8"/>`,
+      `<circle cx="214" cy="80" r="5" fill="#1a1210"/>`,
+      `<circle cx="198" cy="72" r="4.5" fill="#111"/><circle cx="199.5" cy="70.5" r="1.6" fill="#ffffff"/>`,
+    ].join(''),
+  );
+}
+
 /** A snapping turtle plodding right, with a ridged shell and a hooked beak, 220 x 150. */
 function turtleSvg(): string {
   const defs = vGrad('shell', '#7c8a4a', '#4d5a2a') + vGrad('skin', '#9aa06a', '#6f7648');
@@ -868,6 +900,7 @@ export function allSprites(): SpriteArt[] {
     { key: 'raccoon', svg: raccoonSvg(), width: 92, height: 67 },
     { key: 'fox', svg: foxSvg(), width: 100, height: 68 },
     { key: 'mink', svg: minkSvg(), width: 88, height: 44 },
+    { key: 'skunk', svg: skunkSvg(), width: 94, height: 60 },
     { key: 'turtle', svg: turtleSvg(), width: 110, height: 75 },
     { key: 'hawk', svg: hawkSvg(), width: 88, height: 88 },
     { key: 'bandit', svg: banditSvg(), width: 150, height: 112 },

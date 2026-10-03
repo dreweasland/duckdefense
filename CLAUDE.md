@@ -64,12 +64,21 @@ everywhere: dialogue, tooltips, code comments.
 | Raccoon | Ground path | Baseline enemy |
 | Fox | Ground path | Fast, low health. Shakes off most of an Alarm Quack, so Curtis's slow is the answer |
 | Mink | Ground path | Small and slippery. Hides in the grass: ducks only spot it up close until Chester's Alarm Quack flushes it out |
+| Skunk | Ground path | Splash it and it sprays: the duck that splashed it and every duck nearby run off scared (not Curtis). Peck it one-on-one instead: Potato's the answer. First seen in Night Woods |
 | Hawk | Flying | Ignores the path and dives straight at the house. Only some ducks can hit it. Scares ducks it swoops over |
 | Snapping Turtle | From the pond | Slow, huge health. Climbs out of the pond and cuts across to the path. Its shell (armor) blocks part of every hit, so big splashes beat little pecks |
 | **Boss: The Night Bandit** | Ground path | A masked mega-raccoon at the end of level 3 (he drops by Snapper Swamp too). Whistles up raccoon minions, scaring nearby ducks |
 | **Boss: The Storm Hawk** | Flying | Hawk Hill and the Endless Pond. A giant hawk that calls in hawks and scares ducks it swoops near. Only Sunny and Potato can hit it. Always flies in from the sky point farthest from the house |
 | **Boss: The Silver Fox** | Ground path | Fox Run and the Endless Pond. Fast, barely freezes, calls in foxes. Curtis's slow is the answer |
 | **Boss: Old Snapper** | From the pond | Snapper Swamp and the Endless Pond. A huge mossy turtle with a thick shell (little pecks do 1 damage) that can't be pushed back |
+
+**Variants:** any spawn group can carry a `variant` (`src/data/variants.ts`) that twists the
+predator on arrival: **Armored** (+3 armor), **Rabid** (1.7x speed, 0.7x health), **Sneaky**
+(hides like a mink), **Regrowing** (heals when nothing has hit it for 1.5 s). They drop 1.5x
+peas, wear a tint, show as their own chip in the wave preview ("Armored Raccoon"), and never
+apply to bosses. Levels 4 to 6 introduce them; the Endless Pond adds one twisted group a wave
+from wave 12 and one more every 10 (`ENDLESS.variants`), skipping bosses, skunks, and sneaky
+flyers. `enemyStats(enemy)` in `src/logic/battle.ts` is the stats-with-twist lookup.
 
 ## Economy and systems
 

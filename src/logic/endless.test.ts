@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ENDLESS } from '../data/endless';
 import { LEVELS } from '../data/levels';
 import { play } from './simulate';
-import { bossCount, bossesFor, endlessWave, endlessWaves } from './endless';
+import { bossCount, bossesFor, endlessWave, endlessWaves, variantsFor } from './endless';
 import { buyDuck, createGame, mapFromLevel, repairCost, repairHouse, sellValue, startWave, trainDuck, trainingCost, upgradeDuck } from './game';
 import { parseLevel } from './level';
 import { spawnEnemy } from './battle';
@@ -121,5 +121,20 @@ describe('Endless Pond balance', () => {
 
   it('ends quickly with no ducks', () => {
     expect(play(info, 'easy', null).waveIndex).toBeLessThanOrEqual(5);
+  });
+});
+
+describe('Endless Pond variants', () => {
+  it('start at the wave in ENDLESS.variants, on one group, then more, never on bosses or skunks', () => {
+    const { from, moreEvery } = ENDLESS.variants;
+    expect(endlessWave(from - 1).groups.some((g) => g.variant)).toBe(false);
+    expect(endlessWave(from).groups.filter((g) => g.variant).length).toBeLessThanOrEqual(1);
+    expect(variantsFor(from + moreEvery, 5).filter(Boolean)).toHaveLength(2);
+    for (const n of [from, from + 7, from + 2 * moreEvery, 60]) {
+      for (const group of endlessWave(n).groups) {
+        if (ENEMIES[group.enemy].boss || ENEMIES[group.enemy].sprays) expect(group.variant).toBeUndefined();
+        if (ENEMIES[group.enemy].flying) expect(group.variant).not.toBe('sneaky');
+      }
+    }
   });
 });

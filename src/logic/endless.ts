@@ -1,5 +1,6 @@
 import { ENDLESS } from '../data/endless';
-import type { EnemyKind } from '../data/enemies';
+import { ENEMIES, type EnemyKind } from '../data/enemies';
+import { VARIANTS, type VariantKind } from '../data/variants';
 import { ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, HUD_AREAS, type Area } from '../data/layout';
 import type { SpawnGroup, Wave } from '../data/waves';
 import { closestPointOnPolyline, distance, inEllipse, type Point } from './geometry';
@@ -20,6 +21,10 @@ export function endlessWave(n: number): Wave {
       every: Math.max(ENDLESS.minEvery, g.every / squeeze),
       ...(g.after !== undefined && { after: g.after }),
     }));
+  for (const [index, variant] of variantsFor(n, groups.length).entries()) {
+    const group = groups[index]!;
+    if (variant && variantFits(group.enemy, variant)) group.variant = variant;
+  }
   bossesFor(n).forEach((enemy, i) => groups.push({ enemy, count: 1, every: 1, after: 8 + i * 6 }));
   return {
     time: n % ENDLESS.nightEvery === 0 ? 'night' : 'day',
@@ -27,6 +32,30 @@ export function endlessWave(n: number): Wave {
     bonusPeas: ENDLESS.bonusPeas.first + ENDLESS.bonusPeas.perWave * (n - 1),
     health: ENDLESS.healthGrowth ** (n - 1),
   };
+}
+
+/**
+ * Which groups of wave `n` get a variant (by group index): none before ENDLESS.variants.from,
+ * then one group, and one more every `moreEvery` waves. The groups and the twists take turns,
+ * so neighbouring waves look different.
+ */
+export function variantsFor(n: number, groupCount: number): (VariantKind | undefined)[] {
+  const { from, moreEvery, kinds } = ENDLESS.variants;
+  const result: (VariantKind | undefined)[] = Array.from({ length: groupCount }, () => undefined);
+  if (n < from || groupCount === 0) return result;
+  const twisted = Math.min(groupCount, 1 + Math.floor((n - from) / moreEvery));
+  for (let i = 0; i < twisted; i++) {
+    result[(n + i) % groupCount] = kinds[(n + i) % kinds.length];
+  }
+  return result;
+}
+
+/** Whether a twist makes sense on a predator: no sneaky flyers, and a skunk is enough trouble already. */
+function variantFits(enemy: EnemyKind, variant: VariantKind): boolean {
+  const stats = ENEMIES[enemy];
+  if (stats.boss || stats.sprays) return false;
+  if (VARIANTS[variant].sneaky && (stats.flying || stats.sneaky)) return false;
+  return true;
 }
 
 /** The bosses that crash wave `n`, taking turns through ENDLESS.boss.kinds (none on most waves). */

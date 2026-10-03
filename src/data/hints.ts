@@ -8,6 +8,7 @@ export type HintId =
   | 'callCraig'
   | 'hawks'
   | 'minks'
+  | 'skunks'
   | 'turtles'
   | 'foxes'
   | 'bandit'
@@ -21,6 +22,7 @@ export const HINTS: Record<HintId, string> = {
   callCraig: "Uh oh! Tap my picture and I'll protect the duck house for a while.",
   hawks: "Hawks fly! Potato hits them hardest, and Sunny can too. The others can't.",
   minks: "Minks hide in the grass. Chester's quack helps everyone find them!",
+  skunks: "Don't splash a skunk, it sprays! Potato's pecks chase it off safely.",
   turtles: "That turtle's shell is tough! Sunny's big splash works best.",
   foxes: 'Foxes are super fast! Curtis slows them down.',
   bandit: "The Night Bandit scares the flock. Curtis isn't scared of anybody!",
