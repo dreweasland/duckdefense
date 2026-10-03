@@ -116,7 +116,7 @@ export function bonusNestsFor(level: Level, count = ENDLESS.bonusNestCount): Poi
   for (let y = edge; y <= height - edge; y += grid) {
     for (let x = edge; x <= width - edge; x += grid) {
       const at = { x, y };
-      const toPath = distance(at, closestPointOnPolyline(at, level.path));
+      const toPath = Math.min(...level.paths.map((trail) => distance(at, closestPointOnPolyline(at, trail))));
       if (toPath <= path) continue;
       if (level.slots.some((slot) => distance(at, slot) < nest)) continue;
       if (level.ponds.some((p) => inEllipse(at, { ...p, radiusX: p.radiusX + pond, radiusY: p.radiusY + pond }))) continue;

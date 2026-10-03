@@ -990,3 +990,39 @@ describe('predator variants', () => {
     expect(bandit.speed).toBe(ENEMIES.bandit.speed);
   });
 });
+
+describe('maps with several trails', () => {
+  const a = makePath([{ x: 0, y: 0 }, { x: 1000, y: 0 }]);
+  const b = makePath([{ x: 1000, y: -1000 }, { x: 1000, y: 0 }]);
+
+  it('send ground predators down the trails in turn, or down the one their group picks', () => {
+    const battle = createBattle(a, { paths: [a, b], pondAt: { x: 900, y: -300 } });
+    expect(spawnEnemy(battle, 'raccoon').path).toBe(a);
+    expect(spawnEnemy(battle, 'raccoon').path).toBe(b);
+    expect(spawnEnemy(battle, 'raccoon').path).toBe(a);
+    expect(spawnEnemy(battle, 'fox', undefined, 1).path).toBe(b);
+    expect(spawnEnemy(battle, 'fox', undefined, 0).path).toBe(a);
+    // A turtle climbs out onto the nearest trail (the pond is beside trail b).
+    const turtle = spawnEnemy(battle, 'turtle');
+    expect(turtle.path.points[1]).toEqual({ x: 1000, y: -300 });
+  });
+
+  it("keep a boss's minions on the boss's own trail", () => {
+    const battle = createBattle(a, { paths: [a, b] });
+    spawnEnemy(battle, 'raccoon'); // so the turn-taking would otherwise send the next walker down trail b
+    const bandit = spawnEnemy(battle, 'bandit', undefined, 0);
+    bandit.distance = 500;
+    bandit.summonTime = 0;
+    const events = step(battle, 0.01);
+    const summoned = events.find((e) => e.type === 'summoned');
+    expect(summoned).toBeDefined();
+    if (summoned?.type === 'summoned') for (const minion of summoned.minions) expect(minion.path).toBe(a);
+  });
+
+  it('are just the one trail when nothing else is given', () => {
+    const battle = createBattle(a);
+    expect(battle.paths).toEqual([a]);
+    expect(spawnEnemy(battle, 'raccoon').path).toBe(a);
+    expect(spawnEnemy(battle, 'raccoon').path).toBe(a);
+  });
+});

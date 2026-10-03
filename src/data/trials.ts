@@ -111,6 +111,22 @@ export const TRIALS: Trial[][] = [
       noCraig: true,
     },
   ],
+  // Level 7: Two Trails
+  [
+    {
+      id: 'trailMix',
+      name: 'Trail Mix',
+      description: 'Only Potato and Chester are playing. Two trails, two problems!',
+      ducks: ['potato', 'chester'],
+      startingPeas: 1.3,
+    },
+    {
+      id: 'sixDucks',
+      name: 'Six Ducks',
+      description: 'Only six ducks can be out at once, to cover two trails. Choose well!',
+      maxDucks: 6,
+    },
+  ],
 ];
 
 /** The trial with this id, if there is one, and which level it's on. */

@@ -1,0 +1,416 @@
+{
+ "compressionlevel": -1,
+ "height": 18,
+ "infinite": false,
+ "layers": [
+  {
+   "draworder": "topdown",
+   "id": 1,
+   "name": "pond",
+   "objects": [
+    {
+     "ellipse": true,
+     "height": 80,
+     "id": 1,
+     "name": "pond",
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 160,
+     "x": 520,
+     "y": 290
+    }
+   ],
+   "opacity": 1,
+   "type": "objectgroup",
+   "visible": true,
+   "x": 0,
+   "y": 0
+  },
+  {
+   "draworder": "topdown",
+   "id": 2,
+   "name": "path",
+   "objects": [
+    {
+     "height": 0,
+     "id": 2,
+     "name": "trail 1",
+     "polyline": [
+      {
+       "x": 0,
+       "y": 0
+      },
+      {
+       "x": 280,
+       "y": 0
+      },
+      {
+       "x": 280,
+       "y": 230
+      },
+      {
+       "x": 520,
+       "y": 230
+      },
+      {
+       "x": 520,
+       "y": 390
+      },
+      {
+       "x": 800,
+       "y": 390
+      },
+      {
+       "x": 800,
+       "y": 150
+      },
+      {
+       "x": 1040,
+       "y": 150
+      },
+      {
+       "x": 1040,
+       "y": 50
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": -40,
+     "y": 250
+    },
+    {
+     "height": 0,
+     "id": 3,
+     "name": "trail 2",
+     "polyline": [
+      {
+       "x": 0,
+       "y": 0
+      },
+      {
+       "x": 0,
+       "y": 160
+      },
+      {
+       "x": 160,
+       "y": 160
+      },
+      {
+       "x": 160,
+       "y": 280
+      },
+      {
+       "x": 520,
+       "y": 280
+      },
+      {
+       "x": 520,
+       "y": 340
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 480,
+     "y": -40
+    }
+   ],
+   "opacity": 1,
+   "type": "objectgroup",
+   "visible": true,
+   "x": 0,
+   "y": 0
+  },
+  {
+   "draworder": "topdown",
+   "id": 3,
+   "name": "slots",
+   "objects": [
+    {
+     "height": 0,
+     "id": 4,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 330,
+     "y": 360
+    },
+    {
+     "height": 0,
+     "id": 5,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 160,
+     "y": 160
+    },
+    {
+     "height": 0,
+     "id": 6,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 360,
+     "y": 570
+    },
+    {
+     "height": 0,
+     "id": 7,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "hill",
+     "visible": true,
+     "width": 0,
+     "x": 650,
+     "y": 540
+    },
+    {
+     "height": 0,
+     "id": 8,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 860,
+     "y": 480
+    },
+    {
+     "height": 0,
+     "id": 9,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 760,
+     "y": 340
+    },
+    {
+     "height": 0,
+     "id": 10,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 880,
+     "y": 340
+    },
+    {
+     "height": 0,
+     "id": 11,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "water",
+     "visible": true,
+     "width": 0,
+     "x": 470,
+     "y": 340
+    },
+    {
+     "height": 0,
+     "id": 12,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 540,
+     "y": 200
+    },
+    {
+     "height": 0,
+     "id": 13,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 760,
+     "y": 170
+    },
+    {
+     "height": 0,
+     "id": 14,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 400,
+     "y": 150
+    },
+    {
+     "height": 0,
+     "id": 15,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 1080,
+     "y": 500
+    },
+    {
+     "height": 0,
+     "id": 16,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 1160,
+     "y": 440
+    },
+    {
+     "height": 0,
+     "id": 17,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 900,
+     "y": 640
+    },
+    {
+     "height": 0,
+     "id": 18,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 220,
+     "y": 600
+    }
+   ],
+   "opacity": 1,
+   "type": "objectgroup",
+   "visible": true,
+   "x": 0,
+   "y": 0
+  },
+  {
+   "draworder": "topdown",
+   "id": 4,
+   "name": "sky",
+   "objects": [
+    {
+     "height": 0,
+     "id": 19,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": -40,
+     "y": 60
+    },
+    {
+     "height": 0,
+     "id": 20,
+     "name": "",
+     "point": true,
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 640,
+     "y": -40
+    }
+   ],
+   "opacity": 1,
+   "type": "objectgroup",
+   "visible": true,
+   "x": 0,
+   "y": 0
+  },
+  {
+   "draworder": "topdown",
+   "id": 5,
+   "name": "mud",
+   "objects": [
+    {
+     "ellipse": true,
+     "height": 60,
+     "id": 21,
+     "name": "",
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 140,
+     "x": 550,
+     "y": 610
+    }
+   ],
+   "opacity": 1,
+   "type": "objectgroup",
+   "visible": true,
+   "x": 0,
+   "y": 0
+  },
+  {
+   "draworder": "topdown",
+   "id": 6,
+   "name": "brambles",
+   "objects": [
+    {
+     "ellipse": true,
+     "height": 56,
+     "id": 22,
+     "name": "",
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 100,
+     "x": 770,
+     "y": 212
+    }
+   ],
+   "opacity": 1,
+   "type": "objectgroup",
+   "visible": true,
+   "x": 0,
+   "y": 0
+  }
+ ],
+ "nextlayerid": 7,
+ "nextobjectid": 23,
+ "orientation": "orthogonal",
+ "renderorder": "right-down",
+ "tiledversion": "1.11.2",
+ "tileheight": 40,
+ "tilesets": [],
+ "tilewidth": 40,
+ "type": "map",
+ "version": "1.10",
+ "width": 32
+}

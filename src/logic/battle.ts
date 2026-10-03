@@ -6,7 +6,7 @@ import { VARIANTS, type VariantKind } from '../data/variants';
 import { DEFAULT_TARGETING, type Targeting } from '../data/targeting';
 import { CHASES, PECKING_LOOP } from '../data/synergy';
 import { TILES, type NestKind } from '../data/tiles';
-import { distance, inEllipse, type Ellipse, type Point } from './geometry';
+import { closestPointOnPolyline, distance, inEllipse, type Ellipse, type Point } from './geometry';
 import { joinPath, makePath, pointAt, type Path } from './path';
 import { BOSS_PRICKLE } from '../data/perks';
 import { POWER_EFFECTS } from '../data/powers';
@@ -103,8 +103,12 @@ export interface Fountain {
 }
 
 export interface Battle {
-  /** The ground path, ending at the duck house. */
+  /** The first ground trail, ending at the duck house (the same as paths[0]). */
   path: Path;
+  /** Every ground trail. Predators take turns down them unless their spawn group picks one. */
+  paths: Path[];
+  /** How many ground predators have arrived (to take turns down the trails). */
+  walkersSpawned: number;
   /** Where flyers enter; they take turns. */
   sky: Point[];
   /** Where predators that come from the pond climb out (the middle of the pond). */
@@ -145,6 +149,8 @@ export type BattleEvent =
   | { type: 'reachedHouse'; enemy: Enemy };
 
 export interface BattleOptions {
+  /** Every ground trail (the first is `path`); leave out for just the one. */
+  paths?: Path[];
   sky?: Point[];
   mud?: Ellipse[];
   brambles?: Ellipse[];
@@ -157,6 +163,8 @@ export interface BattleOptions {
 export function createBattle(path: Path, options: BattleOptions = {}): Battle {
   return {
     path,
+    paths: options.paths?.length ? options.paths : [path],
+    walkersSpawned: 0,
     sky: options.sky ?? [],
     pond: options.pondAt,
     enemies: [],
@@ -180,11 +188,15 @@ export function housePosition(battle: Battle): Point {
   return battle.path.points[battle.path.points.length - 1]!;
 }
 
-export function spawnEnemy(battle: Battle, kind: EnemyKind, variant?: VariantKind): Enemy {
+/**
+ * A predator arrives at the start of its trail (or flies in from the sky, or climbs out of the
+ * pond). `trail` picks which trail on a map with several; otherwise ground predators take turns.
+ */
+export function spawnEnemy(battle: Battle, kind: EnemyKind, variant?: VariantKind, trail?: number): Enemy {
   const stats = ENEMIES[kind];
   // Bosses are themselves; a twist on any other predator changes its health and speed on arrival.
   const twist = variant && !stats.boss ? VARIANTS[variant] : undefined;
-  let path = battle.path;
+  let path = battle.paths[(trail ?? battle.walkersSpawned++) % battle.paths.length]!;
   if (stats.flying) {
     const house = housePosition(battle);
     // Flyers take turns at the sky points. A flying boss always takes the longest way in,
@@ -198,7 +210,9 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind, variant?: VariantKin
     path = makePath([from, house]);
   } else if (stats.fromPond) {
     if (!battle.pond) throw new Error(`A ${stats.name} needs a pond to climb out of: add a "pond" layer to the map`);
-    path = joinPath(battle.pond, battle.path);
+    // It cuts across to the nearest trail.
+    const pond = battle.pond;
+    path = joinPath(pond, battle.paths.reduce((near, trail) => (distanceToPath(pond, trail) < distanceToPath(pond, near) ? trail : near)));
   }
   const maxHp = stats.maxHp * battle.enemyHealth * (twist?.health ?? 1);
   const enemy: Enemy = {
@@ -396,6 +410,11 @@ export function damageTo(enemy: Enemy, damage: number): number {
   return armor > 0 ? Math.max(1, damage - armor) : damage;
 }
 
+/** How far a point is from the nearest bit of a trail. */
+function distanceToPath(from: Point, path: Path): number {
+  return distance(from, closestPointOnPolyline(from, path.points));
+}
+
 /** Pixels left before a predator reaches the house. */
 function remaining(enemy: Enemy): number {
   return enemy.path.length - enemy.distance;
@@ -568,8 +587,10 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     if (enemy.summonTime > 0) continue;
     enemy.summonTime = summons.every;
     const minions: Enemy[] = [];
+    // Ground minions appear on the boss's own trail, just behind it.
+    const trail = battle.paths.indexOf(enemy.path);
     for (let i = 0; i < summons.count; i++) {
-      const minion = spawnEnemy(battle, summons.enemy);
+      const minion = spawnEnemy(battle, summons.enemy, undefined, trail >= 0 ? trail : undefined);
       if (!isFlying(minion)) minion.distance = Math.max(0, enemy.distance - 50 - i * 40);
       minions.push(minion);
     }

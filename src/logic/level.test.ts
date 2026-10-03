@@ -26,8 +26,11 @@ function areasOverlap(a: Area, b: Area): boolean {
 for (const [index, info] of LEVELS.entries()) {
   describe(`level ${index + 1}: ${info.name}`, () => {
     const level = parseLevel(info.map);
-    const path = makePath(level.path);
-    const samples = Array.from({ length: Math.ceil(path.length / 5) + 1 }, (_, i) => pointAt(path, i * 5));
+    // Points every 5 px along every trail.
+    const samples = level.paths.flatMap((trail) => {
+      const path = makePath(trail);
+      return Array.from({ length: Math.ceil(path.length / 5) + 1 }, (_, i) => pointAt(path, i * 5));
+    });
     const door = level.path[level.path.length - 1]!;
 
     it('is the size of the game screen', () => {
@@ -40,9 +43,11 @@ for (const [index, info] of LEVELS.entries()) {
       expect(level.ponds.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('starts the path off-screen, so predators walk in', () => {
-      const start = level.path[0]!;
-      expect(start.x < 0 || start.x > 1280 || start.y < 0 || start.y > 720).toBe(true);
+    it('starts every path off-screen, so predators walk in', () => {
+      for (const trail of level.paths) {
+        const start = trail[0]!;
+        expect(start.x < 0 || start.x > 1280 || start.y < 0 || start.y > 720).toBe(true);
+      }
     });
 
     it('has places for hawks to fly in from, if any wave has hawks', () => {
@@ -99,7 +104,7 @@ for (const [index, info] of LEVELS.entries()) {
       }
     });
 
-    it('puts every mud and bramble patch on the path, and keeps nests out of them', () => {
+    it('puts every mud and bramble patch on a path, and keeps nests out of them', () => {
       for (const patch of [...level.mud, ...level.brambles]) {
         expect(samples.some((p) => inEllipse(p, patch)), `patch at ${JSON.stringify(patch.center)}`).toBe(true);
         for (const slot of level.slots) expect(inEllipse(slot, patch), JSON.stringify(slot)).toBe(false);
@@ -118,8 +123,10 @@ for (const [index, info] of LEVELS.entries()) {
 for (const [index, info] of LEVELS.entries()) {
   describe(`level ${index + 1} as the Endless Pond: ${info.name}`, () => {
     const level = parseLevel(info.map);
-    const path = makePath(level.path);
-    const samples = Array.from({ length: Math.ceil(path.length / 5) + 1 }, (_, i) => pointAt(path, i * 5));
+    const samples = level.paths.flatMap((trail) => {
+      const path = makePath(trail);
+      return Array.from({ length: Math.ceil(path.length / 5) + 1 }, (_, i) => pointAt(path, i * 5));
+    });
     const door = level.path[level.path.length - 1]!;
 
     it('keeps nests out from under the Pond Perks counter and the fix-the-duck-house button', () => {
@@ -138,8 +145,8 @@ for (const [index, info] of LEVELS.entries()) {
         for (const area of [...HUD_AREAS, ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, houseBox(door)]) {
           expect(circleHitsArea(nest, NEST_RADIUS, area), JSON.stringify(nest)).toBe(false);
         }
-        // Near enough to the path to be useful.
-        expect(distance(nest, closestPointOnPolyline(nest, level.path))).toBeLessThan(200);
+        // Near enough to a path to be useful.
+        expect(Math.min(...level.paths.map((trail) => distance(nest, closestPointOnPolyline(nest, trail))))).toBeLessThan(200);
       });
     });
   });
@@ -171,5 +178,37 @@ describe('parseLevel', () => {
   it('explains what is missing when a layer is absent', () => {
     const map = JSON.stringify({ width: 1, height: 1, tilewidth: 40, tileheight: 40, layers: [] });
     expect(() => parseLevel(map)).toThrow('object layer named "path"');
+  });
+
+  const twoTrails = (secondEnd: { x: number; y: number }) =>
+    JSON.stringify({
+      width: 32,
+      height: 18,
+      tilewidth: 40,
+      tileheight: 40,
+      layers: [
+        {
+          name: 'path',
+          type: 'objectgroup',
+          objects: [
+            { x: 0, y: 0, width: 0, height: 0, polyline: [{ x: -40, y: 100 }, { x: 500, y: 100 }] },
+            { x: 300, y: 0, width: 0, height: 0, polyline: [{ x: 0, y: -40 }, { x: secondEnd.x - 300, y: secondEnd.y }] },
+          ],
+        },
+        { name: 'slots', type: 'objectgroup', objects: [{ x: 50, y: 300, width: 0, height: 0, point: true }] },
+      ],
+    });
+
+  it('reads several trails, snapping their ends to the duck house', () => {
+    const level = parseLevel(twoTrails({ x: 505, y: 96 }));
+    expect(level.paths).toEqual([
+      [{ x: -40, y: 100 }, { x: 500, y: 100 }],
+      [{ x: 300, y: -40 }, { x: 500, y: 100 }],
+    ]);
+    expect(level.path).toBe(level.paths[0]);
+  });
+
+  it("complains when a trail doesn't end at the duck house", () => {
+    expect(() => parseLevel(twoTrails({ x: 700, y: 300 }))).toThrow('every path has to end at the duck house');
   });
 });

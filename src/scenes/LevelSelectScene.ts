@@ -17,10 +17,10 @@ export interface LevelSelectSceneData {
   difficulty: Difficulty;
 }
 
-// Two rows of three wide cards: a little map on the left, the level's number, stars, and
-// trial ribbons on the right. Tap one to open the level sheet.
-const CARD = { width: 340, height: 196, spacing: 380, rows: [268, 482] };
-const MAP = { width: 160, height: 90 }; // 16:9, like the real map
+// Two rows of four cards (room for eight levels): a little map on the left, the level's
+// number, stars, and trial ribbons on the right. Tap one to open the level sheet.
+const CARD = { width: 290, height: 170, spacing: 305, perRow: 4, rows: [250, 438] };
+const MAP = { width: 136, height: 76 }; // 16:9, like the real map
 const MODE_BUTTON = { width: 430, height: 84, gap: 24 }; // Daily Challenge and Endless Pond, side by side
 // The level sheet: a big map, stars and best score, a Play button, and the level's trials.
 // Its height grows by a row for each trial (three fit).
@@ -56,18 +56,18 @@ export class LevelSelectScene extends Phaser.Scene {
       .text(cx, 128, DIFFICULTIES[this.difficulty].label, textStyle(28, { color: chipColor, stroke: '#ffffff', strokeThickness: 6 }))
       .setOrigin(0.5);
 
-    // Rows of three cards (CARD.rows has room for two rows: six levels).
+    // Rows of cards (CARD.rows has room for two rows: eight levels).
     LEVELS.forEach((info, i) => {
-      const row = Math.floor(i / 3);
-      const inRow = Math.min(3, LEVELS.length - row * 3);
-      const col = i % 3;
+      const row = Math.floor(i / CARD.perRow);
+      const inRow = Math.min(CARD.perRow, LEVELS.length - row * CARD.perRow);
+      const col = i % CARD.perRow;
       const x = cx + (col - (inRow - 1) / 2) * CARD.spacing;
       const y = CARD.rows[row] ?? CARD.rows[CARD.rows.length - 1]!;
       this.drawLevelCard(x, y, i, parseLevel(info.map), isUnlocked(progress, this.difficulty, i));
     });
 
-    this.drawDailyButton(cx - (MODE_BUTTON.width + MODE_BUTTON.gap) / 2, 648, progress);
-    this.drawEndlessButton(cx + (MODE_BUTTON.width + MODE_BUTTON.gap) / 2, 648, progress);
+    this.drawDailyButton(cx - (MODE_BUTTON.width + MODE_BUTTON.gap) / 2, 620, progress);
+    this.drawEndlessButton(cx + (MODE_BUTTON.width + MODE_BUTTON.gap) / 2, 620, progress);
 
     // Back to the title screen.
     drawBackButton(this, () => fadeToScene(this, 'TitleScene'));
@@ -79,16 +79,17 @@ export class LevelSelectScene extends Phaser.Scene {
   private drawLevelCard(x: number, y: number, index: number, level: Level, unlocked: boolean): void {
     const name = LEVELS[index]!.name;
     const stars = this.progress.levels[this.difficulty][index]?.stars ?? 0;
-    const card = drawCard(this.add.graphics(), CARD.width, CARD.height, { radius: 24, borderWidth: 4 });
-    const parts: Phaser.GameObjects.GameObject[] = [card, this.drawMiniMap(level, -76, -30, MAP)];
+    const card = drawCard(this.add.graphics(), CARD.width, CARD.height, { radius: 22, borderWidth: 4 });
+    const parts: Phaser.GameObjects.GameObject[] = [card, this.drawMiniMap(level, -64, -24, MAP)];
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
-    parts.push(this.add.text(86, -62, `Level ${index + 1}`, textStyle(20, { ...ink, color: '#8a7f85' })).setOrigin(0.5));
-    parts.push(this.add.text(0, 56, name, textStyle(30, { ...ink, weight: '700' })).setOrigin(0.5));
+    const right = 72; // the stars and ribbons sit in a column to the right of the map
+    parts.push(this.add.text(right, -56, `Level ${index + 1}`, textStyle(18, { ...ink, color: '#8a7f85' })).setOrigin(0.5));
+    parts.push(this.add.text(0, 50, name, textStyle(name.length > 12 ? 22 : 26, { ...ink, weight: '700' })).setOrigin(0.5));
     for (let s = 0; s < 3; s++) {
       parts.push(
         this.add
-          .image(86 + (s - 1) * 40, -26, 'star')
-          .setDisplaySize(36, 36)
+          .image(right + (s - 1) * 34, -24, 'star')
+          .setDisplaySize(32, 32)
           .setTint(s < stars ? 0xffd23f : 0xd8d2cc),
       );
     }
@@ -98,8 +99,8 @@ export class LevelSelectScene extends Phaser.Scene {
       const won = hasWonTrial(this.progress, this.difficulty, trial.id);
       parts.push(
         this.add
-          .image(86 + (t - (trials.length - 1) / 2) * 34, 10, 'ribbon')
-          .setDisplaySize(30, 30)
+          .image(right + (t - (trials.length - 1) / 2) * 30, 8, 'ribbon')
+          .setDisplaySize(26, 26)
           .setTint(won ? COLORS.pink : 0xd8d2cc)
           .setAlpha(won ? 1 : 0.7),
       );
@@ -111,7 +112,7 @@ export class LevelSelectScene extends Phaser.Scene {
         this.add
           .graphics()
           .fillStyle(0x2b2233, 0.45)
-          .fillRoundedRect(-CARD.width / 2, -CARD.height / 2, CARD.width, CARD.height, 24),
+          .fillRoundedRect(-CARD.width / 2, -CARD.height / 2, CARD.width, CARD.height, 22),
       );
       const lock = this.add
         .graphics()
@@ -430,10 +431,13 @@ export class LevelSelectScene extends Phaser.Scene {
       const c = clamp(pond.center);
       g.fillStyle(0x4aa3df).fillEllipse(c.x, c.y, pond.radiusX * 2 * scale, pond.radiusY * 2 * scale);
     }
+    for (const trail of level.paths) {
+      const path = trail.map(clamp);
+      g.lineStyle(5 * k, 0xc99d64).strokePoints(path);
+      g.fillStyle(0xc99d64);
+      path.forEach((p) => g.fillCircle(p.x, p.y, 2.5 * k));
+    }
     const path = level.path.map(clamp);
-    g.lineStyle(5 * k, 0xc99d64).strokePoints(path);
-    g.fillStyle(0xc99d64);
-    path.forEach((p) => g.fillCircle(p.x, p.y, 2.5 * k));
     g.fillStyle(0xf3d480);
     level.slots.map(clamp).forEach((p) => g.fillCircle(p.x, p.y, 2.5 * k));
     const door = path[path.length - 1]!;

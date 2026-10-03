@@ -13,7 +13,9 @@ game mechanics come from how they actually behave.
 
 - **Engine:** Phaser 3 + TypeScript
 - **Build:** Vite (fast hot reload, so kids see changes instantly)
-- **Maps:** Tiled (`.tmj` JSON). The kids can design levels visually, no code needed.
+- **Maps:** Tiled (`.tmj` JSON). The kids can design levels visually, no code needed. A map can
+  have several trails (polylines in the `path` layer) that all end at the duck house; spawn
+  groups pick one with `path`, or take turns. See `maps/README.md`.
 - **Tests:** Vitest, for game logic only (damage, waves, synergy). Keep rendering out of tests.
 - **Hosting:** Cloudflare Workers with static assets, configured in `wrangler.jsonc`, with
   www.duckdefense.com as the main custom domain. A Cloudflare redirect rule sends the bare
@@ -132,6 +134,11 @@ flyers. `enemyStats(enemy)` in `src/logic/battle.ts` is the stats-with-twist loo
   yet), Craig pops up beside her button with a tip that fits: call her when hearts are low,
   the duck that beats the predator that got in, then general tips. Each hint shows once per
   visit. Words in `src/data/hints.ts`, rules in `src/logic/hints.ts`.
+- **The balance simulator** (`src/logic/simulate.ts`) is the floor every level must clear: it
+  fills the best-coverage nests with one kind of duck (or a team taking turns), upgrades with
+  spare peas, and calls Craig when the boss (or anything, if there's no boss) is nearly at the
+  door. It never uses flock powers unless asked. `npm test` runs it on every level, trial, and
+  difficulty, so a change to a map or a number that makes something unwinnable fails loudly.
 - **Endless Pond:** Waves on any map you've opened (pick one from the Endless sheet on the level
   select screen) until the hearts run out; the score is waves survived, with a leaderboard per map
   (the Endless tab has a pill for each). Waves are built by a formula (no randomness,
@@ -218,9 +225,11 @@ When adding a feature, prefer a design where the tunable part lives in a data fi
   missing uses a built-in placeholder), six levels in two worlds (`src/data/levels.ts`), and
   the Night Bandit boss fight at the end of level 3. World 2 (Hawk Hill, Fox Run, Snapper
   Swamp) ends each level with one of the other bosses: the Storm Hawk, the Silver Fox, and
-  Old Snapper. Levels 2 to 6 were designed by Claude; the kids can redesign them or add
-  their own in Tiled. The level select screen has room for six: a seventh needs a third row
-  or pages (`CARD.rows` in `LevelSelectScene.ts`). (Art was overhauled into polished vector art
+  Old Snapper. Level 7, Two Trails, is the first map with two ways in (a serpentine from the
+  west and a short zigzag from the north); the Night Bandit takes the long way. Levels 2 to 7
+  were designed by Claude; the kids can redesign them or add their own in Tiled. The level
+  select screen shows two rows of four cards, so there's room for one more level; a ninth
+  needs pages (`CARD` in `LevelSelectScene.ts`). (Art was overhauled into polished vector art
   instead of the kids' drawings.)
 - **M5: Polish.** Title screen, level select, save progress in localStorage, mobile touch
   support, and a public leaderboard on Workers + D1 (typed names, profanity-filtered,

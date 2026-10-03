@@ -53,7 +53,7 @@ import {
   type PreviewEntry,
 } from '../logic/game';
 import { shortNumber } from '../logic/display';
-import { closestPointOnPolyline, type Ellipse, type Point } from '../logic/geometry';
+import { closestPointOnPolyline, distance, type Ellipse, type Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
 import { isFinalChoice, nameAt, nextUpgrade, statsAt, upgradeOptions } from '../logic/upgrades';
 import { challengeSettings, dailyFor } from '../logic/daily';
@@ -449,8 +449,10 @@ export class GameScene extends Phaser.Scene {
     const seed = 11 + this.levelIndex * 100;
     drawGrass(this, seed);
     drawOutskirts(this, seed + 3);
-    drawPath(this, this.level.path, seed + 1);
-    drawPathEntrance(this, this.level.path, seed + 4);
+    this.level.paths.forEach((trail, i) => {
+      drawPath(this, trail, seed + 1 + i * 7);
+      drawPathEntrance(this, trail, seed + 4 + i * 7);
+    });
     this.level.ponds.forEach((pond, i) => drawPond(this, pond, seed + 9 + i));
     this.level.mud.forEach((patch, i) => drawMud(this, patch, seed + 20 + i));
     this.level.brambles.forEach((patch, i) => drawBrambles(this, patch, seed + 30 + i));
@@ -494,7 +496,7 @@ export class GameScene extends Phaser.Scene {
     scatterDecor(
       this,
       // (The Endless Pond keeps bushes and rocks off the spots where the New Nests boss reward goes.)
-      { path: this.level.path, slots: [...this.level.slots, ...this.bonusNests], ponds: this.level.ponds, house: door, blocked: HUD_AREAS },
+      { paths: this.level.paths, slots: [...this.level.slots, ...this.bonusNests], ponds: this.level.ponds, house: door, blocked: HUD_AREAS },
       seed + 2,
     );
   }
@@ -1149,9 +1151,12 @@ export class GameScene extends Phaser.Scene {
     if (kind) this.floatText({ x: at.x, y: at.y - 90 }, `${TILES.nests[kind].name}: ${TILES.nests[kind].description}!`, '#c8f59a');
   }
 
-  /** Ducks face the nearest bit of path. */
+  /** Ducks face the nearest bit of any trail. */
   private facesLeft(at: Point): boolean {
-    return closestPointOnPolyline(at, this.level.path).x < at.x;
+    const nearest = this.level.paths
+      .map((trail) => closestPointOnPolyline(at, trail))
+      .reduce((best, p) => (distance(at, p) < distance(at, best) ? p : best));
+    return nearest.x < at.x;
   }
 
   private onDuckTap(duckId: number): void {

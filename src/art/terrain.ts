@@ -152,7 +152,8 @@ export function drawPond(scene: Phaser.Scene, pond: Ellipse, seed: number): void
 }
 
 export interface DecorAvoid {
-  path?: Point[];
+  /** Every trail (or just the one). */
+  paths?: Point[][];
   slots?: Point[];
   ponds?: Ellipse[];
   house?: Point;
@@ -164,7 +165,7 @@ export interface DecorAvoid {
 export function scatterDecor(scene: Phaser.Scene, avoid: DecorAvoid, seed: number): void {
   const rng = seededRandom(seed);
   const isClear = (p: Point, margin: number) => {
-    if (avoid.path && distance(p, closestPointOnPolyline(p, avoid.path)) < 40 + margin) return false;
+    if (avoid.paths?.some((path) => distance(p, closestPointOnPolyline(p, path)) < 40 + margin)) return false;
     if (avoid.slots?.some((s) => distance(p, s) < 48 + margin)) return false;
     if (avoid.house && distance(p, avoid.house) < 100 + margin) return false;
     for (const pond of avoid.ponds ?? []) {

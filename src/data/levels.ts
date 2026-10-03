@@ -4,7 +4,8 @@ import level3 from '../../maps/level3.tmj?raw';
 import level4 from '../../maps/level4.tmj?raw';
 import level5 from '../../maps/level5.tmj?raw';
 import level6 from '../../maps/level6.tmj?raw';
-import { LEVEL1_WAVES, LEVEL2_WAVES, LEVEL3_WAVES, LEVEL4_WAVES, LEVEL5_WAVES, LEVEL6_WAVES, type Wave } from './waves';
+import level7 from '../../maps/level7.tmj?raw';
+import { LEVEL1_WAVES, LEVEL2_WAVES, LEVEL3_WAVES, LEVEL4_WAVES, LEVEL5_WAVES, LEVEL6_WAVES, LEVEL7_WAVES, type Wave } from './waves';
 
 // The levels, in the order you play them. To add one: make a map in maps/ with Tiled
 // (see maps/README.md), write its waves in waves.ts, and add it to the end of this list.
@@ -23,4 +24,5 @@ export const LEVELS: LevelInfo[] = [
   { name: 'Hawk Hill', map: level4, waves: LEVEL4_WAVES },
   { name: 'Fox Run', map: level5, waves: LEVEL5_WAVES },
   { name: 'Snapper Swamp', map: level6, waves: LEVEL6_WAVES },
+  { name: 'Two Trails', map: level7, waves: LEVEL7_WAVES },
 ];

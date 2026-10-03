@@ -11,6 +11,9 @@ export interface SpawnGroup {
   every: number;
   after?: number;
   variant?: VariantKind; // a twist on them, like 'armored' (see src/data/variants.ts)
+  // On a map with more than one trail: which one they walk (0 = the first polyline in the
+  // map's path layer). Leave it out and they take turns down every trail.
+  path?: number;
 }
 
 // Calling the next wave early: once every predator in a wave has shown up, you can send the
@@ -406,6 +409,81 @@ export const LEVEL6_WAVES: Wave[] = [
       { enemy: 'turtle', count: 3, every: 5, after: 2 },
       { enemy: 'hawk', count: 4, every: 2, after: 6 },
       { enemy: 'oldSnapper', count: 1, every: 1, after: 8 },
+    ],
+    bonusPeas: 0,
+  },
+];
+
+// Two Trails: the first map with two ways in. A long winding trail from the west and a short
+// quick one from the north meet at the duck house. Groups with no `path` take turns down both;
+// `path: 1` sends a group down the quick north trail on purpose.
+export const LEVEL7_WAVES: Wave[] = [
+  { time: 'day', groups: [{ enemy: 'raccoon', count: 3, every: 5, path: 0 }], bonusPeas: 90 },
+  {
+    time: 'day',
+    groups: [
+      { enemy: 'raccoon', count: 4, every: 2.5, path: 0 },
+      { enemy: 'raccoon', count: 2, every: 4, after: 8, path: 1 }, // the north trail opens!
+    ],
+    bonusPeas: 100,
+  },
+  {
+    time: 'night',
+    groups: [
+      { enemy: 'raccoon', count: 7, every: 1.6 },
+      { enemy: 'hawk', count: 2, every: 3, after: 4 },
+    ],
+    bonusPeas: 110,
+  },
+  {
+    time: 'day',
+    groups: [
+      { enemy: 'raccoon', count: 8, every: 1.2, path: 0 },
+      { enemy: 'fox', count: 3, every: 1.8, after: 4, path: 1 }, // foxes sprint the short way
+      { enemy: 'skunk', count: 2, every: 5, after: 6 },
+    ],
+    bonusPeas: 110,
+  },
+  {
+    time: 'night',
+    groups: [
+      { enemy: 'raccoon', count: 10, every: 1.1 },
+      { enemy: 'mink', count: 2, every: 3, after: 3 },
+      { enemy: 'turtle', count: 1, every: 1, after: 5 },
+      { enemy: 'hawk', count: 3, every: 2.5, after: 4 },
+    ],
+    bonusPeas: 120,
+  },
+  {
+    time: 'day',
+    groups: [
+      { enemy: 'raccoon', count: 12, every: 1 },
+      { enemy: 'raccoon', count: 3, every: 2, after: 10, variant: 'rabid', path: 1 },
+      { enemy: 'fox', count: 4, every: 1.4, after: 4 },
+      { enemy: 'hawk', count: 4, every: 2.2, after: 3 },
+    ],
+    bonusPeas: 140,
+  },
+  {
+    time: 'night',
+    groups: [
+      { enemy: 'raccoon', count: 10, every: 1 },
+      { enemy: 'raccoon', count: 3, every: 2.5, after: 8, variant: 'armored', path: 0 },
+      { enemy: 'mink', count: 2, every: 3, after: 3 },
+      { enemy: 'skunk', count: 2, every: 5, after: 5 },
+      { enemy: 'turtle', count: 2, every: 7, after: 4 },
+    ],
+    bonusPeas: 160,
+  },
+  // The Night Bandit takes the long way while his friends pour down the short one.
+  {
+    time: 'night',
+    groups: [
+      { enemy: 'raccoon', count: 5, every: 1.8, path: 1 },
+      { enemy: 'raccoon', count: 4, every: 1.6, after: 2, path: 0 },
+      { enemy: 'fox', count: 3, every: 2, after: 6 },
+      { enemy: 'hawk', count: 3, every: 2.5, after: 4 },
+      { enemy: 'bandit', count: 1, every: 1, after: 10, path: 0 },
     ],
     bonusPeas: 0,
   },

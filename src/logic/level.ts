@@ -30,11 +30,20 @@ interface TiledMap {
   layers: TiledLayer[];
 }
 
+// Every path has to end at the duck house. Tiled's snapping isn't perfect, so ends this close
+// together count as the same spot (and are snapped to the first path's end).
+export const PATH_END_TOLERANCE = 12;
+
 export interface Level {
   width: number;
   height: number;
-  /** Predators walk from path[0] to the last point, where the duck house is. */
+  /**
+   * The first trail predators walk, from path[0] to the last point, where the duck house is.
+   * (The same as paths[0]; most of the game only needs to know where the house is.)
+   */
   path: Point[];
+  /** Every trail, each ending at the duck house. Spawn groups pick one (see src/data/waves.ts). */
+  paths: Point[][];
   /** Where ducks can be placed. */
   slots: Point[];
   ponds: Ellipse[];
@@ -53,14 +62,25 @@ export function parseLevel(tmjText: string): Level {
   const map = JSON.parse(tmjText) as TiledMap;
 
   const lines = requireLayer(map, 'path').filter((o) => o.polyline);
-  if (lines.length !== 1) {
-    throw new Error(`The "path" layer needs exactly one polyline, but has ${lines.length}`);
+  if (lines.length === 0) {
+    throw new Error('The "path" layer needs at least one polyline');
   }
-  const line = lines[0]!;
-  const path = line.polyline!.map((p) => ({ x: line.x + p.x, y: line.y + p.y }));
-  if (path.length < 2) {
-    throw new Error('The path polyline needs at least 2 points');
+  const paths = lines.map((line) => line.polyline!.map((p) => ({ x: line.x + p.x, y: line.y + p.y })));
+  for (const trail of paths) {
+    if (trail.length < 2) throw new Error('Every path polyline needs at least 2 points');
   }
+  // Every trail ends at the duck house: the first trail's end.
+  const house = paths[0]![paths[0]!.length - 1]!;
+  for (const [i, trail] of paths.entries()) {
+    const end = trail[trail.length - 1]!;
+    if (Math.hypot(end.x - house.x, end.y - house.y) > PATH_END_TOLERANCE) {
+      throw new Error(
+        `Path ${i + 1} ends at (${end.x}, ${end.y}) but the duck house is at (${house.x}, ${house.y}): every path has to end at the duck house`,
+      );
+    }
+    trail[trail.length - 1] = { ...house };
+  }
+  const path = paths[0]!;
 
   const slotObjects = requireLayer(map, 'slots').filter((o) => o.point);
   const slots = slotObjects.map((o) => ({ x: o.x, y: o.y }));
@@ -93,6 +113,7 @@ export function parseLevel(tmjText: string): Level {
     width: map.width * map.tilewidth,
     height: map.height * map.tileheight,
     path,
+    paths,
     slots,
     ponds,
     sky,

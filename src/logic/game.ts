@@ -29,6 +29,8 @@ export type GamePhase = 'building' | 'wave' | 'won' | 'lost';
 
 export interface ScheduledSpawn {
   variant?: VariantKind;
+  /** Which trail it walks (index into the map's paths); missing means take turns. */
+  path?: number;
   time: number; // seconds after the wave starts
   enemy: EnemyKind;
 }
@@ -71,7 +73,9 @@ export interface Game {
 
 /** What the game needs from a level. */
 export interface GameMap {
+  /** The trail(s) predators walk, all ending at the duck house. `path` on its own means one trail. */
   path: Path;
+  paths?: Path[];
   sky?: Point[];
   /** Where the solar fountain is (leave out for no fountain). */
   fountainAt?: Point;
@@ -88,6 +92,7 @@ export function mapFromLevel(level: Level): GameMap {
   const pond = level.ponds[0]?.center;
   return {
     path: makePath(level.path),
+    paths: level.paths.map(makePath),
     sky: level.sky,
     fountainAt: pond,
     pondAt: pond,
@@ -117,6 +122,7 @@ export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Dif
   const settings = challengeSettings(difficulty, challenge);
   return {
     battle: createBattle(map.path, {
+      paths: map.paths,
       sky: map.sky,
       fountainAt: map.fountainAt,
       pondAt: map.pondAt,
@@ -341,7 +347,12 @@ export function scheduleWave(wave: Wave): ScheduledSpawn[] {
   const spawns: ScheduledSpawn[] = [];
   for (const group of wave.groups) {
     for (let i = 0; i < group.count; i++) {
-      spawns.push({ time: (group.after ?? 0) + i * group.every, enemy: group.enemy, ...(group.variant && { variant: group.variant }) });
+      spawns.push({
+        time: (group.after ?? 0) + i * group.every,
+        enemy: group.enemy,
+        ...(group.variant && { variant: group.variant }),
+        ...(group.path !== undefined && { path: group.path }),
+      });
     }
   }
   return spawns.sort((a, b) => a.time - b.time);
@@ -449,7 +460,7 @@ export function update(game: Game, dt: number): GameEvent[] {
   game.shieldTime = Math.max(0, game.shieldTime - dt);
   while (game.pending.length > 0 && game.pending[0]!.time <= game.waveTime) {
     const spawn = game.pending.shift()!;
-    events.push({ type: 'spawned', enemy: spawnEnemy(game.battle, spawn.enemy, spawn.variant) });
+    events.push({ type: 'spawned', enemy: spawnEnemy(game.battle, spawn.enemy, spawn.variant, spawn.path) });
   }
 
   const shielded = game.shieldTime > 0;

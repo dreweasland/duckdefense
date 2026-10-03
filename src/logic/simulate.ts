@@ -3,11 +3,14 @@
 import type { Challenge } from '../data/challenges';
 import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
+import { ENEMIES } from '../data/enemies';
+import type { Enemy } from './battle';
 import type { LevelInfo } from '../data/levels';
 import {
   buyDuck,
   canBuy,
   canUpgrade,
+  canUseBlessing,
   choosePerk,
   createGame,
   isOver,
@@ -28,14 +31,17 @@ import { bonusNestsFor } from './endless';
 import { canUsePower, usePower } from './powers';
 import { nextUpgrade } from './upgrades';
 
+/** The simulated player calls Craig when a predator is this close to the duck house. */
+const CRAIG_CALL_DISTANCE = 200;
+
 /** Slots sorted so the ones that can see the most of every predator route come first. */
-function bestSlots(info: LevelInfo, range: number): Point[] {
+export function bestSlots(info: LevelInfo, range: number): Point[] {
   const level = parseLevel(info.map);
   const house = level.path[level.path.length - 1]!;
   // The ground path, plus a hawk's line from each sky point.
   // Like a real player, care about the ground path first (most predators walk).
   const routes = [
-    { path: makePath(level.path), weight: 2 },
+    ...level.paths.map((trail) => ({ path: makePath(trail), weight: 2 })),
     ...level.sky.map((from) => ({ path: makePath([from, house]), weight: 1 })),
   ];
   const coverage = (slot: Point) => {
@@ -49,7 +55,7 @@ function bestSlots(info: LevelInfo, range: number): Point[] {
 }
 
 export interface Strategy {
-  /** Call Craig for the last wave. */
+  /** Call Craig during the last wave, once a predator is nearly at the duck house. */
   craig?: boolean;
   /**
    * How to spend spare peas on upgrades between waves:
@@ -129,11 +135,16 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | r
         break;
       }
     }
-    if (strategy.craig && game.waveIndex === game.waves.length - 1) useBlessing(game);
+    const lastWave = game.waveIndex === game.waves.length - 1;
+    // If a boss is coming, Craig's shield is saved for it.
+    const bossComing = game.waves[game.waveIndex]!.groups.some((g) => ENEMIES[g.enemy].boss);
     startWave(game);
     const dt = strategy.step ?? 1 / 30;
     for (let i = 0; i < 200_000 && game.phase === 'wave'; i++) {
       if (strategy.powers) for (const kind of DUCK_ORDER) if (canUsePower(game, kind)) usePower(game, kind);
+      // Like a player watching the door: call Craig when something (the boss, if there is one) is nearly in.
+      const atTheDoor = (e: Enemy) => e.path.length - e.distance < CRAIG_CALL_DISTANCE && (!bossComing || !!ENEMIES[e.kind].boss);
+      if (strategy.craig && lastWave && canUseBlessing(game) && game.battle.enemies.some(atTheDoor)) useBlessing(game);
       update(game, dt);
     }
   }
