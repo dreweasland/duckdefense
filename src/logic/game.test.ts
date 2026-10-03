@@ -22,6 +22,7 @@ import {
   setTargeting,
   wavePreview,
   killPeas,
+  jumpToWave,
   sellValue,
   refundFor,
   scorePeas,
@@ -33,6 +34,7 @@ import {
 } from './game';
 import { makePath } from './path';
 import { VARIANTS } from '../data/variants';
+import { SANDBOX } from '../data/sandbox';
 
 // A short straight path so predators arrive quickly.
 const path = makePath([{ x: 0, y: 0 }, { x: 200, y: 0 }]);
@@ -433,5 +435,29 @@ describe('predator variants in waves', () => {
     const game = createGame({ path }, [twisted], 'easy');
     expect(killPeas(game, { kind: 'raccoon', variant: 'armored' })).toBe(Math.round(ENEMIES.raccoon.peas * VARIANTS.armored.peas));
     expect(killPeas(game, { kind: 'raccoon' })).toBe(ENEMIES.raccoon.peas);
+  });
+});
+
+describe('the Sandbox', () => {
+  const three: Wave[] = [oneRaccoon, oneRaccoon, oneRaccoon];
+
+  it('starts with heaps of peas and hearts, whatever the difficulty', () => {
+    const game = createGame({ path }, three, 'hard', undefined, false, true);
+    expect(game.peas).toBe(SANDBOX.peas);
+    expect(game.hearts).toBe(SANDBOX.hearts);
+    expect(game.sandbox).toBe(true);
+    expect(createGame({ path }, three, 'hard').sandbox).toBe(false);
+  });
+
+  it('lets you jump to any wave between waves, but not during one or outside the Sandbox', () => {
+    const game = createGame({ path }, three, 'easy', undefined, false, true);
+    expect(jumpToWave(game, 2)).toBe(true);
+    expect(game.waveIndex).toBe(2);
+    expect(jumpToWave(game, 3)).toBe(false);
+    expect(jumpToWave(game, -1)).toBe(false);
+    startWave(game);
+    expect(jumpToWave(game, 0)).toBe(false);
+    const plain = createGame({ path }, three, 'easy');
+    expect(jumpToWave(plain, 1)).toBe(false);
   });
 });

@@ -1026,3 +1026,35 @@ describe('maps with several trails', () => {
     expect(spawnEnemy(battle, 'raccoon').path).toBe(a);
   });
 });
+
+describe('boss phases', () => {
+  it('give a boss its second wind at half health: it shouts, speeds up, and its stats change', () => {
+    const battle = newBattle();
+    const bandit = spawnEnemy(battle, 'bandit');
+    const { phase } = ENEMIES.bandit;
+    const before = bandit.speed;
+    bandit.hp = bandit.maxHp * phase!.at + 1;
+    expect(step(battle, 0).some((e) => e.type === 'bossPhase')).toBe(false);
+    bandit.hp = bandit.maxHp * phase!.at;
+    const events = step(battle, 0);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'bossPhase', enemy: bandit }));
+    expect(bandit.phase).toBe(1);
+    expect(bandit.speed).toBeCloseTo(before * (phase!.speed ?? 1));
+    expect(enemyStats(bandit).summons).toEqual(phase!.summons);
+    // Only once.
+    expect(step(battle, 0).some((e) => e.type === 'bossPhase')).toBe(false);
+  });
+
+  it("crack Old Snapper's shell, and let Chester's quack stick to a winded Silver Fox", () => {
+    const pondBattle = createBattle(makePath([{ x: 0, y: 0 }, { x: 2000, y: 0 }]), { pondAt: { x: 500, y: 200 } });
+    const snapper = spawnEnemy(pondBattle, 'oldSnapper');
+    snapper.hp = snapper.maxHp / 2;
+    step(pondBattle, 0);
+    expect(enemyStats(snapper).armor).toBe(ENEMIES.oldSnapper.phase!.armor);
+    const battle = newBattle();
+    const fox = spawnEnemy(battle, 'silverFox');
+    fox.hp = fox.maxHp / 2;
+    step(battle, 0);
+    expect(enemyStats(fox).stunResistance).toBe(ENEMIES.silverFox.phase!.stunResistance);
+  });
+});

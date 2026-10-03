@@ -30,6 +30,7 @@ export interface ResultSceneData {
   peas?: number;
   daily?: string; // the Daily Challenge date, if that's what was played
   trial?: string; // the Level Trial's id, if that's what was played
+  sandbox?: boolean; // the Sandbox: nothing was saved
   newRibbon?: boolean; // a trial won for the first time on this difficulty
   streak?: number; // Daily Challenges won on days in a row, counting this one
   report?: Partial<Record<DuckKind, KindReport>>; // what each kind of duck did (the damage report)
@@ -57,10 +58,10 @@ export class ResultScene extends Phaser.Scene {
   create(): void {
     setupCamera(this);
     const cx = WORLD.width / 2;
-    const { won, difficulty, level, daily, trial } = this.result;
+    const { won, difficulty, level, daily, trial, sandbox } = this.result;
     const endless = this.result.endlessWaves !== undefined;
-    const hasNext = won && !daily && !trial && !endless && level + 1 < LEVELS.length;
-    const beatEverything = won && !daily && !trial && !hasNext;
+    const hasNext = won && !daily && !trial && !sandbox && !endless && level + 1 < LEVELS.length;
+    const beatEverything = won && !daily && !trial && !sandbox && !hasNext;
     const trialName = trial && findTrial(trial)?.trial.name;
 
     drawGrass(this, 41);
@@ -88,6 +89,10 @@ export class ResultScene extends Phaser.Scene {
         172,
         endless
           ? `Your best: ${this.result.endlessBest ?? 0} ${this.result.endlessBest === 1 ? 'wave' : 'waves'}`
+          : sandbox
+            ? won
+              ? 'Sandbox: nothing saved, but the flock had fun.'
+              : 'Sandbox: nothing saved. Try something else!'
           : trial && won
             ? `${trialName}: done! ${this.result.newRibbon ? 'A ribbon for the flock!' : 'The flock is so proud.'}`
             : trial
@@ -151,7 +156,7 @@ export class ResultScene extends Phaser.Scene {
 
     // Stars and score for a win.
     const stars = this.result.stars ?? 0;
-    if (won && !endless && !trial) {
+    if (won && !endless && !trial && !sandbox) {
       for (let s = 0; s < 3; s++) {
         const earned = s < stars;
         const star = this.add
@@ -222,7 +227,7 @@ export class ResultScene extends Phaser.Scene {
     }
 
     const go = (scene: string, data?: object) => fadeToScene(this, scene, data, 250);
-    const again: GameSceneData = { difficulty, level, daily, endless, trial };
+    const again: GameSceneData = { difficulty, level, daily, endless, trial, sandbox };
     const levels: LevelSelectSceneData = { difficulty };
     const y = 560;
     if (hasNext) {

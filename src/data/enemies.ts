@@ -45,6 +45,17 @@ export interface EnemyStats {
     time: number; // seconds the ducks stay scared
     every: number; // seconds before it can spray again
   };
+  // Bosses get a second wind: once its health drops to `at` (0.5 = half), the boss changes.
+  // Anything listed here replaces the boss's usual stat from then on; `speed` multiplies it.
+  phase?: {
+    at: number;
+    quip: string; // what it says
+    speed?: number;
+    armor?: number;
+    stunResistance?: number;
+    scares?: EnemyStats['scares'];
+    summons?: EnemyStats['summons'];
+  };
 }
 
 export const ENEMIES: Record<EnemyKind, EnemyStats> = {
@@ -144,6 +155,8 @@ export const ENEMIES: Record<EnemyKind, EnemyStats> = {
     pushResistance: 0.8, // too heavy to push far, so Potato can't pin it in place
     scares: { radius: 150, time: 1.2, when: 'whistling' },
     summons: { enemy: 'raccoon', count: 2, every: 7 },
+    // Half beaten, he gets cross: three friends per whistle.
+    phase: { at: 0.5, quip: 'Now I am MAD!', summons: { enemy: 'raccoon', count: 3, every: 8 } },
   },
 
   // Boss: a giant hawk. Only ducks that hit flyers can hurt it (Chester can still freeze it).
@@ -163,6 +176,8 @@ export const ENEMIES: Record<EnemyKind, EnemyStats> = {
     stunResistance: 0.3,
     scares: { radius: 120, time: 2, when: 'swooping' },
     summons: { enemy: 'hawk', count: 2, every: 6 },
+    // Half beaten, she screams louder: a wider scare and hawks called faster.
+    phase: { at: 0.5, quip: 'SCREEEEEEE!', scares: { radius: 180, time: 2, when: 'swooping' }, summons: { enemy: 'hawk', count: 2, every: 4 } },
   },
 
   // Boss: a fast, silvery fox who shrugs off nearly all of Chester's freeze and calls in
@@ -181,6 +196,8 @@ export const ENEMIES: Record<EnemyKind, EnemyStats> = {
     pushResistance: 0.8,
     stunResistance: 0.85,
     summons: { enemy: 'fox', count: 3, every: 6 },
+    // Half beaten, he's winded: faster in a panic, but now Chester's quack sticks.
+    phase: { at: 0.5, quip: 'Can... not... stop!', speed: 1.2, stunResistance: 0.3 },
   },
 
   // Boss: an enormous old snapping turtle from the pond. Its thick shell turns little pecks
@@ -200,5 +217,7 @@ export const ENEMIES: Record<EnemyKind, EnemyStats> = {
     pushResistance: 1,
     stunResistance: 0.5,
     fromPond: true,
+    // Half beaten, its shell cracks: thinner armor, but it's cross and comes on quicker.
+    phase: { at: 0.5, quip: 'CRACK! SNAP!!', speed: 1.2, armor: 3 },
   },
 };

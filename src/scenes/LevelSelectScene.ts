@@ -201,6 +201,14 @@ export class LevelSelectScene extends Phaser.Scene {
         height: 90,
       }),
     );
+    // The Sandbox: the same level with endless peas and hearts, for trying things out.
+    parts.push(
+      drawBigButton(this, rightX + 140, top + 296, 'Sandbox', COLORS.blue, COLORS.blueDark, () => play({ difficulty: this.difficulty, level: index, sandbox: true }), {
+        width: 220,
+        height: 44,
+        fontSize: 20,
+      }),
+    );
 
     // Below: the trials.
     const listTop = top + 336;

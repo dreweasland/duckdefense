@@ -22,6 +22,7 @@ import {
   callNextWave,
   canBuy,
   isFlockFull,
+  jumpToWave,
   canCallEarly,
   canSell,
   choosePerk,
@@ -152,6 +153,8 @@ export interface GameSceneData {
   endless?: boolean;
   /** Play a Level Trial (its id, see src/data/trials.ts) instead; the trial picks the level. */
   trial?: string;
+  /** The Sandbox: `level` with endless peas and hearts and any wave on tap. Nothing is saved. */
+  sandbox?: boolean;
 }
 
 interface DuckSprite {
@@ -231,6 +234,8 @@ export class GameScene extends Phaser.Scene {
   private daily?: { date: string; challenge: Challenge };
   /** The Level Trial being played, if any. */
   private trial?: Trial;
+  /** Whether this is the Sandbox (see src/data/sandbox.ts). */
+  private sandbox = false;
   /** Endless Pond: where the New Nests boss reward puts its nests on this map. */
   private bonusNests: Point[] = [];
   private level!: Level;
@@ -311,6 +316,7 @@ export class GameScene extends Phaser.Scene {
     const found = !daily && !this.endless && data.trial ? findTrial(data.trial) : undefined;
     this.trial = found?.trial;
     if (found) this.levelIndex = found.level;
+    this.sandbox = !daily && !this.endless && !found && !!data.sandbox;
   }
 
   /** The twist on the rules this game is played with: a Daily Challenge's or a Level Trial's. */
@@ -336,6 +342,7 @@ export class GameScene extends Phaser.Scene {
       this.difficulty,
       this.challenge,
       this.endless,
+      this.sandbox,
     );
     this.selected = DUCK_ORDER.find((kind) => isDuckAllowed(this.state, kind)) ?? 'sunny';
     this.duckSprites.clear();
@@ -397,9 +404,12 @@ export class GameScene extends Phaser.Scene {
       const trial = this.trial;
       this.time.delayedCall(350, () => this.showBanner(`Trial: ${trial.name}`));
       this.time.delayedCall(2500, () => this.showChallengeInfo(trial));
+    } else if (this.sandbox) {
+      this.time.delayedCall(350, () => this.showBanner(`Sandbox: ${info.name}`));
     } else {
       this.time.delayedCall(350, () => this.showBanner(`Level ${this.levelIndex + 1}: ${info.name}`));
     }
+    if (this.sandbox) this.drawWaveArrows();
     // A map with special tiles gets a key explaining them (once per map, per visit).
     const mapKey = this.endless ? 'endless' : String(this.levelIndex);
     if (this.tilesOnMap().length > 0 && !shownMapKeys.has(mapKey)) {
@@ -885,6 +895,35 @@ export class GameScene extends Phaser.Scene {
       });
       this.pickerCards.push({ kind, container, card });
     });
+  }
+
+  // --- Sandbox -------------------------------------------------------------
+
+  /** Sandbox: arrows under the counters to jump to any wave (between waves). */
+  private drawWaveArrows(): void {
+    const draw = (x: number, step: number, flip: boolean) => {
+      const arrow = this.add
+        .graphics()
+        .fillStyle(0xffffff)
+        .fillTriangle(flip ? 7 : -7, -10, flip ? 7 : -7, 10, flip ? -9 : 9, 0)
+        .lineStyle(3, COLORS.ink)
+        .strokeTriangle(flip ? 7 : -7, -10, flip ? 7 : -7, 10, flip ? -9 : 9, 0);
+      const button = drawRoundButton(this, x, 96, 20, COLORS.blue, COLORS.blueDark, [arrow]);
+      button.container.setDepth(DEPTH.hud);
+      button.hit.on('pointerdown', () => {
+        if (!jumpToWave(this.state, this.state.waveIndex + step)) {
+          playSound(this, 'noPeas');
+          this.tweens.add({ targets: button.container, x: x + 4, duration: 50, yoyo: true, repeat: 3 });
+          return;
+        }
+        playSound(this, 'tap');
+        this.previewKey = ''; // the coming-next chips show the new wave
+        this.refreshHud();
+      });
+    };
+    draw(660, -1, true);
+    draw(740, 1, false);
+    this.add.text(700, 96, 'wave', textStyle(16, { strokeThickness: 3 })).setOrigin(0.5).setDepth(DEPTH.hud);
   }
 
   // --- Flock powers --------------------------------------------------------
@@ -1927,6 +1966,9 @@ export class GameScene extends Phaser.Scene {
       case 'scared':
         this.showScared(event.duckIds, event.fearlessIds);
         break;
+      case 'bossPhase':
+        this.showBossPhase(event.enemy, event.position);
+        break;
       case 'sprayed':
         playSound(this, 'noPeas');
         this.fx.puff.explode(18, event.position.x, event.position.y - 20);
@@ -1967,9 +2009,12 @@ export class GameScene extends Phaser.Scene {
           level: this.levelIndex,
           daily: this.daily?.date,
           trial: this.trial?.id,
+          sandbox: this.sandbox,
           report: this.state.battle.report,
         };
-        if (this.endless) {
+        if (this.sandbox) {
+          // Nothing to save: the Sandbox is for trying things out.
+        } else if (this.endless) {
           // The score is waves survived (the one that got you doesn't count). Keep the best.
           const progress = loadProgress();
           result.endlessWaves = this.state.phase === 'won' ? this.state.waves.length : this.state.waveIndex;
@@ -2237,6 +2282,21 @@ export class GameScene extends Phaser.Scene {
       .setAlpha(0);
     this.tweens.add({ targets: container, alpha: 1, y: container.y - 6, duration: 400 });
     this.bossBar = { container, fill, face, name, enemyId: enemy.id };
+  }
+
+  /** A boss gets its second wind: it shouts, the screen shakes, and its big bar turns angry. */
+  private showBossPhase(enemy: Enemy, at: Point): void {
+    const { phase, name } = ENEMIES[enemy.kind];
+    playSound(this, 'bossArrives');
+    this.cameras.main.shake(400, 0.005);
+    if (phase) popSpeechBubble(this, at.x, at.y - 110, phase.quip, DEPTH.floatText);
+    this.showBanner(`${name} is getting angry!`);
+    const sprite = this.enemySprites.get(enemy.id);
+    if (sprite) {
+      this.fx.stars.explode(16, at.x, at.y - 40);
+      this.tweens.add({ targets: sprite.art, scale: sprite.art.scale * 1.25, duration: 160, yoyo: true, repeat: 2 });
+    }
+    if (this.bossBar?.enemyId === enemy.id) this.bossBar.fill.fillColor = 0xff9a2e;
   }
 
   private showSummon(bossId: number, minions: Enemy[]): void {
@@ -2625,7 +2685,7 @@ export class GameScene extends Phaser.Scene {
     if (isOver(this.state) || this.scene.isPaused()) return;
     playSound(this, 'tap');
     const data: PauseSceneData = {
-      again: { difficulty: this.difficulty, level: this.levelIndex, daily: this.daily?.date, endless: this.endless, trial: this.trial?.id },
+      again: { difficulty: this.difficulty, level: this.levelIndex, daily: this.daily?.date, endless: this.endless, trial: this.trial?.id, sandbox: this.sandbox },
       difficulty: this.difficulty,
       // Leaving an Endless Pond run part-way still counts the waves survived so far.
       onLeave: () => {

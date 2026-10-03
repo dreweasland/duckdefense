@@ -6,6 +6,7 @@ import { DUCKS, MOVE_SETTLE_TIME, SELL_REFUND, type DuckKind } from '../data/duc
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { VARIANTS, type VariantKind } from '../data/variants';
 import { restPowers } from './powers';
+import { SANDBOX } from '../data/sandbox';
 import type { Targeting } from '../data/targeting';
 import { EARLY_CALL, type Wave } from '../data/waves';
 import { createBattle, findDuck, placeDuck, spawnEnemy, step, type Battle, type BattleEvent, type Duck, type Enemy } from './battle';
@@ -42,6 +43,8 @@ export interface Game {
   enemyHealth: number;
   /** Seconds until each kind of duck's flock power is ready again (missing or 0 = ready). See src/logic/powers.ts. */
   powers: Partial<Record<DuckKind, number>>;
+  /** The Sandbox: endless peas and hearts, and any wave on tap (see src/data/sandbox.ts). */
+  sandbox: boolean;
   peas: number;
   hearts: number;
   /** The wave being fought, or the next one while building (0-based). */
@@ -114,12 +117,13 @@ export type GameEvent =
 /**
  * A new game. A Daily Challenge twist, if given, changes the peas, hearts, waves, and rules.
  * `endless` turns on the Endless Pond's extras: training ducks and fixing the duck house.
+ * `sandbox` starts with the Sandbox's peas and hearts instead of the difficulty's.
  */
-export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Difficulty, challenge?: Challenge, endless = false): Game {
+export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Difficulty, challenge?: Challenge, endless = false, sandbox = false): Game {
   if (waves.length === 0) {
     throw new Error('A level needs at least one wave');
   }
-  const settings = challengeSettings(difficulty, challenge);
+  const settings = { ...challengeSettings(difficulty, challenge), ...(sandbox && { startingPeas: SANDBOX.peas, hearts: SANDBOX.hearts }) };
   return {
     battle: createBattle(map.path, {
       paths: map.paths,
@@ -148,7 +152,15 @@ export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Dif
     repairs: 0,
     perks: {},
     powers: {},
+    sandbox,
   };
+}
+
+/** Sandbox only, between waves: skip ahead (or back) to any wave. */
+export function jumpToWave(game: Game, index: number): boolean {
+  if (!game.sandbox || game.phase !== 'building' || !Number.isInteger(index) || index < 0 || index >= game.waves.length) return false;
+  game.waveIndex = index;
+  return true;
 }
 
 /** Day or night for the wave being fought, or the next one while building. */

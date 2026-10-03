@@ -52,6 +52,8 @@ export interface Enemy {
   sinceHit: number;
   /** Seconds before a skunk can spray again. */
   sprayTime: number;
+  /** A boss's second wind: 0 until its health drops to its phase's `at`, then 1. */
+  phase: number;
 }
 
 /**
@@ -145,6 +147,8 @@ export type BattleEvent =
   | { type: 'summoned'; enemyId: number; minions: Enemy[] }
   /** A skunk was splashed and sprayed. */
   | { type: 'sprayed'; enemyId: number; position: Point }
+  /** A boss got its second wind (see `phase` in src/data/enemies.ts). */
+  | { type: 'bossPhase'; enemy: Enemy; position: Point }
   | { type: 'defeated'; enemy: Enemy; position: Point }
   | { type: 'reachedHouse'; enemy: Enemy };
 
@@ -237,6 +241,7 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind, variant?: VariantKin
     soakSpeed: 1,
     sinceHit: 0,
     sprayTime: 0,
+    phase: 0,
   };
   battle.enemies.push(enemy);
   return enemy;
@@ -294,17 +299,28 @@ export function isFlying(enemy: Enemy): boolean {
   return ENEMIES[enemy.kind].flying;
 }
 
-/** A predator's stats with its variant's twist on top: extra armor, or hiding in the grass. */
+/**
+ * A predator's stats with its variant's twist on top (extra armor, or hiding in the grass),
+ * or a boss's second wind once it's in its phase.
+ */
 export function enemyStats(enemy: Enemy): EnemyStats {
   const base = ENEMIES[enemy.kind];
   const twist = enemy.variant && VARIANTS[enemy.variant];
-  if (!twist) return base;
+  const phase = enemy.phase > 0 ? base.phase : undefined;
+  if (!twist && !phase) return base;
   return {
     ...base,
-    ...(twist.armor && { armor: (base.armor ?? 0) + twist.armor }),
-    ...(twist.sneaky && !base.sneaky && { sneaky: twist.sneaky }),
+    ...(twist?.armor && { armor: (base.armor ?? 0) + twist.armor }),
+    ...(twist?.sneaky && !base.sneaky && { sneaky: twist.sneaky }),
+    ...(phase?.armor !== undefined && { armor: phase.armor }),
+    ...(phase?.stunResistance !== undefined && { stunResistance: phase.stunResistance }),
+    ...(phase?.scares && { scares: phase.scares }),
+    ...(phase?.summons && { summons: phase.summons }),
   };
 }
+
+/** (The same as enemyStats, for spots where a local is already called that.) */
+const statsOf = (enemy: Enemy): EnemyStats => enemyStats(enemy);
 
 /** "Armored Raccoon", or just "Raccoon". */
 export function enemyName(enemy: Pick<Enemy, 'kind' | 'variant'>): string {
@@ -573,7 +589,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
 
   // 2. Swooping hawks scare the ducks they fly low over (each duck once per hawk).
   for (const enemy of battle.enemies) {
-    const scares = ENEMIES[enemy.kind].scares;
+    const scares = enemyStats(enemy).scares;
     if (scares?.when !== 'swooping') continue;
     const event = scareDucks(battle, enemy, enemyPosition(enemy), scares.radius, scares.time, true);
     if (event) events.push(event);
@@ -581,7 +597,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
 
   // 3. Bosses call for minions, which appear just behind them (not while stunned).
   for (const enemy of [...battle.enemies]) {
-    const summons = ENEMIES[enemy.kind].summons;
+    const summons = enemyStats(enemy).summons;
     if (!summons || enemy.stopTime > 0) continue;
     enemy.summonTime -= dt;
     if (enemy.summonTime > 0) continue;
@@ -596,7 +612,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     }
     events.push({ type: 'summoned', enemyId: enemy.id, minions });
     // The whistle scares nearby ducks too.
-    const scares = ENEMIES[enemy.kind].scares;
+    const scares = enemyStats(enemy).scares;
     if (scares?.when === 'whistling') {
       const event = scareDucks(battle, enemy, enemyPosition(enemy), scares.radius, scares.time, false);
       if (event) events.push(event);
@@ -618,7 +634,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
       const freezable = inRange.filter((e) => e.freezeRecovery === 0);
       if (freezable.length > 0) {
         for (const enemy of freezable) {
-          const enemyStats = ENEMIES[enemy.kind];
+          const enemyStats = statsOf(enemy);
           const stun = stats.alarmQuack.stunTime * (1 - (enemyStats.stunResistance ?? 0));
           enemy.stopTime = Math.max(enemy.stopTime, stun);
           enemy.freezeRecovery = stun * (1 + FREEZE_RECOVERY);
@@ -704,7 +720,7 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
         enemy.pushRecovery = WING_FLAP_RECOVERY;
         // Dizzy Flap (a boss reward): flapped predators see stars for a moment.
         if (battle.mods.flapStun > 0) {
-          enemy.stopTime = Math.max(enemy.stopTime, battle.mods.flapStun * (1 - (ENEMIES[enemy.kind].stunResistance ?? 0)));
+          enemy.stopTime = Math.max(enemy.stopTime, battle.mods.flapStun * (1 - (enemyStats(enemy).stunResistance ?? 0)));
         }
       }
       credit(battle, duck, 'special', blown.length);
@@ -713,7 +729,19 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     events.push({ type: 'attack', duckId: duck.id, target: targetPos, hitIds: hit.map((e) => e.id), wingFlap });
   }
 
-  // 6. Predators out of health run away.
+  // 6. A boss that's been knocked down to its phase gets its second wind.
+  for (const enemy of battle.enemies) {
+    const { phase } = ENEMIES[enemy.kind];
+    if (phase && enemy.phase === 0 && enemy.hp > 0 && enemy.hp <= enemy.maxHp * phase.at) {
+      enemy.phase = 1;
+      if (phase.speed) enemy.speed *= phase.speed;
+      // A new whistle rhythm starts now.
+      if (phase.summons) enemy.summonTime = Math.min(enemy.summonTime, phase.summons.every);
+      events.push({ type: 'bossPhase', enemy, position: enemyPosition(enemy) });
+    }
+  }
+
+  // 7. Predators out of health run away.
   for (const enemy of battle.enemies) {
     if (enemy.hp <= 0) {
       events.push({ type: 'defeated', enemy, position: enemyPosition(enemy) });
@@ -775,7 +803,7 @@ export function flapStorm(battle: Battle): PowerResult {
     result.duckIds.push(duck.id);
     for (const enemy of enemiesInRange(battle, duck.position, stats.range)) {
       if (result.hitIds.includes(enemy.id)) continue; // one gust per predator
-      const enemyStats = ENEMIES[enemy.kind];
+      const enemyStats = statsOf(enemy);
       enemy.distance = Math.max(0, enemy.distance - pushBack * (1 - (enemyStats.pushResistance ?? 0)));
       enemy.stopTime = Math.max(enemy.stopTime, stun * (1 - (enemyStats.stunResistance ?? 0)));
       enemy.pushRecovery = WING_FLAP_RECOVERY;

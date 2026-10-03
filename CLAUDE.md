@@ -74,6 +74,13 @@ everywhere: dialogue, tooltips, code comments.
 | **Boss: The Silver Fox** | Ground path | Fox Run and the Endless Pond. Fast, barely freezes, calls in foxes. Curtis's slow is the answer |
 | **Boss: Old Snapper** | From the pond | Snapper Swamp and the Endless Pond. A huge mossy turtle with a thick shell (little pecks do 1 damage) that can't be pushed back |
 
+**Boss phases:** every boss gets a second wind at half health (`phase` in `src/data/enemies.ts`):
+it shouts, the screen shakes, its bar turns orange, and some stats change from then on. The
+Night Bandit whistles up three raccoons at a time; the Storm Hawk's scare grows and she calls
+hawks faster; the Silver Fox panics (faster, but Chester's quack finally sticks); Old Snapper's
+shell cracks (thinner armor, but it comes on quicker). `enemyStats(enemy)` already folds the
+phase in.
+
 **Variants:** any spawn group can carry a `variant` (`src/data/variants.ts`) that twists the
 predator on arrival: **Armored** (+3 armor), **Rabid** (1.7x speed, 0.7x health), **Sneaky**
 (hides like a mink), **Regrowing** (heals when nothing has hit it for 1.5 s). They drop 1.5x
@@ -109,6 +116,9 @@ flyers. `enemyStats(enemy)` in `src/logic/battle.ts` is the stats-with-twist loo
   the numbers are in `src/data/tiles.ts`.
 - **Aiming:** Tap a duck to pick who it goes after: First, Strong, Last, or Near
   (`src/data/targeting.ts`).
+- **Sandbox:** On a level's sheet, under Play. The level with 9999 peas and 99 hearts and
+  arrows under the counters to jump to any wave (`src/data/sandbox.ts`), for trying things
+  out and for tuning a new wave. Nothing is saved or posted.
 - **Flock powers:** One big move per kind of duck, on a column of round buttons down the
   right edge (`src/data/powers.ts`, logic in `src/logic/powers.ts`, moves in
   `src/logic/battle.ts`). A power is ready once a duck of that kind is out and a wave is on,
