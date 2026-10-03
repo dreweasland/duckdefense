@@ -3,7 +3,7 @@ import { playSound } from '../audio/sfx';
 import { drawGrass, drawOutskirts } from '../art/terrain';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { HAT_ORDER, HATS, type HatKind } from '../data/hats';
-import { hatFor, isHatUnlocked, totalStars, wearHat } from '../logic/hats';
+import { hatFor, isHatUnlocked, totalEarned, wearHat } from '../logic/hats';
 import { loadProgress, saveProgress } from '../save';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
 import { duckWithHat } from '../ui/hats';
@@ -13,11 +13,11 @@ import { drawBackButton, drawCard, drawPill, drawSoundButton, fadeToScene, popSp
 
 const DUCK_CARD = { width: 180, height: 190, y: 230, spacing: 200 };
 const HAT_CARD = { width: 150, height: 124, spacing: 164, rows: [440, 580] };
-const PER_ROW = 6;
+const PER_ROW = 7; // 13 cards ("No hat" and 12 hats) in two rows
 
 export class WardrobeScene extends Phaser.Scene {
   private selected: DuckKind = 'sunny';
-  private stars = 0;
+  private earned = { stars: 0, ribbons: 0 };
   private duckCards: { kind: DuckKind; container: Phaser.GameObjects.Container }[] = [];
   private hatCards: Phaser.GameObjects.Container[] = [];
 
@@ -33,14 +33,17 @@ export class WardrobeScene extends Phaser.Scene {
     this.selected = 'sunny';
     this.duckCards = [];
     this.hatCards = [];
-    this.stars = totalStars(loadProgress());
+    this.earned = totalEarned(loadProgress());
 
     this.add.text(cx, 62, 'Duck Wardrobe', textStyle(58, { weight: '700', strokeThickness: 10 })).setOrigin(0.5);
 
-    // Stars earned so far (they unlock hats).
+    // Stars and Level Trial ribbons earned so far (they unlock hats).
     drawPill(this, WORLD.width - 110, 62, 130, 52);
     this.add.image(WORLD.width - 148, 62, 'star').setDisplaySize(34, 34).setTint(COLORS.gold);
-    this.add.text(WORLD.width - 126, 62, String(this.stars), textStyle(30)).setOrigin(0, 0.5);
+    this.add.text(WORLD.width - 126, 62, String(this.earned.stars), textStyle(30)).setOrigin(0, 0.5);
+    drawPill(this, WORLD.width - 260, 62, 130, 52);
+    this.add.image(WORLD.width - 298, 62, 'ribbon').setDisplaySize(36, 36).setTint(COLORS.pink);
+    this.add.text(WORLD.width - 276, 62, String(this.earned.ribbons), textStyle(30)).setOrigin(0, 0.5);
 
     drawBackButton(this, () => fadeToScene(this, 'TitleScene'));
     drawSoundButton(this, WORLD.width - 40, WORLD.height - 40, 100);
@@ -93,7 +96,7 @@ export class WardrobeScene extends Phaser.Scene {
       const inRow = Math.min(PER_ROW, choices.length - row * PER_ROW);
       const x = WORLD.width / 2 + ((i % PER_ROW) - (inRow - 1) / 2) * HAT_CARD.spacing;
       const y = HAT_CARD.rows[row]!;
-      const unlocked = !hat || isHatUnlocked(hat, this.stars);
+      const unlocked = !hat || isHatUnlocked(hat, this.earned);
       const on = hat === wearing;
       const parts: Phaser.GameObjects.GameObject[] = [
         drawCard(this.add.graphics(), HAT_CARD.width, HAT_CARD.height, {
@@ -116,11 +119,14 @@ export class WardrobeScene extends Phaser.Scene {
           .setAlpha(unlocked ? 1 : 0.5),
       );
       if (!unlocked && hat) {
-        // Padlock with the stars needed.
+        // Padlock with the stars (or ribbons) needed.
+        const ribbons = HATS[hat].ribbons;
         parts.push(
           this.add.graphics().fillStyle(COLORS.panel, 0.75).fillRoundedRect(-44, -30, 88, 34, 17),
-          this.add.image(-22, -13, 'star').setDisplaySize(24, 24).setTint(COLORS.gold),
-          this.add.text(-6, -13, String(HATS[hat].stars), textStyle(20)).setOrigin(0, 0.5),
+          ribbons
+            ? this.add.image(-22, -13, 'ribbon').setDisplaySize(26, 26).setTint(COLORS.pink)
+            : this.add.image(-22, -13, 'star').setDisplaySize(24, 24).setTint(COLORS.gold),
+          this.add.text(-6, -13, String(ribbons ?? HATS[hat].stars), textStyle(20)).setOrigin(0, 0.5),
         );
       }
       const hit = this.add.zone(0, 0, HAT_CARD.width, HAT_CARD.height).setInteractive({ useHandCursor: true });
@@ -132,11 +138,13 @@ export class WardrobeScene extends Phaser.Scene {
   }
 
   private pickHat(hat: HatKind | undefined, card: Phaser.GameObjects.Container): void {
-    if (hat && !isHatUnlocked(hat, this.stars)) {
+    if (hat && !isHatUnlocked(hat, this.earned)) {
       playSound(this, 'noPeas');
       this.tweens.add({ targets: card, x: card.x + 8, duration: 50, yoyo: true, repeat: 3 });
-      const more = HATS[hat].stars - this.stars;
-      popSpeechBubble(this, card.x, card.y - 60, `${more} more ${more === 1 ? 'star' : 'stars'}!`, 200);
+      const ribbons = HATS[hat].ribbons;
+      const more = ribbons ? ribbons - this.earned.ribbons : HATS[hat].stars - this.earned.stars;
+      const what = ribbons ? (more === 1 ? 'ribbon' : 'ribbons') : more === 1 ? 'star' : 'stars';
+      popSpeechBubble(this, card.x, card.y - 60, `${more} more ${what}!`, 200);
       return;
     }
     saveProgress(wearHat(loadProgress(), this.selected, hat));

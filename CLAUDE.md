@@ -103,8 +103,8 @@ everywhere: dialogue, tooltips, code comments.
   and its power (`power.stat` in `src/data/ducks.ts`: splashed, flapped, froze, slowed).
   Tap a duck to see its numbers; the result screen totals them per kind, and the top
   damage-dealer wears a crown.
-- **Hats:** Stars from winning levels unlock hats (`src/data/hats.ts`, drawn in
-  `src/art/sprites.ts`). Pick one for each duck in the Wardrobe (hat button on the title
+- **Hats:** Stars from winning levels (and ribbons from Level Trials) unlock hats
+  (`src/data/hats.ts`, drawn in `src/art/sprites.ts`). Pick one for each duck in the Wardrobe (hat button on the title
   screen); the ducks wear them everywhere. A great job for the art director.
 - **Craig's hints:** When a predator gets into the duck house (or nobody has placed a duck
   yet), Craig pops up beside her button with a tip that fits: call her when hearts are low,
@@ -138,10 +138,12 @@ everywhere: dialogue, tooltips, code comments.
   the peas, every wave at night, or only four ducks out at once (`maxDucks`). The first trial
   on each level leaves Sunny out or picks a small team, so players learn the other ducks.
   Winning one earns a **ribbon** on the level card (saved per difficulty in `trials` in
-  `src/logic/progress.ts`); trial runs have no score and don't post to the leaderboard. Trials
-  reuse the Daily Challenge `Challenge` rules and live in `src/data/trials.ts`; `npm test`
-  checks every trial can be won on Easy by the simulator and on Normal by at least one
-  sensible team (`src/logic/balance.test.ts`). The level sheet also shows the best score.
+  `src/logic/progress.ts`), and ribbons unlock hats too (`ribbons` in `src/data/hats.ts`: the
+  Laurel Wreath). Each trial has its own leaderboard (the `trial` column; pick a level tab on
+  the Top Scores screen, then the trial's pill). Trials reuse the Daily Challenge `Challenge`
+  rules and live in `src/data/trials.ts`; `npm test` checks every trial can be won on Easy by
+  the simulator and on Normal by at least one sensible team (`src/logic/balance.test.ts`). The
+  level sheet also shows the best score.
 - **Daily Challenge:** One level and one twist per UTC day, the same for everyone, with its
   own leaderboard. Winning on days in a row builds a streak, shown on the Daily Challenge
   button and the win screen from the second day (`dailyStreak` in `src/logic/progress.ts`). Twists live in `src/data/challenges.ts`; the rules shared with the server

@@ -4,6 +4,7 @@ import { playSound } from '../audio/sfx';
 import { drawGrass, drawOutskirts } from '../art/terrain';
 import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
 import { LEVELS } from '../data/levels';
+import { TRIALS, findTrial } from '../data/trials';
 import { dailyDate, dailyFor } from '../logic/daily';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
 import { drawBackButton, drawCard, fadeToScene } from '../ui/widgets';
@@ -14,6 +15,8 @@ export interface LeaderboardSceneData {
   daily?: string;
   /** Show the Endless Pond board. */
   endless?: boolean;
+  /** Show a Level Trial's board (its id) instead of its level's. */
+  trial?: string;
   difficulty?: Difficulty;
   /** Score id to highlight (the one just posted). */
   highlightId?: number;
@@ -21,15 +24,21 @@ export interface LeaderboardSceneData {
   back?: { scene: string; data?: object };
 }
 
-const LIST = { x: WORLD.width / 2, y: 430, width: 640, height: 420, rowHeight: 36 };
+const LIST = { x: WORLD.width / 2, y: 462, width: 640, height: 380, rowHeight: 34 };
+// Under a level's tab: pills for the level itself and each of its trials.
+const SUB_TABS = { y: 242, width: 190, spacing: 200 };
 const MEDALS = [0xffd23f, 0xc9d1d9, 0xe0955a];
 
 export class LeaderboardScene extends Phaser.Scene {
   private level = 0;
   /** The Daily Challenge date the Daily tab shows, and whether that tab is picked. */
   private dailyDate = '';
-  /** Which tab is picked: the Daily Challenge, a level (this.level), or the Endless Pond. */
-  private board: 'daily' | 'level' | 'endless' = 'level';
+  /** Which tab is picked: the Daily Challenge, a level (this.level), one of its trials (this.trial), or the Endless Pond. */
+  private board: 'daily' | 'level' | 'trial' | 'endless' = 'level';
+  private trial = '';
+  private subTabs?: Phaser.GameObjects.Container;
+  /** How many of `tabs` are the main row (the rest belong to the sub-tabs, and are redrawn with them). */
+  private mainTabCount = 0;
   private difficulty: Difficulty = 'easy';
   private highlightId?: number;
   private back: { scene: string; data?: object } = { scene: 'TitleScene' };
@@ -44,12 +53,16 @@ export class LeaderboardScene extends Phaser.Scene {
   init(data: LeaderboardSceneData): void {
     this.level = data.level ?? 0;
     this.dailyDate = data.daily ?? dailyDate();
-    this.board = data.endless ? 'endless' : data.daily ? 'daily' : 'level';
+    const trial = data.trial ? findTrial(data.trial) : undefined;
+    this.trial = trial?.trial.id ?? '';
+    if (trial) this.level = trial.level;
+    this.board = data.endless ? 'endless' : data.daily ? 'daily' : trial ? 'trial' : 'level';
     this.difficulty = data.difficulty ?? 'easy';
     this.highlightId = data.highlightId;
     this.back = data.back ?? { scene: 'TitleScene' };
     this.tabs = [];
     this.list = undefined;
+    this.subTabs = undefined;
   }
 
   create(): void {
@@ -70,7 +83,7 @@ export class LeaderboardScene extends Phaser.Scene {
     const dailyName = dailyFor(this.dailyDate)?.challenge.name ?? 'Daily';
     this.drawTab(tabX(0), 138, tabWidth, `★ ${dailyName}`, () => this.board === 'daily', () => (this.board = 'daily'));
     LEVELS.forEach((info, i) => {
-      this.drawTab(tabX(i + 1), 138, tabWidth, `${i + 1}. ${info.name}`, () => this.board === 'level' && this.level === i, () => {
+      this.drawTab(tabX(i + 1), 138, tabWidth, `${i + 1}. ${info.name}`, () => (this.board === 'level' || this.board === 'trial') && this.level === i, () => {
         this.board = 'level';
         this.level = i;
       });
@@ -82,15 +95,54 @@ export class LeaderboardScene extends Phaser.Scene {
 
     drawBackButton(this, () => fadeToScene(this, this.back.scene, this.back.data));
 
+    this.mainTabCount = this.tabs.length;
+    this.drawSubTabs();
     this.cameras.main.fadeIn(250, 0, 0, 0);
     void this.loadScores();
   }
 
-  private drawTab(x: number, y: number, width: number, label: string, isOn: () => boolean, select: () => void): void {
+  /** Under a level's tab: the level's own board, or one of its trials'. (Nothing for the other boards.) */
+  private drawSubTabs(): void {
+    this.subTabs?.destroy();
+    this.subTabs = undefined;
+    this.tabs.length = this.mainTabCount;
+    if (this.board !== 'level' && this.board !== 'trial') return;
+    const level = this.level;
+    const trials = TRIALS[level] ?? [];
+    const choices = [
+      { label: LEVELS[level]?.name ?? 'Level', isOn: () => this.board === 'level', select: () => (this.board = 'level') },
+      ...trials.map((trial) => ({
+        label: trial.name,
+        isOn: () => this.board === 'trial' && this.trial === trial.id,
+        select: () => {
+          this.board = 'trial';
+          this.trial = trial.id;
+        },
+      })),
+    ];
+    this.subTabs = this.add.container(0, 0);
+    choices.forEach((choice, i) => {
+      const x = WORLD.width / 2 + (i - (choices.length - 1) / 2) * SUB_TABS.spacing;
+      const parts: Phaser.GameObjects.GameObject[] = [];
+      if (i > 0) parts.push(this.add.image(-SUB_TABS.width / 2 + 22, 0, 'ribbon').setDisplaySize(26, 26).setTint(COLORS.pink));
+      this.drawTab(x, SUB_TABS.y, SUB_TABS.width, choice.label, choice.isOn, choice.select, { parent: this.subTabs, icon: parts, small: true });
+    });
+  }
+
+  private drawTab(
+    x: number,
+    y: number,
+    width: number,
+    label: string,
+    isOn: () => boolean,
+    select: () => void,
+    options: { parent?: Phaser.GameObjects.Container; icon?: Phaser.GameObjects.GameObject[]; small?: boolean } = {},
+  ): void {
     const g = this.add.graphics();
-    const text = this.add.text(0, 0, label, textStyle(20, { strokeThickness: 0 })).setOrigin(0.5);
+    const iconRoom = options.icon?.length ? 18 : 0;
+    const text = this.add.text(iconRoom, 0, label, textStyle(options.small ? 17 : 20, { strokeThickness: 0 })).setOrigin(0.5);
     // Long names shrink to fit their tab.
-    if (text.width > width - 16) text.setScale((width - 16) / text.width);
+    if (text.width > width - 16 - iconRoom * 2) text.setScale((width - 16 - iconRoom * 2) / text.width);
     const refresh = () => {
       const on = isOn();
       g.clear()
@@ -102,7 +154,8 @@ export class LeaderboardScene extends Phaser.Scene {
     };
     refresh();
     const hit = this.add.zone(0, 0, width, 44).setInteractive({ useHandCursor: true });
-    this.add.container(x, y, [g, text, hit]);
+    const tab = this.add.container(x, y, [g, text, ...(options.icon ?? []), hit]);
+    options.parent?.add(tab);
     this.tabs.push({ refresh });
     hit.on('pointerdown', () => {
       if (isOn()) return;
@@ -110,6 +163,7 @@ export class LeaderboardScene extends Phaser.Scene {
       select();
       this.highlightId = undefined;
       this.tabs.forEach((tab) => tab.refresh());
+      this.drawSubTabs();
       void this.loadScores();
     });
   }
@@ -127,7 +181,14 @@ export class LeaderboardScene extends Phaser.Scene {
   private async loadScores(): Promise<void> {
     const id = ++this.requestId;
     this.message('Loading...');
-    const board = this.board === 'daily' ? { daily: this.dailyDate } : this.board === 'endless' ? ({ endless: true } as const) : { level: this.level };
+    const board =
+      this.board === 'daily'
+        ? { daily: this.dailyDate }
+        : this.board === 'endless'
+          ? ({ endless: true } as const)
+          : this.board === 'trial'
+            ? { trial: this.trial }
+            : { level: this.level };
     const result = await fetchScores(board, this.difficulty);
     if (id !== this.requestId || !this.sys.isActive()) return; // a newer tab was picked, or we left
     if (!result.ok) {

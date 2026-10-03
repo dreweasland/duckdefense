@@ -61,7 +61,7 @@ import { loadProgress, saveProgress } from '../save';
 import type { HatKind } from '../data/hats';
 import { HINT_GAP, HINTS, type HintId } from '../data/hints';
 import { pickHint, type HintMoment } from '../logic/hints';
-import { hatFor, newlyUnlocked, totalStars } from '../logic/hats';
+import { hatFor, newlyUnlocked, totalEarned } from '../logic/hats';
 import { duckWithHat, hatImage, placeHat } from '../ui/hats';
 import type { PauseSceneData } from './PauseScene';
 import type { ResultSceneData } from './ResultScene';
@@ -1811,10 +1811,15 @@ export class GameScene extends Phaser.Scene {
           result.endlessBest = Math.max(previousBest, result.endlessWaves);
           saveProgress(recordEndless(progress, this.difficulty, result.endlessWaves));
         } else if (result.won && this.trial) {
-          // A trial win earns its ribbon. (It's played with the rules bent, so it has no score.)
+          // A trial win earns its ribbon (and ribbons can unlock hats). Its score goes on the trial's own board.
+          result.hearts = this.state.hearts;
+          result.peas = scorePeas(this.state);
+          result.score = scoreFor(this.state.hearts, result.peas, this.difficulty);
           const progress = loadProgress();
           result.newRibbon = !progress.trials?.[this.difficulty]?.includes(this.trial.id);
-          saveProgress(recordTrialWin(progress, this.difficulty, this.trial.id));
+          const saved = recordTrialWin(progress, this.difficulty, this.trial.id);
+          saveProgress(saved);
+          result.newHats = newlyUnlocked(totalEarned(progress), totalEarned(saved));
         } else if (result.won) {
           // Save progress: this unlocks the next level and keeps the best stars and score.
           // (A Daily Challenge win is saved on its own and doesn't unlock anything.)
@@ -1833,7 +1838,7 @@ export class GameScene extends Phaser.Scene {
           saveProgress(saved);
           if (this.daily) result.streak = dailyStreak(saved, this.daily.date);
           // New stars can unlock hats.
-          result.newHats = newlyUnlocked(totalStars(progress), totalStars(saved));
+          result.newHats = newlyUnlocked(totalEarned(progress), totalEarned(saved));
         }
         this.time.delayedCall(1000, () => this.scene.start('ResultScene', result));
         break;

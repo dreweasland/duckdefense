@@ -129,19 +129,24 @@ export class ResultScene extends Phaser.Scene {
       if ((this.result.endlessWaves ?? 0) > 0) this.drawPostButton(cx + 300, 296);
     }
 
-    // A trial win: a big ribbon (the rules were bent, so there's no score to post).
+    // A trial win: a big ribbon where the stars would go, and the score for the trial's own board.
     if (won && trial) {
-      const ribbon = this.add.image(cx, 258, 'ribbon').setDisplaySize(120, 120).setTint(COLORS.pink).setDepth(52);
+      const ribbon = this.add.image(cx, 232, 'ribbon').setDisplaySize(88, 88).setTint(COLORS.pink).setDepth(52);
       const full = ribbon.scaleX;
       ribbon.setScale(0);
       this.tweens.add({ targets: ribbon, scale: full, delay: 300, duration: 400, ease: 'Back.Out' });
       if (this.result.newRibbon) {
         this.add
-          .text(cx + 80, 228, 'New ribbon!', textStyle(28, { color: '#e0447a', stroke: '#ffffff', strokeThickness: 6, weight: '700' }))
+          .text(cx + 56, 206, 'New ribbon!', textStyle(26, { color: '#e0447a', stroke: '#ffffff', strokeThickness: 6, weight: '700' }))
           .setOrigin(0, 0.5)
           .setDepth(51)
           .setAngle(-8);
       }
+      this.add
+        .text(cx, 296, `Score  ${this.result.score ?? 0}`, textStyle(30, { color: COLORS.inkCss, strokeThickness: 0, weight: '700' }))
+        .setOrigin(0.5)
+        .setDepth(51);
+      this.drawPostButton(cx + 300, 296);
     }
 
     // Stars and score for a win.
@@ -308,7 +313,7 @@ export class ResultScene extends Phaser.Scene {
 
   /** "Post" puts this win on the public leaderboard (asks for a name first). */
   private drawPostButton(x: number, y: number): void {
-    const { level, difficulty, hearts, peas, daily, endlessWaves } = this.result;
+    const { level, difficulty, hearts, peas, daily, trial, endlessWaves } = this.result;
     const endless = endlessWaves !== undefined;
     if (!endless && (hearts === undefined || peas === undefined)) return;
     const button = drawBigButton(
@@ -322,7 +327,7 @@ export class ResultScene extends Phaser.Scene {
         let posted: { id: number } | undefined;
         const ok = await askForName(async (name) => {
           const result = await postScore(
-            endless ? { name, difficulty, endless: true, waves: endlessWaves } : { name, level, difficulty, hearts: hearts!, peas: peas!, daily },
+            endless ? { name, difficulty, endless: true, waves: endlessWaves } : { name, level, difficulty, hearts: hearts!, peas: peas!, daily, trial },
           );
           if (!result.ok) return result.error;
           posted = result.data;
@@ -338,6 +343,7 @@ export class ResultScene extends Phaser.Scene {
           level,
           difficulty,
           daily,
+          trial,
           endless,
           highlightId: posted.id,
           back: { scene: 'LevelSelectScene', data: { difficulty } },

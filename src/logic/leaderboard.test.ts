@@ -3,7 +3,8 @@ import { DIFFICULTIES } from '../data/difficulty';
 import { LEVEL_COUNT } from '../data/levelCount';
 import { LEVELS } from '../data/levels';
 import { ENDLESS, ENDLESS_LEVEL } from '../data/endless';
-import { challengeSettings, dailyFor } from './daily';
+import { challengeSettings, dailyDate, dailyFor } from './daily';
+import { findTrial } from '../data/trials';
 import { MAX_PEAS, NAME_MAX_LENGTH, checkName, checkSubmission } from './leaderboard';
 import { scoreFor } from './progress';
 
@@ -80,6 +81,31 @@ describe('daily challenge submissions', () => {
     const maxHearts = challengeSettings('easy', today.challenge).hearts;
     expect(checkSubmission({ ...good, hearts: maxHearts }, now).ok).toBe(true);
     expect(checkSubmission({ ...good, hearts: maxHearts + 1 }, now).ok).toBe(false);
+  });
+});
+
+describe('Level Trial submissions', () => {
+  // Fragile House (level 4) keeps only 30% of the hearts.
+  const trial = findTrial('fragileHouse')!;
+  const good = { name: 'Trial Fan', difficulty: 'normal', hearts: 2, peas: 50, trial: 'fragileHouse' };
+
+  it("takes the level from the trial and scores it like a level, on the trial's own board", () => {
+    expect(checkSubmission({ ...good, level: 0 })).toEqual({
+      ok: true,
+      entry: { name: 'Trial Fan', level: trial.level, difficulty: 'normal', hearts: 2, peas: 50, trial: 'fragileHouse', score: scoreFor(2, 50, 'normal') },
+    });
+  });
+
+  it("uses the trial's hearts to spot impossible scores", () => {
+    const maxHearts = challengeSettings('normal', trial.trial).hearts;
+    expect(checkSubmission({ ...good, hearts: maxHearts }).ok).toBe(true);
+    expect(checkSubmission({ ...good, hearts: maxHearts + 1 }).ok).toBe(false);
+  });
+
+  it('rejects unknown trials, and a score that claims to be a daily too', () => {
+    expect(checkSubmission({ ...good, trial: 'sunnysNap' }).ok).toBe(false);
+    expect(checkSubmission({ ...good, trial: 7 }).ok).toBe(false);
+    expect(checkSubmission({ ...good, daily: dailyDate() }).ok).toBe(false);
   });
 });
 

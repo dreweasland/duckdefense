@@ -3,7 +3,8 @@
 //   GET    /api/scores?level=0&difficulty=easy          top scores for a level
 //   GET    /api/scores?daily=2026-09-29&difficulty=easy top scores for a Daily Challenge
 //   GET    /api/scores?endless=1&difficulty=easy        most Endless Pond waves survived
-//   POST   /api/scores                                  post a win { name, level, difficulty, hearts, peas, daily? }
+//   GET    /api/scores?trial=potatoPatrol&difficulty=easy top scores for a Level Trial
+//   POST   /api/scores                                  post a win { name, level, difficulty, hearts, peas, daily? | trial? }
 //                                                       or an Endless Pond run { name, difficulty, endless: true, waves }
 //   DELETE /api/scores/:id                       remove an entry (needs the ADMIN_TOKEN secret)
 
@@ -12,6 +13,7 @@ import { LEVEL_COUNT } from '../src/data/levelCount';
 import { ENDLESS_LEVEL } from '../src/data/endless';
 import { dailyFor } from '../src/logic/daily';
 import { isDifficulty } from '../src/data/difficulty';
+import { findTrial } from '../src/data/trials';
 
 interface Env {
   DB: D1Database;
@@ -24,8 +26,8 @@ const TOP_SCORES = 10;
 // Each player (by IP) can post at most this many scores per this many seconds.
 const RATE_LIMIT = { max: 3, seconds: 60 };
 const MAX_BODY_BYTES = 1000;
-// The rows on one board: a level's scores, or one day's Daily Challenge scores.
-const BOARD_FILTER = { level: 'level = ? AND daily IS NULL', daily: 'daily = ?' } as const;
+// The rows on one board: a level's scores, one day's Daily Challenge scores, or a Level Trial's.
+const BOARD_FILTER = { level: 'level = ? AND daily IS NULL AND trial IS NULL', daily: 'daily = ?', trial: 'trial = ?' } as const;
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -58,13 +60,17 @@ async function listScores(url: URL, env: Env): Promise<Response> {
   const difficulty = url.searchParams.get('difficulty');
   if (!isDifficulty(difficulty)) return json({ error: 'Unknown difficulty.' }, 400);
 
-  // Which board: a day's Daily Challenge, or a level's (Endless Pond runs have their own level number).
-  let board: { column: 'daily'; value: string } | { column: 'level'; value: number };
+  // Which board: a day's Daily Challenge, a Level Trial, or a level's (Endless Pond runs have their own level number).
+  let board: { column: 'daily' | 'trial'; value: string } | { column: 'level'; value: number };
   const dailyParam = url.searchParams.get('daily');
+  const trialParam = url.searchParams.get('trial');
   if (dailyParam !== null) {
     const daily = dailyFor(dailyParam);
     if (!daily) return json({ error: 'Unknown day.' }, 400);
     board = { column: 'daily', value: daily.date };
+  } else if (trialParam !== null) {
+    if (!findTrial(trialParam)) return json({ error: 'Unknown trial.' }, 400);
+    board = { column: 'trial', value: trialParam };
   } else {
     const level = url.searchParams.get('endless') === '1' ? ENDLESS_LEVEL : Number(url.searchParams.get('level'));
     const realLevel = Number.isInteger(level) && level >= 0 && level < LEVEL_COUNT;
@@ -106,17 +112,17 @@ async function postScore(request: Request, env: Env): Promise<Response> {
   }
 
   const daily = entry.daily ?? null;
+  const trial = entry.trial ?? null;
   const inserted = await env.DB.prepare(
-    `INSERT INTO scores (name, level, difficulty, hearts, peas, score, ip_hash, daily)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    `INSERT INTO scores (name, level, difficulty, hearts, peas, score, ip_hash, daily, trial)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
   )
-    .bind(entry.name, entry.level, entry.difficulty, entry.hearts, entry.peas, entry.score, ipHash, daily)
+    .bind(entry.name, entry.level, entry.difficulty, entry.hearts, entry.peas, entry.score, ipHash, daily, trial)
     .first<{ id: number }>();
-  // Rank among scores on the same board: this level's, or this day's Daily Challenge.
-  const better = await env.DB.prepare(
-    `SELECT COUNT(*) AS count FROM scores WHERE ${BOARD_FILTER[daily === null ? 'level' : 'daily']} AND difficulty = ? AND score > ?`,
-  )
-    .bind(daily ?? entry.level, entry.difficulty, entry.score)
+  // Rank among scores on the same board: this level's, this day's Daily Challenge, or this trial's.
+  const board = daily !== null ? 'daily' : trial !== null ? 'trial' : 'level';
+  const better = await env.DB.prepare(`SELECT COUNT(*) AS count FROM scores WHERE ${BOARD_FILTER[board]} AND difficulty = ? AND score > ?`)
+    .bind(daily ?? trial ?? entry.level, entry.difficulty, entry.score)
     .first<{ count: number }>();
   return json({ id: inserted?.id, name: entry.name, score: entry.score, rank: (better?.count ?? 0) + 1 }, 201);
 }

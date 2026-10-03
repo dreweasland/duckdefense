@@ -271,6 +271,24 @@ const HAT_ART: Record<HatKind, string> = {
     `<rect x="18" y="68" width="64" height="12" rx="3" fill="#f2a900" ${stroke(4)}/>` +
     `<circle cx="14" cy="34" r="5" fill="#ff5f8f" ${stroke(3)}/><circle cx="50" cy="24" r="6" fill="#7fd4ff" ${stroke(3)}/><circle cx="86" cy="34" r="5" fill="#ff5f8f" ${stroke(3)}/>` +
     `<circle cx="34" cy="74" r="3" fill="#e0447a"/><circle cx="50" cy="74" r="3" fill="#3d8fe0"/><circle cx="66" cy="74" r="3" fill="#3fbf5f"/>`,
+  // A laurel wreath for a trial champion: leaves arching over the head, tied with a gold ribbon.
+  laurel:
+    [-1, 1]
+      .map((side) =>
+        [0, 1, 2, 3, 4]
+          .map((i) => {
+            // Along an arc from the brow (just off the brim) up to the top of the head.
+            const degrees = 12 + i * 15; // leaves stop short of the top, where the ribbon is
+            const angle = (degrees * Math.PI) / 180;
+            const cx = 50 + side * 40 * Math.cos(angle);
+            const cy = 82 - 38 * Math.sin(angle);
+            const tilt = side * (90 - degrees); // leaves lie along the arc
+            return `<ellipse cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="6" ry="11" transform="rotate(${tilt} ${cx.toFixed(1)} ${cy.toFixed(1)})" fill="#5fbf4a" ${stroke(3)}/>`;
+          })
+          .join(''),
+      )
+      .join('') +
+    `<path d="M40 46 L50 38 L60 46 L56 54 L50 48 L44 54 Z" fill="#ffd23f" ${stroke(3)}/>`,
 };
 
 function hatSvg(hat: HatKind): string {

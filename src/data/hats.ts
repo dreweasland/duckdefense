@@ -13,15 +13,18 @@ export type HatKind =
   | 'propeller'
   | 'tophat'
   | 'wizard'
-  | 'crown';
+  | 'crown'
+  | 'laurel';
 
 export interface HatInfo {
   name: string;
   stars: number; // total stars needed to unlock it (0 = unlocked from the start)
+  ribbons?: number; // Level Trial ribbons needed too (leave out for none)
 }
 
 // In the order they show in the Wardrobe. There are 36 stars to earn
-// (6 levels x 3 stars x Easy and Normal), so the last hat needs every one.
+// (6 levels x 3 stars x Easy and Normal), so the crown needs every one. Ribbons come from
+// Level Trials (12 trials x Easy and Normal = 24): the laurel wreath needs half of them.
 export const HATS: Record<HatKind, HatInfo> = {
   party: { name: 'Party Hat', stars: 0 },
   flower: { name: 'Daisy', stars: 1 },
@@ -34,6 +37,7 @@ export const HATS: Record<HatKind, HatInfo> = {
   tophat: { name: 'Top Hat', stars: 15 },
   wizard: { name: 'Wizard Hat', stars: 18 },
   crown: { name: 'Golden Crown', stars: 36 },
+  laurel: { name: 'Laurel Wreath', stars: 0, ribbons: 12 },
 };
 
 export const HAT_ORDER = Object.keys(HATS) as HatKind[];

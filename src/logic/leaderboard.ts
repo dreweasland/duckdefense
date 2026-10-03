@@ -2,6 +2,7 @@ import { englishDataset, englishRecommendedTransformers, RegExpMatcher } from 'o
 import { isDifficulty, type Difficulty } from '../data/difficulty';
 import { LEVEL_COUNT } from '../data/levelCount';
 import { ENDLESS, ENDLESS_LEVEL } from '../data/endless';
+import { findTrial } from '../data/trials';
 import { challengeSettings, dailyFor, isPostableDate } from './daily';
 import { scoreFor } from './progress';
 
@@ -34,6 +35,8 @@ export interface ScoreSubmission {
   peas: number;
   /** The Daily Challenge date (YYYY-MM-DD), for a daily score. Its level comes from the date. */
   daily?: string;
+  /** The Level Trial's id, for a trial score. Its level comes from the trial. */
+  trial?: string;
 }
 
 export type SubmissionCheck = { ok: true; entry: ScoreSubmission & { score: number } } | { ok: false; reason: string };
@@ -41,7 +44,7 @@ export type SubmissionCheck = { ok: true; entry: ScoreSubmission & { score: numb
 /** Validates a score someone wants to post, and works out the score itself (never trusting a sent one). */
 export function checkSubmission(body: unknown, now: Date = new Date()): SubmissionCheck {
   if (typeof body !== 'object' || body === null) return { ok: false, reason: 'Bad request.' };
-  const { name, difficulty, hearts, peas, daily, endless, waves } = body as Record<string, unknown>;
+  const { name, difficulty, hearts, peas, daily, trial, endless, waves } = body as Record<string, unknown>;
   let { level } = body as Record<string, unknown>;
   const nameCheck = checkName(typeof name === 'string' ? name : '');
   if (!nameCheck.ok) return nameCheck;
@@ -63,10 +66,16 @@ export function checkSubmission(body: unknown, now: Date = new Date()): Submissi
   }
   if (today) level = today.level;
 
+  // A Level Trial score: the trial decides the level and twist (and it can't also be a daily).
+  const found = trial === undefined ? undefined : typeof trial === 'string' ? findTrial(trial) : undefined;
+  if (trial !== undefined && (!found || today)) return { ok: false, reason: 'Unknown trial.' };
+  if (found) level = found.level;
+  const twist = today?.challenge ?? found?.trial;
+
   if (!Number.isInteger(level) || (level as number) < 0 || (level as number) >= LEVEL_COUNT) {
     return { ok: false, reason: 'Unknown level.' };
   }
-  const maxHearts = challengeSettings(difficulty, today?.challenge).hearts;
+  const maxHearts = challengeSettings(difficulty, twist).hearts;
   if (!Number.isInteger(hearts) || (hearts as number) < 1 || (hearts as number) > maxHearts) {
     return { ok: false, reason: 'That score is not possible.' };
   }
@@ -80,6 +89,7 @@ export function checkSubmission(body: unknown, now: Date = new Date()): Submissi
     hearts: hearts as number,
     peas: peas as number,
     ...(today && { daily: today.date }),
+    ...(found && { trial: found.trial.id }),
   };
   return { ok: true, entry: { ...entry, score: scoreFor(entry.hearts, entry.peas, entry.difficulty) } };
 }
