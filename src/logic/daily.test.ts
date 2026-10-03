@@ -3,7 +3,7 @@ import { CHALLENGES } from '../data/challenges';
 import { DIFFICULTIES } from '../data/difficulty';
 import { LEVEL_COUNT } from '../data/levelCount';
 import type { Wave } from '../data/waves';
-import { challengeSettings, challengeWaves, dailyDate, dailyFor, isPostableDate } from './daily';
+import { DOUBLE_TWIST_EVERY, challengeSettings, challengeWaves, combineChallenges, dailyDate, dailyFor, isPostableDate } from './daily';
 import { buyDuck, canBuy, canSell, canUseBlessing, createGame, isFlockFull, sellDuck } from './game';
 import { makePath } from './path';
 
@@ -22,8 +22,47 @@ describe('daily challenge', () => {
 
   it("doesn't repeat a twist until every twist has had a day", () => {
     const seen = new Set<string>();
-    for (let d = 1; d <= CHALLENGES.length; d++) seen.add(dailyFor(`2026-10-${String(d).padStart(2, '0')}`)!.challenge.name);
+    for (let d = 1; d <= CHALLENGES.length; d++) seen.add(dailyFor(`2026-10-${String(d).padStart(2, '0')}`)!.challenge.name.split(' + ')[0]!);
     expect(seen.size).toBe(CHALLENGES.length);
+  });
+
+  it('gives about one day in three a second, different twist', () => {
+    let doubles = 0;
+    for (let d = 0; d < 90; d++) {
+      const date = new Date(Date.UTC(2026, 10, 1 + d)).toISOString().slice(0, 10);
+      const { challenge } = dailyFor(date)!;
+      const names = challenge.name.split(' + ');
+      if (names.length === 2) {
+        doubles++;
+        expect(names[0]).not.toBe(names[1]);
+        for (const name of names) expect(CHALLENGES.some((c) => c.name === name)).toBe(true);
+      } else {
+        expect(CHALLENGES).toContain(challenge);
+      }
+    }
+    expect(doubles).toBeGreaterThan(90 / DOUBLE_TWIST_EVERY - 12);
+    expect(doubles).toBeLessThan(90 / DOUBLE_TWIST_EVERY + 12);
+  });
+
+  it('combines two twists so both rules apply', () => {
+    const combined = combineChallenges(
+      { name: 'A', description: 'a.', ducks: ['sunny', 'potato'], startingPeas: 0.5, hearts: 0.5, noCraig: true, extras: [{ enemy: 'hawk', count: 1, every: 1 }] },
+      { name: 'B', description: 'b.', ducks: ['potato', 'chester'], startingPeas: 1.3, enemySpeed: 1.2, allNight: true, maxDucks: 4, extras: [{ enemy: 'mink', count: 2, every: 2 }] },
+    );
+    expect(combined).toEqual({
+      name: 'A + B',
+      description: 'a. b.',
+      ducks: ['potato'],
+      startingPeas: 0.65,
+      hearts: 0.5,
+      enemySpeed: 1.2,
+      allNight: true,
+      noCraig: true,
+      maxDucks: 4,
+      extras: [{ enemy: 'hawk', count: 1, every: 1 }, { enemy: 'mink', count: 2, every: 2 }],
+    });
+    // Twists that leave no duck in common keep the first's ducks rather than nobody's.
+    expect(combineChallenges({ name: 'A', description: '', ducks: ['sunny'] }, { name: 'B', description: '', ducks: ['curtis'] }).ducks).toEqual(['sunny']);
   });
 
   it('uses every level over a month', () => {
@@ -56,7 +95,7 @@ describe('daily challenge', () => {
 
   it('can make every wave night and add predators to each one', () => {
     const waves: Wave[] = [{ time: 'day', groups: [{ enemy: 'raccoon', count: 2, every: 1 }], bonusPeas: 10 }];
-    const changed = challengeWaves(waves, { name: 'x', description: 'x', allNight: true, extra: { enemy: 'fox', count: 1, every: 1 } });
+    const changed = challengeWaves(waves, { name: 'x', description: 'x', allNight: true, extras: [{ enemy: 'fox', count: 1, every: 1 }] });
     expect(changed).toEqual([
       { time: 'night', groups: [{ enemy: 'raccoon', count: 2, every: 1 }, { enemy: 'fox', count: 1, every: 1 }], bonusPeas: 10 },
     ]);

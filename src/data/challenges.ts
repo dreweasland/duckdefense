@@ -18,14 +18,14 @@ export interface Challenge {
   noCraig?: boolean; // Craig takes the day off
   maxDucks?: number; // only this many ducks can be out at once (sell one to place another)
   // Added to every wave, on top of the level's usual predators.
-  extra?: SpawnGroup;
+  extras?: SpawnGroup[];
 }
 
 export const CHALLENGES: Challenge[] = [
   {
     name: 'Hawk Day',
     description: 'Extra hawks swoop in every wave. Bring ducks that can hit them!',
-    extra: { enemy: 'hawk', count: 2, every: 3, after: 2 },
+    extras: [{ enemy: 'hawk', count: 2, every: 3, after: 2 }],
   },
   {
     name: 'Speedy Critters',
@@ -67,21 +67,21 @@ export const CHALLENGES: Challenge[] = [
   {
     name: 'Turtle Parade',
     description: 'A snapping turtle climbs out of the pond every wave.',
-    extra: { enemy: 'turtle', count: 1, every: 1, after: 3 },
+    extras: [{ enemy: 'turtle', count: 1, every: 1, after: 3 }],
   },
   {
     name: 'Mink Mischief',
     description: 'Sneaky minks join every wave. Chester can find them!',
-    extra: { enemy: 'mink', count: 2, every: 2, after: 2 },
+    extras: [{ enemy: 'mink', count: 2, every: 2, after: 2 }],
   },
   {
     name: 'Skunk Alert',
     description: "Skunks join every wave. Don't splash them! Potato pecks them off.",
-    extra: { enemy: 'skunk', count: 2, every: 3, after: 3 },
+    extras: [{ enemy: 'skunk', count: 2, every: 3, after: 3 }],
   },
   {
     name: 'Hard Hats',
     description: 'Armored raccoons join every wave. Little pecks bounce off, so hit hard.',
-    extra: { enemy: 'raccoon', count: 3, every: 2, after: 2, variant: 'armored' },
+    extras: [{ enemy: 'raccoon', count: 3, every: 2, after: 2, variant: 'armored' }],
   },
 ];

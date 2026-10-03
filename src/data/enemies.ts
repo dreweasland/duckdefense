@@ -97,17 +97,18 @@ export const ENEMIES: Record<EnemyKind, EnemyStats> = {
     sneaky: { spotRange: 0.5, revealTime: 3 },
   },
 
-  // Splash it and it sprays: every duck nearby runs off. Potato's pecks don't set it off.
+  // Splash it and it sprays: every duck nearby runs off. Potato's pecks don't set it off. It's
+  // a tough old waddler, so a flock that keeps splashing it keeps getting sprayed.
   skunk: {
     name: 'Skunk',
     description: "Splash it and it sprays! Ducks nearby run off. Peck it instead: Potato's the one.",
     beatenBy: 'potato',
-    maxHp: 70,
+    maxHp: 160,
     speed: 70,
-    peas: 16,
+    peas: 22,
     hearts: 1,
     flying: false,
-    sprays: { radius: 120, time: 1.5, every: 2.5 },
+    sprays: { radius: 120, time: 2.5, every: 2 },
   },
 
   // Slow, with a huge amount of health and a hard shell. Climbs out of the pond partway

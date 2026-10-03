@@ -42,14 +42,42 @@ function mix(n: number): number {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-/** The level and twist for a date. Every player gets the same one. */
+// Some days get two twists at once ("Hawk Day + Thin Wallet"): one day in this many.
+export const DOUBLE_TWIST_EVERY = 3;
+
+/** The level and twist (or two) for a date. Every player gets the same one. */
 export function dailyFor(date: string): Daily | undefined {
   const day = dayNumber(date);
   if (day === undefined) return undefined;
   // Twists take turns, so none repeats until they've all had a day; the level is mixed up.
-  const challenge = CHALLENGES[day % CHALLENGES.length]!;
+  const first = CHALLENGES[day % CHALLENGES.length]!;
   const level = mix(day) % LEVEL_COUNT;
-  return { date, level, challenge };
+  // On a double-twist day a second, different twist joins in (mixed up, so the pairs vary).
+  if (mix(day + 2) % DOUBLE_TWIST_EVERY !== 0 || CHALLENGES.length < 2) return { date, level, challenge: first };
+  const second = CHALLENGES[(day + 1 + (mix(day + 2) % (CHALLENGES.length - 1))) % CHALLENGES.length]!;
+  return { date, level, challenge: combineChallenges(first, second) };
+}
+
+/** Two twists as one: both rules apply (fewer ducks, less of everything, every extra predator). */
+export function combineChallenges(a: Challenge, b: Challenge): Challenge {
+  const shared = a.ducks && b.ducks ? a.ducks.filter((kind) => b.ducks!.includes(kind)) : undefined;
+  // Both teams, if they overlap; the first twist's team if they don't (nobody would be no game at all).
+  const ducks = shared && shared.length > 0 ? shared : (a.ducks ?? b.ducks);
+  const multiply = (x?: number, y?: number) => (x === undefined && y === undefined ? undefined : (x ?? 1) * (y ?? 1));
+  const extras = [...(a.extras ?? []), ...(b.extras ?? [])];
+  return {
+    name: `${a.name} + ${b.name}`,
+    description: `${a.description} ${b.description}`,
+    ...(ducks && { ducks }),
+    ...(multiply(a.startingPeas, b.startingPeas) !== undefined && { startingPeas: multiply(a.startingPeas, b.startingPeas) }),
+    ...(multiply(a.hearts, b.hearts) !== undefined && { hearts: multiply(a.hearts, b.hearts) }),
+    ...(multiply(a.enemySpeed, b.enemySpeed) !== undefined && { enemySpeed: multiply(a.enemySpeed, b.enemySpeed) }),
+    ...((a.allNight || b.allNight) && { allNight: true }),
+    ...((a.noSelling || b.noSelling) && { noSelling: true }),
+    ...((a.noCraig || b.noCraig) && { noCraig: true }),
+    ...((a.maxDucks !== undefined || b.maxDucks !== undefined) && { maxDucks: Math.min(a.maxDucks ?? Infinity, b.maxDucks ?? Infinity) }),
+    ...(extras.length > 0 && { extras }),
+  };
 }
 
 /** Scores can be posted for today, or yesterday (for a game that started before midnight). */
@@ -77,6 +105,6 @@ export function challengeWaves(waves: readonly Wave[], challenge?: Challenge): W
   return waves.map((wave) => ({
     ...wave,
     time: challenge.allNight ? 'night' : wave.time,
-    groups: challenge.extra ? [...wave.groups, { ...challenge.extra }] : wave.groups,
+    groups: challenge.extras ? [...wave.groups, ...challenge.extras.map((group) => ({ ...group }))] : wave.groups,
   }));
 }

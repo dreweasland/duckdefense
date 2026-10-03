@@ -66,7 +66,7 @@ everywhere: dialogue, tooltips, code comments.
 | Raccoon | Ground path | Baseline enemy |
 | Fox | Ground path | Fast, low health. Shakes off most of an Alarm Quack, so Curtis's slow is the answer |
 | Mink | Ground path | Small and slippery. Hides in the grass: ducks only spot it up close until Chester's Alarm Quack flushes it out |
-| Skunk | Ground path | Splash it and it sprays: the duck that splashed it and every duck nearby run off scared (not Curtis). Peck it one-on-one instead: Potato's the answer. First seen in Night Woods |
+| Skunk | Ground path | A tough waddler. Splash it and it sprays: the duck that splashed it and every duck nearby run off scared (not Curtis), and it keeps spraying as long as it keeps getting splashed. Peck it one-on-one instead: Potato's the answer. First seen in Night Woods; the Skunk Patch trial is where a splash-only flock finally loses |
 | Hawk | Flying | Ignores the path and dives straight at the house. Only some ducks can hit it. Scares ducks it swoops over |
 | Snapping Turtle | From the pond | Slow, huge health. Climbs out of the pond and cuts across to the path. Its shell (armor) blocks part of every hit, so big splashes beat little pecks |
 | **Boss: The Night Bandit** | Ground path | A masked mega-raccoon at the end of level 3 (he drops by Snapper Swamp too). Whistles up raccoon minions, scaring nearby ducks |
@@ -187,7 +187,9 @@ flyers. `enemyStats(enemy)` in `src/logic/battle.ts` is the stats-with-twist loo
   the simulator and on Normal by at least one sensible team (`src/logic/balance.test.ts`). The
   level sheet also shows the best score.
 - **Daily Challenge:** One level and one twist per UTC day, the same for everyone, with its
-  own leaderboard. Winning on days in a row builds a streak, shown on the Daily Challenge
+  own leaderboard. About one day in three gets two twists at once ("Hawk Day + Thin Wallet":
+  `combineChallenges` in `src/logic/daily.ts` applies both rules; `DOUBLE_TWIST_EVERY`), and
+  `npm test` checks a couple of months of those days are winnable on Easy. Winning on days in a row builds a streak, shown on the Daily Challenge
   button and the win screen from the second day (`dailyStreak` in `src/logic/progress.ts`). Twists live in `src/data/challenges.ts`; the rules shared with the server
   are in `src/logic/daily.ts`.
 - **Upgrades:** Two tiers per duck (e.g. Sunny → "Seasoned Sunny" → "Legendary Sunny"),

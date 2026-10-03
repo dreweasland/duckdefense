@@ -63,6 +63,13 @@ export const TRIALS: Trial[][] = [
       allNight: true,
       hearts: 0.5,
     },
+    {
+      id: 'skunkPatch',
+      name: 'Skunk Patch',
+      description: "Skunks in every wave, and half the hearts. Splashing won't work this time!",
+      hearts: 0.5,
+      extras: [{ enemy: 'skunk', count: 3, every: 3, after: 2 }],
+    },
   ],
   // Level 4: Hawk Hill
   [
@@ -92,7 +99,7 @@ export const TRIALS: Trial[][] = [
       id: 'foxRush',
       name: 'Fox Rush',
       description: 'Extra foxes dash in every wave!',
-      extra: { enemy: 'fox', count: 3, every: 1.5, after: 2 },
+      extras: [{ enemy: 'fox', count: 3, every: 1.5, after: 2 }],
     },
   ],
   // Level 6: Snapper Swamp

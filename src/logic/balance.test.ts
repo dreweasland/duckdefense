@@ -5,8 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { CHALLENGES } from '../data/challenges';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { LEVELS } from '../data/levels';
-import { TRIALS } from '../data/trials';
+import { TRIALS, findTrial } from '../data/trials';
 import { play } from './simulate';
+import { dailyFor } from './daily';
 
 for (const [index, info] of LEVELS.entries()) {
   describe(`level ${index + 1} balance: ${info.name}`, () => {
@@ -51,6 +52,22 @@ describe('daily challenge balance', () => {
   }
 });
 
+describe('double-twist daily balance', () => {
+  // The next couple of months of double-twist days (the pairs are mixed up, so this samples
+  // many of them): each can be won on Easy by a team of the ducks that are playing.
+  const days: string[] = [];
+  for (let d = 0; d < 60; d++) days.push(new Date(Date.UTC(2026, 9, 10 + d)).toISOString().slice(0, 10));
+  for (const date of days) {
+    const daily = dailyFor(date)!;
+    if (!daily.challenge.name.includes(' + ')) continue;
+    it(`${date}: ${daily.challenge.name} on ${LEVELS[daily.level]!.name} can be won on Easy`, () => {
+      const allowed = DUCK_ORDER.filter((kind) => daily.challenge.ducks?.includes(kind) ?? true);
+      const won = play(LEVELS[daily.level]!, 'easy', allowed, { challenge: daily.challenge, upgrades: 'place-first', craig: !daily.challenge.noCraig }).phase === 'won';
+      expect(won).toBe(true);
+    });
+  }
+});
+
 describe('level trial balance', () => {
   for (const [index, trials] of TRIALS.entries()) {
     const info = LEVELS[index]!;
@@ -86,5 +103,14 @@ describe('flock powers', () => {
       without += play(info, 'hard', team, { upgrades: 'place-first', craig: true, step: 1 / 20 }).hearts;
     }
     expect(withPowers).toBeGreaterThan(without);
+  });
+});
+
+describe('the Skunk Patch trial', () => {
+  it("can't be won on Normal by splashing alone, but a pecking team manages it", () => {
+    const { trial, level } = findTrial('skunkPatch')!;
+    const info = LEVELS[level]!;
+    expect(play(info, 'normal', 'sunny', { challenge: trial, upgrades: 'place-first', craig: true }).phase).toBe('lost');
+    expect(play(info, 'normal', ['potato', 'curtis'], { challenge: trial, upgrades: 'place-first', craig: true }).phase).toBe('won');
   });
 });

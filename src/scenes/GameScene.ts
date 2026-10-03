@@ -797,15 +797,20 @@ export class GameScene extends Phaser.Scene {
   private showChallengeInfo(challenge: Challenge): void {
     if (this.popup) return;
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
-    const card = drawCard(this.add.graphics(), 420, 150, { radius: 18, border: COLORS.gold, borderWidth: 5 });
+    // Two twists at once have a longer name and twice the words, so the card grows to fit.
+    const words = this.add.text(-186, -6, challenge.description, { ...textStyle(19, ink), wordWrap: { width: 372 } }).setOrigin(0, 0);
+    const height = Math.max(150, words.height + 82);
+    const card = drawCard(this.add.graphics(), 420, height, { radius: 18, border: COLORS.gold, borderWidth: 5 });
+    const top = -height / 2;
+    words.setY(top + 44);
     const popup = this.add
-      .container(WORLD.width / 2, 250, [
+      .container(WORLD.width / 2, 250 + (height - 150) / 2, [
         card,
         this.trial
-          ? this.add.image(-172, -38, 'ribbon').setDisplaySize(44, 44).setTint(COLORS.pink)
-          : this.add.image(-172, -38, 'star').setDisplaySize(40, 40).setTint(COLORS.gold),
-        this.add.text(-142, -38, challenge.name, textStyle(28, { ...ink, weight: '700' })).setOrigin(0, 0.5),
-        this.add.text(-186, -6, challenge.description, { ...textStyle(19, ink), wordWrap: { width: 372 } }).setOrigin(0, 0),
+          ? this.add.image(-172, top + 37, 'ribbon').setDisplaySize(44, 44).setTint(COLORS.pink)
+          : this.add.image(-172, top + 37, 'star').setDisplaySize(40, 40).setTint(COLORS.gold),
+        this.add.text(-142, top + 37, challenge.name, textStyle(challenge.name.length > 18 ? 22 : 28, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        words,
       ])
       .setDepth(DEPTH.hud + 5);
     this.showPopup(popup, 6000);
