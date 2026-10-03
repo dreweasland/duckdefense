@@ -107,6 +107,15 @@ flyers. `enemyStats(enemy)` in `src/logic/battle.ts` is the stats-with-twist loo
   the numbers are in `src/data/tiles.ts`.
 - **Aiming:** Tap a duck to pick who it goes after: First, Strong, Last, or Near
   (`src/data/targeting.ts`).
+- **Flock powers:** One big move per kind of duck, on a column of round buttons down the
+  right edge (`src/data/powers.ts`, logic in `src/logic/powers.ts`, moves in
+  `src/logic/battle.ts`). A power is ready once a duck of that kind is out and a wave is on,
+  then rests for its cooldown (shown as a shrinking shade and a countdown). Every duck of the
+  kind joins in: **Tidal Wave** (Sunny: a giant soaking splash in each Sunny's reach), **Flap
+  Storm** (Potato: everything in reach blown back and dizzy), **Mega Quack** (Chester: every
+  predator on the map frozen, hiders flushed), **Hold the Line** (Curtis: for 6 s nothing
+  scares the flock and ground predators trudge). The balance simulator doesn't use them
+  (`powers: true` makes it), so they're pure help for a real player.
 - **Wave preview:** Between waves, chips beside the start button show what's coming. Tap one
   for what that predator does and which duck beats it (`description` and `beatenBy` in
   `src/data/enemies.ts`).

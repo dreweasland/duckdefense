@@ -75,3 +75,16 @@ describe('level trial balance', () => {
     }
   }
 });
+
+describe('flock powers', () => {
+  it('help: a team that taps its powers keeps more hearts on Hard than one that never does', () => {
+    const team: DuckKind[] = ['potato', 'sunny', 'curtis', 'chester'];
+    let withPowers = 0;
+    let without = 0;
+    for (const info of LEVELS) {
+      withPowers += play(info, 'hard', team, { upgrades: 'place-first', craig: true, powers: true, step: 1 / 20 }).hearts;
+      without += play(info, 'hard', team, { upgrades: 'place-first', craig: true, step: 1 / 20 }).hearts;
+    }
+    expect(withPowers).toBeGreaterThan(without);
+  });
+});

@@ -4,6 +4,7 @@ import type { HintId } from '../data/hints';
 import { CHASES } from '../data/synergy';
 import { chasePartner } from './battle';
 import { canBuy, canUpgrade, canUseBlessing, isDuckAllowed, type Game } from './game';
+import { powerState } from './powers';
 import { challengeSettings } from './daily';
 import type { Difficulty } from '../data/difficulty';
 
@@ -56,6 +57,8 @@ export function pickHint(
   if (counter) candidates.push([counter.hint, counter.answered(allowed) && !counter.answered(kinds)]);
   candidates.push(
     ['spendPeas', emptyNests > 0 && Object.keys(DUCKS).some((k) => canBuy(game, k as DuckKind))],
+    // A flock power that's ready (or would be, between waves) and hasn't been used this level.
+    ['powers', DUCK_ORDER.some((k) => ['ready', 'notNow'].includes(powerState(game, k)) && game.powers[k] === undefined)],
     ['upgrade', ducks.some((d) => canUpgrade(game, d.id))],
     // A chaser and the duck it chases are both out, but not next to each other.
     ['peckingLoop', ducks.some((d) => CHASES[d.kind] && kinds.includes(CHASES[d.kind]!) && !chasePartner(game.battle, d))],

@@ -5,6 +5,7 @@ import type { Difficulty } from '../data/difficulty';
 import { DUCKS, MOVE_SETTLE_TIME, SELL_REFUND, type DuckKind } from '../data/ducks';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { VARIANTS, type VariantKind } from '../data/variants';
+import { restPowers } from './powers';
 import type { Targeting } from '../data/targeting';
 import { EARLY_CALL, type Wave } from '../data/waves';
 import { createBattle, findDuck, placeDuck, spawnEnemy, step, type Battle, type BattleEvent, type Duck, type Enemy } from './battle';
@@ -37,6 +38,8 @@ export interface Game {
   waves: readonly Wave[];
   /** The difficulty's health multiplier for every predator (on top of a wave's own). */
   enemyHealth: number;
+  /** Seconds until each kind of duck's flock power is ready again (missing or 0 = ready). See src/logic/powers.ts. */
+  powers: Partial<Record<DuckKind, number>>;
   peas: number;
   hearts: number;
   /** The wave being fought, or the next one while building (0-based). */
@@ -138,6 +141,7 @@ export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Dif
     endless,
     repairs: 0,
     perks: {},
+    powers: {},
   };
 }
 
@@ -441,6 +445,7 @@ export function update(game: Game, dt: number): GameEvent[] {
 
   game.waveTime += dt;
   updateBattery(game, dt);
+  restPowers(game, dt);
   game.shieldTime = Math.max(0, game.shieldTime - dt);
   while (game.pending.length > 0 && game.pending[0]!.time <= game.waveTime) {
     const spawn = game.pending.shift()!;

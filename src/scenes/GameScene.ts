@@ -9,12 +9,14 @@ import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { CHASES } from '../data/synergy';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { VARIANTS, type VariantKind } from '../data/variants';
+import { POWERS } from '../data/powers';
+import { powerCooldown, powerState, usePower, type PowerState } from '../logic/powers';
 import { GAME_SPEEDS } from '../data/gameSpeed';
 import { TARGETING, TARGETING_ORDER, type Targeting } from '../data/targeting';
 import { ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, HUD_AREAS } from '../data/layout';
 import { PERKS, type PerkId } from '../data/perks';
 import { LEVELS } from '../data/levels';
-import { chasePartner, duckStats, enemyName, enemyPosition, enemyStats, findDuck, inBrambles, inMud, isFlying, isHidden, isRefreshed, nestAt, type Duck, type Enemy } from '../logic/battle';
+import { chasePartner, duckStats, enemyName, enemyPosition, enemyStats, findDuck, type PowerResult, inBrambles, inMud, isFlying, isHidden, isRefreshed, nestAt, type Duck, type Enemy } from '../logic/battle';
 import {
   buyDuck,
   callNextWave,
@@ -100,6 +102,9 @@ const PEA_ICON = { x: 596, y: 38 };
 // Duck picker cards along the top-left, kept short so the path below stays visible.
 // Low enough that the raised (selected) card and its corner badges never go off the top of the screen.
 const CARD = { width: 84, height: 90, y: 54, spacing: 92, lift: 3 };
+// Flock power buttons: a column down the right edge, between the wave preview and the pause
+// button (see HUD_AREAS in src/data/layout.ts), one per duck in picker order.
+const POWER_BUTTON = { x: 1250, y: 250, spacing: 86, radius: 30 };
 const GO_BUTTON = { x: 1200, y: 70 };
 const REPAIR_BUTTON = {
   x: ENDLESS_REPAIR_AREA.x + ENDLESS_REPAIR_AREA.width / 2,
@@ -193,6 +198,16 @@ interface PickerCard {
   card: Phaser.GameObjects.Graphics;
 }
 
+interface PowerButton {
+  container: Phaser.GameObjects.Container;
+  face: Phaser.GameObjects.Image;
+  shade: Phaser.GameObjects.Graphics;
+  seconds: Phaser.GameObjects.Text;
+  glow: Phaser.GameObjects.Image;
+  /** What it last showed, so it only redraws on a change. */
+  state: PowerState | undefined;
+}
+
 interface Effects {
   splash: Phaser.GameObjects.Particles.ParticleEmitter;
   feathers: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -224,6 +239,8 @@ export class GameScene extends Phaser.Scene {
   private duckSprites = new Map<number, DuckSprite>();
   private enemySprites = new Map<number, EnemySprite>();
   private pickerCards: PickerCard[] = [];
+  /** The flock power buttons under the picker, by duck kind. */
+  private powerButtons: Partial<Record<DuckKind, PowerButton>> = {};
   private nests: Nest[] = [];
   /** The panel shown for a tapped duck (or the info card for a tapped picker card). */
   private popup?: Phaser.GameObjects.Container;
@@ -324,6 +341,7 @@ export class GameScene extends Phaser.Scene {
     this.duckSprites.clear();
     this.enemySprites.clear();
     this.pickerCards = [];
+    this.powerButtons = {};
     this.nests = [];
     this.popup = undefined;
     this.popupTimer = undefined;
@@ -351,6 +369,7 @@ export class GameScene extends Phaser.Scene {
     this.drawShield();
 
     this.drawPicker();
+    this.drawPowerButtons();
     this.drawHud();
     this.preview = this.add.container(0, 0).setDepth(DEPTH.hud);
     if (this.endless) {
@@ -414,6 +433,7 @@ export class GameScene extends Phaser.Scene {
     const shielded = this.state.shieldTime > 0;
     this.shield.setVisible(shielded);
     this.fx.sparkles.emitting = shielded;
+    this.syncPowerButtons();
 
     if (events.length > 0) {
       // Attacks, quacks, and scares happen constantly and change nothing the HUD shows.
@@ -863,6 +883,130 @@ export class GameScene extends Phaser.Scene {
       });
       this.pickerCards.push({ kind, container, card });
     });
+  }
+
+  // --- Flock powers --------------------------------------------------------
+
+  /** One big round button per kind of duck, down the right edge: tap it during a wave for the kind's power. */
+  private drawPowerButtons(): void {
+    DUCK_ORDER.forEach((kind, i) => {
+      const x = POWER_BUTTON.x;
+      const y = POWER_BUTTON.y + i * POWER_BUTTON.spacing;
+      const r = POWER_BUTTON.radius;
+      const glow = this.add.image(0, 0, 'glow').setDisplaySize(r * 3.4, r * 3.4).setTint(COLORS.gold).setAlpha(0);
+      const face = this.add.image(0, -2, `duck-${kind}`).setDisplaySize(r * 1.45, r * 1.45);
+      const shade = this.add.graphics(); // the dark "pie" that shrinks as the power recharges
+      const seconds = this.add.text(0, 2, '', textStyle(22, { weight: '700', strokeThickness: 5 })).setOrigin(0.5);
+      const badge = this.add.container(r * 0.62, -r * 0.62, [
+        this.add.circle(0, 0, 11, 0xffffff).setStrokeStyle(2.5, COLORS.ink),
+        this.add.image(0, 0, `power-${DUCKS[kind].power.icon}`).setDisplaySize(15, 15),
+      ]);
+      const button = drawRoundButton(this, x, y, r, COLORS.gold, 0xc99a1a, [face, shade, seconds, badge]);
+      button.container.addAt(glow, 0).setDepth(DEPTH.hud);
+      this.tweens.add({ targets: glow, scale: 1.15, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+      button.hit.on('pointerdown', () => this.onPowerTap(kind));
+      this.powerButtons[kind] = { container: button.container, face, shade, seconds, glow, state: undefined };
+    });
+    this.syncPowerButtons();
+  }
+
+  /** Shows each power button as ready (glowing), resting (a shrinking shade and a countdown), or not usable yet. */
+  private syncPowerButtons(): void {
+    for (const kind of DUCK_ORDER) {
+      const button = this.powerButtons[kind];
+      if (!button) continue;
+      const state = powerState(this.state, kind);
+      const left = powerCooldown(this.state, kind);
+      const r = POWER_BUTTON.radius;
+      button.shade.clear();
+      if (state === 'resting') {
+        // A pie slice of shade, full at the start of the rest and gone when it's ready.
+        const share = left / POWERS[kind].cooldown;
+        button.shade
+          .fillStyle(COLORS.ink, 0.55)
+          .slice(0, 0, r - 2, Phaser.Math.DegToRad(-90), Phaser.Math.DegToRad(-90 + 360 * share), false)
+          .fillPath();
+        button.seconds.setText(String(Math.ceil(left)));
+      } else {
+        button.seconds.setText('');
+      }
+      if (state !== button.state) {
+        button.state = state;
+        button.container.setAlpha(state === 'noDuck' ? 0.4 : state === 'notNow' ? 0.75 : 1);
+        if (state === 'ready') button.face.clearTint();
+        else button.face.setTint(0x9a9a9a);
+        button.glow.setAlpha(state === 'ready' ? 0.75 : 0);
+      }
+    }
+  }
+
+  private onPowerTap(kind: DuckKind): void {
+    const button = this.powerButtons[kind]!;
+    const state = powerState(this.state, kind);
+    if (state !== 'ready') {
+      playSound(this, 'noPeas');
+      this.tweens.add({ targets: button.container, x: button.container.x - 6, duration: 50, yoyo: true, repeat: 3 });
+      const why =
+        state === 'noDuck'
+          ? `Put a ${DUCKS[kind].name} out first!`
+          : state === 'notNow'
+            ? 'Wait for the wave!'
+            : `Resting: ${Math.ceil(powerCooldown(this.state, kind))}s`;
+      popSpeechBubble(this, button.container.x - 120, button.container.y - 10, why, DEPTH.floatText);
+      return;
+    }
+    const result = usePower(this.state, kind);
+    if (!result) return;
+    this.closePopup();
+    this.tweens.add({ targets: button.container, scale: 1.2, duration: 120, yoyo: true });
+    this.showPower(kind, result);
+    this.refreshHud();
+  }
+
+  /** The big show when a flock power goes off. */
+  private showPower(kind: DuckKind, result: PowerResult): void {
+    this.showBanner(`${POWERS[kind].name}!`);
+    for (const id of result.hitIds) {
+      const sprite = this.enemySprites.get(id);
+      if (sprite) sprite.flashUntil = this.time.now + 200;
+    }
+    for (const duckId of result.duckIds) {
+      const found = this.duckSprite(duckId);
+      if (!found) continue;
+      const { sprite, duck } = found;
+      const { range } = duckStats(this.state.battle, duck);
+      this.tweens.add({ targets: sprite.art, scale: sprite.art.scale * 1.3, duration: 140, yoyo: true });
+      switch (kind) {
+        case 'sunny':
+          playSound(this, 'splash');
+          this.ring(duck.position.x, duck.position.y - 20, range, COLORS.blue, 600);
+          this.fx.splash.explode(40, duck.position.x, duck.position.y - 30);
+          for (const id of result.hitIds) {
+            const enemy = this.enemySprites.get(id);
+            if (enemy) this.fx.splash.explode(14, enemy.root.x, enemy.root.y - 20);
+          }
+          break;
+        case 'potato':
+          playSound(this, 'flap');
+          this.ring(duck.position.x, duck.position.y - 20, range, 0xffffff, 500);
+          this.fx.feathers.explode(24, duck.position.x, duck.position.y - 30);
+          this.fx.puff.explode(16, duck.position.x, duck.position.y);
+          break;
+        case 'chester':
+          playSound(this, 'quack');
+          this.cameras.main.shake(350, 0.006);
+          this.ring(duck.position.x, duck.position.y - 30, 900, COLORS.gold, 900);
+          this.time.delayedCall(150, () => this.ring(duck.position.x, duck.position.y - 30, 700, COLORS.gold, 800));
+          this.floatText({ x: duck.position.x, y: duck.position.y - 80 }, 'QUAAACK!', COLORS.goldCss);
+          break;
+        case 'curtis':
+          playSound(this, 'upgrade');
+          this.ring(duck.position.x, duck.position.y - 20, 900, COLORS.green, 900);
+          this.fx.stars.explode(14, duck.position.x, duck.position.y - 40);
+          this.floatText({ x: duck.position.x, y: duck.position.y - 80 }, 'Hold the line!', '#c8f59a');
+          break;
+      }
+    }
   }
 
   // --- Ducks -------------------------------------------------------------

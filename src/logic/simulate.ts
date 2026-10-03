@@ -2,7 +2,7 @@
 // It places ducks (one kind, or a team taking turns) in the best nests and optionally upgrades.
 import type { Challenge } from '../data/challenges';
 import type { Difficulty } from '../data/difficulty';
-import { DUCKS, type DuckKind } from '../data/ducks';
+import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import type { LevelInfo } from '../data/levels';
 import {
   buyDuck,
@@ -25,6 +25,7 @@ import { distance, type Point } from './geometry';
 import { parseLevel } from './level';
 import { makePath, pointAt } from './path';
 import { bonusNestsFor } from './endless';
+import { canUsePower, usePower } from './powers';
 import { nextUpgrade } from './upgrades';
 
 /** Slots sorted so the ones that can see the most of every predator route come first. */
@@ -69,6 +70,8 @@ export interface Strategy {
   maxWaves?: number;
   /** Which final upgrade path to take (0 or 1, default 0). */
   path?: number;
+  /** Use every flock power the moment it's ready (a real player taps them; the balance tests don't). */
+  powers?: boolean;
 }
 
 /**
@@ -129,7 +132,10 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | r
     if (strategy.craig && game.waveIndex === game.waves.length - 1) useBlessing(game);
     startWave(game);
     const dt = strategy.step ?? 1 / 30;
-    for (let i = 0; i < 200_000 && game.phase === 'wave'; i++) update(game, dt);
+    for (let i = 0; i < 200_000 && game.phase === 'wave'; i++) {
+      if (strategy.powers) for (const kind of DUCK_ORDER) if (canUsePower(game, kind)) usePower(game, kind);
+      update(game, dt);
+    }
   }
   return game;
 }

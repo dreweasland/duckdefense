@@ -9,6 +9,7 @@ import { TILES, type NestKind } from '../data/tiles';
 import { distance, inEllipse, type Ellipse, type Point } from './geometry';
 import { joinPath, makePath, pointAt, type Path } from './path';
 import { BOSS_PRICKLE } from '../data/perks';
+import { POWER_EFFECTS } from '../data/powers';
 import { NO_MODS, type Mods } from './perks';
 import { statsAt } from './upgrades';
 
@@ -43,8 +44,10 @@ export interface Enemy {
   slowedBy: number[];
   /** While frozen by Wise Old Chester, it takes this much more damage (0.5 = +50%). */
   weakness: number;
-  /** Seconds it stays soaked (and slowed) after one of Sunny's splashes, with the Soggy Splash boss reward. */
+  /** Seconds it stays soaked after one of Sunny's splashes (the Soggy Splash boss reward) or a Tidal Wave. */
   soakedTime: number;
+  /** While soaked, it moves at this share of its speed. */
+  soakSpeed: number;
   /** Seconds since a duck last hit it (a regrowing predator heals once this is long enough). */
   sinceHit: number;
   /** Seconds before a skunk can spray again. */
@@ -121,6 +124,8 @@ export interface Battle {
   report: Partial<Record<DuckKind, KindReport>>;
   /** Multipliers from Endless Pond perks (all 1 otherwise). */
   mods: Mods;
+  /** Seconds left of Curtis's Hold the Line: nothing scares the flock, and ground predators trudge. */
+  rallyTime: number;
   /** Special map tiles: mud and bramble patches on the path, and special nests. */
   mud: Ellipse[];
   brambles: Ellipse[];
@@ -164,6 +169,7 @@ export function createBattle(path: Path, options: BattleOptions = {}): Battle {
     enemyHealth: 1,
     report: {},
     mods: { ...NO_MODS },
+    rallyTime: 0,
     mud: options.mud ?? [],
     brambles: options.brambles ?? [],
     specialNests: options.specialNests ?? [],
@@ -214,6 +220,7 @@ export function spawnEnemy(battle: Battle, kind: EnemyKind, variant?: VariantKin
     slowedBy: [],
     weakness: 0,
     soakedTime: 0,
+    soakSpeed: 1,
     sinceHit: 0,
     sprayTime: 0,
   };
@@ -490,7 +497,7 @@ function scareDucks(
     if (duck !== also && distance(duck.position, at) > radius) continue;
     if (onlyOnce && enemy.scared.includes(duck.id)) continue;
     enemy.scared.push(duck.id);
-    if (statsAt(duck.kind, duck.level, duck.path).fearless || isGuarded(battle, duck)) {
+    if (battle.rallyTime > 0 || statsAt(duck.kind, duck.level, duck.path).fearless || isGuarded(battle, duck)) {
       fearlessIds.push(duck.id);
     } else {
       duck.scaredTime = Math.max(duck.scaredTime, time * battle.mods.scare);
@@ -504,6 +511,7 @@ function scareDucks(
 export function step(battle: Battle, dt: number): BattleEvent[] {
   const events: BattleEvent[] = [];
 
+  battle.rallyTime = Math.max(0, battle.rallyTime - dt);
   for (const duck of battle.ducks) duck.scaredTime = Math.max(0, duck.scaredTime - dt);
 
   // 1. Predators head for the house, unless something has frozen them.
@@ -522,7 +530,8 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
     }
     const { factor: curtisSlow, by: curtis } = slowFor(battle, enemy, zones);
     enemy.slowed = curtisSlow < 1; // (the dusty ring is for Curtis; mud shows for itself)
-    const slow = curtisSlow * (inMud(battle, enemy) ? TILES.mud.speed : 1) * (enemy.soakedTime > 0 ? battle.mods.soakSpeed : 1);
+    const rally = battle.rallyTime > 0 && !isFlying(enemy) ? POWER_EFFECTS.holdTheLine.slow : 1;
+    const slow = curtisSlow * rally * (inMud(battle, enemy) ? TILES.mud.speed : 1) * (enemy.soakedTime > 0 ? enemy.soakSpeed : 1);
     // Prickly Curtis (a boss reward): predators in his zone lose a share of their full health.
     if (curtis && battle.mods.prickle > 0) {
       const before = enemy.hp;
@@ -640,7 +649,10 @@ export function step(battle: Battle, dt: number): BattleEvent[] {
       credit(battle, duck, 'damage', before - Math.max(0, enemy.hp));
       if (enemy.hp <= 0) credit(battle, duck, 'chasedOff', 1);
       // Soggy Splash (a boss reward): Sunny's splashes leave predators soaked and slow.
-      if (stats.splashRadius > 0 && battle.mods.soakTime > 0) enemy.soakedTime = battle.mods.soakTime;
+      if (stats.splashRadius > 0 && battle.mods.soakTime > 0) {
+        enemy.soakedTime = battle.mods.soakTime;
+        enemy.soakSpeed = enemy.soakedTime > 0 ? Math.min(enemy.soakSpeed, battle.mods.soakSpeed) : battle.mods.soakSpeed;
+      }
       // A splashed skunk sprays: the duck that splashed it and every duck nearby run off scared
       // (not Curtis). Pecks don't set it off.
       const sprays = ENEMIES[enemy.kind].sprays;
@@ -700,4 +712,79 @@ export function topDuck(report: Battle['report']): DuckKind | undefined {
     if (better) best = { kind, stats };
   }
   return best?.kind;
+}
+
+// --- Flock powers (src/data/powers.ts) --------------------------------------------------
+// Each one is every duck of a kind doing its big move at once. They return the ducks that
+// joined in and the predators they touched, for the game to show.
+
+export interface PowerResult {
+  duckIds: number[];
+  hitIds: number[];
+}
+
+/** Tidal Wave: every Sunny throws a giant splash at every predator in her reach, soaking them. */
+export function tidalWave(battle: Battle): PowerResult {
+  const { damage: times, soak } = POWER_EFFECTS.tidalWave;
+  const result: PowerResult = { duckIds: [], hitIds: [] };
+  for (const duck of battle.ducks.filter((d) => d.kind === 'sunny')) {
+    const stats = duckStats(battle, duck);
+    result.duckIds.push(duck.id);
+    for (const enemy of enemiesInRange(battle, duck.position, stats.range)) {
+      const before = enemy.hp;
+      enemy.hp -= damageTo(enemy, stats.damage * times * (isRefreshed(battle, duck) ? 1 + FOUNTAIN.damageBoost : 1));
+      enemy.sinceHit = 0;
+      // Soaked: slowed by the wave (or more, if a Soggy Splash already had it).
+      enemy.soakSpeed = enemy.soakedTime > 0 ? Math.min(enemy.soakSpeed, soak.speed) : soak.speed;
+      enemy.soakedTime = Math.max(enemy.soakedTime, soak.time);
+      credit(battle, duck, 'damage', before - Math.max(0, enemy.hp));
+      if (enemy.hp <= 0 && before > 0) credit(battle, duck, 'chasedOff', 1);
+      if (!result.hitIds.includes(enemy.id)) result.hitIds.push(enemy.id);
+    }
+  }
+  return result;
+}
+
+/** Flap Storm: every Potato blows every predator in his reach back down the path, dizzy. */
+export function flapStorm(battle: Battle): PowerResult {
+  const { pushBack, stun } = POWER_EFFECTS.flapStorm;
+  const result: PowerResult = { duckIds: [], hitIds: [] };
+  for (const duck of battle.ducks.filter((d) => d.kind === 'potato')) {
+    const stats = duckStats(battle, duck);
+    result.duckIds.push(duck.id);
+    for (const enemy of enemiesInRange(battle, duck.position, stats.range)) {
+      if (result.hitIds.includes(enemy.id)) continue; // one gust per predator
+      const enemyStats = ENEMIES[enemy.kind];
+      enemy.distance = Math.max(0, enemy.distance - pushBack * (1 - (enemyStats.pushResistance ?? 0)));
+      enemy.stopTime = Math.max(enemy.stopTime, stun * (1 - (enemyStats.stunResistance ?? 0)));
+      enemy.pushRecovery = WING_FLAP_RECOVERY;
+      result.hitIds.push(enemy.id);
+    }
+    credit(battle, duck, 'special', result.hitIds.length);
+  }
+  return result;
+}
+
+/** Mega Quack: every predator on the map freezes (quick ones shake it off sooner), and hiding ones are flushed out. */
+export function megaQuack(battle: Battle): PowerResult {
+  const { stunTime } = POWER_EFFECTS.megaQuack;
+  const result: PowerResult = { duckIds: battle.ducks.filter((d) => d.kind === 'chester').map((d) => d.id), hitIds: [] };
+  for (const enemy of battle.enemies) {
+    const stats = enemyStats(enemy);
+    enemy.stopTime = Math.max(enemy.stopTime, stunTime * (1 - (stats.stunResistance ?? 0)));
+    if (stats.sneaky) enemy.revealedTime = Math.max(enemy.revealedTime, stats.sneaky.revealTime);
+    result.hitIds.push(enemy.id);
+  }
+  for (const id of result.duckIds) credit(battle, findDuck(battle, id)!, 'special', result.hitIds.length);
+  return result;
+}
+
+/** Hold the Line: for a while nothing scares the flock, and every ground predator trudges. */
+export function holdTheLine(battle: Battle): PowerResult {
+  battle.rallyTime = POWER_EFFECTS.holdTheLine.time;
+  for (const duck of battle.ducks) duck.scaredTime = 0; // "Pull yourselves together!"
+  const curtises = battle.ducks.filter((d) => d.kind === 'curtis');
+  const hitIds = battle.enemies.filter((e) => !isFlying(e)).map((e) => e.id);
+  for (const duck of curtises) credit(battle, duck, 'special', hitIds.length);
+  return { duckIds: curtises.map((d) => d.id), hitIds };
 }

@@ -53,6 +53,8 @@ describe("Craig's hints", () => {
     buyDuck(g, 'chester', { x: 900, y: 50 }); // far from Sunny, so no Pecking Loop
     const lost = { type: 'heartLost', enemy: 'raccoon' } as const;
     expect(pickHint(g, 'easy', lost, 3, none)).toBe('spendPeas');
+    expect(pickHint(g, 'easy', lost, 0, none)).toBe('powers'); // a power hasn't been tried yet
+    g.powers = { sunny: 0, chester: 0 }; // both tried
     expect(pickHint(g, 'easy', lost, 0, none)).toBe('upgrade');
     g.peas = 0;
     expect(pickHint(g, 'easy', lost, 0, none)).toBe('peckingLoop');
