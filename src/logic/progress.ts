@@ -1,4 +1,4 @@
-import type { Difficulty } from '../data/difficulty';
+import { DIFFICULTIES, DIFFICULTY_ORDER, type Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, type DuckKind } from '../data/ducks';
 import { HATS, type HatKind } from '../data/hats';
 import { TRIALS, findTrial } from '../data/trials';
@@ -20,8 +20,8 @@ export interface Progress {
   dailyStreak?: { count: number; last: string };
   /** The hat each duck is wearing (picked in the Wardrobe). */
   hats?: Partial<Record<DuckKind, HatKind>>;
-  /** The most Endless Pond waves survived on each difficulty. */
-  endless?: Partial<Record<Difficulty, number>>;
+  /** The most Endless Pond waves survived on each difficulty, per map (index into LEVELS). */
+  endless?: Partial<Record<Difficulty, Record<number, number>>>;
   /** Level Trials won (their ids, see src/data/trials.ts) on each difficulty. */
   trials?: Partial<Record<Difficulty, string[]>>;
 }
@@ -47,10 +47,15 @@ export function trialsUnlocked(progress: Progress, difficulty: Difficulty, level
   return !!progress.levels[difficulty][level];
 }
 
-/** Records an Endless Pond run, keeping the most waves survived. Returns a new Progress. */
-export function recordEndless(progress: Progress, difficulty: Difficulty, waves: number): Progress {
-  const best = Math.max(waves, progress.endless?.[difficulty] ?? 0);
-  return { ...progress, endless: { ...progress.endless, [difficulty]: best } };
+/** Records an Endless Pond run on a map, keeping the most waves survived there. Returns a new Progress. */
+export function recordEndless(progress: Progress, difficulty: Difficulty, map: number, waves: number): Progress {
+  const best = Math.max(waves, endlessBest(progress, difficulty, map));
+  return { ...progress, endless: { ...progress.endless, [difficulty]: { ...progress.endless?.[difficulty], [map]: best } } };
+}
+
+/** The most Endless Pond waves survived on a map and difficulty (0 if never played). */
+export function endlessBest(progress: Progress, difficulty: Difficulty, map: number): number {
+  return progress.endless?.[difficulty]?.[map] ?? 0;
 }
 
 /** A result folded into the record so far: the most stars and the best score. */
@@ -66,7 +71,7 @@ function parseRecord(record: Partial<LevelRecord> | undefined): LevelRecord | un
 }
 
 export function emptyProgress(): Progress {
-  return { version: 1, levels: { easy: {}, normal: {} } };
+  return { version: 1, levels: { easy: {}, normal: {}, hard: {} } };
 }
 
 /** Records a Daily Challenge win, keeping the best for that day. An older day's results are dropped. */
@@ -111,10 +116,10 @@ export function starsFor(heartsLeft: number, startingHearts: number): number {
 
 /**
  * Leaderboard score for a win: 100 per heart kept plus peas (leftover ones and those spent
- * on the ducks still out: see scorePeas in game.ts), doubled on Normal.
+ * on the ducks still out: see scorePeas in game.ts), doubled on Normal and tripled on Hard.
  */
 export function scoreFor(heartsLeft: number, peas: number, difficulty: Difficulty): number {
-  return (heartsLeft * 100 + peas) * (difficulty === 'normal' ? 2 : 1);
+  return (heartsLeft * 100 + peas) * DIFFICULTIES[difficulty].scoreMultiplier;
 }
 
 /** The first level is always open; each level after unlocks when the one before is beaten. */
@@ -133,7 +138,7 @@ export function recordWin(progress: Progress, difficulty: Difficulty, level: num
 
 /** Reads saved progress, ignoring anything missing or malformed. */
 export function parseProgress(text: string | null): Progress {
-  const progress = emptyProgress();
+  let progress = emptyProgress();
   if (!text) return progress;
   try {
     const data = JSON.parse(text) as {
@@ -144,7 +149,7 @@ export function parseProgress(text: string | null): Progress {
       endless?: Record<string, unknown>;
       trials?: Record<string, unknown>;
     };
-    for (const difficulty of ['easy', 'normal'] as const) {
+    for (const difficulty of DIFFICULTY_ORDER) {
       for (const [key, record] of Object.entries(data.levels?.[difficulty] ?? {})) {
         const level = Number(key);
         const parsed = parseRecord(record);
@@ -154,7 +159,7 @@ export function parseProgress(text: string | null): Progress {
     const daily = data.daily;
     if (daily && typeof daily.date === 'string') {
       const results: Partial<Record<Difficulty, LevelRecord>> = {};
-      for (const difficulty of ['easy', 'normal'] as const) {
+      for (const difficulty of DIFFICULTY_ORDER) {
         const parsed = parseRecord(daily.results?.[difficulty]);
         if (parsed) results[difficulty] = parsed;
       }
@@ -170,11 +175,17 @@ export function parseProgress(text: string | null): Progress {
       if (typeof hat === 'string' && hat in HATS) hats[kind] = hat as HatKind;
     }
     if (Object.keys(hats).length > 0) progress.hats = hats;
-    for (const difficulty of ['easy', 'normal'] as const) {
-      const waves = Number(data.endless?.[difficulty]);
-      if (Number.isInteger(waves) && waves > 0) progress.endless = { ...progress.endless, [difficulty]: waves };
+    for (const difficulty of DIFFICULTY_ORDER) {
+      const saved = data.endless?.[difficulty];
+      // Before Endless came to every map, this was just a number: the best on the first map.
+      const perMap: Record<string, unknown> = typeof saved === 'object' && saved !== null ? (saved as Record<string, unknown>) : { 0: saved };
+      for (const [key, value] of Object.entries(perMap)) {
+        const map = Number(key);
+        const waves = Number(value);
+        if (Number.isInteger(map) && map >= 0 && Number.isInteger(waves) && waves > 0) progress = recordEndless(progress, difficulty, map, waves);
+      }
     }
-    for (const difficulty of ['easy', 'normal'] as const) {
+    for (const difficulty of DIFFICULTY_ORDER) {
       const ids = data.trials?.[difficulty];
       if (!Array.isArray(ids)) continue;
       // Only trials that still exist, each counted once.

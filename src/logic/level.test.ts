@@ -4,7 +4,8 @@ import { DUCKS } from '../data/ducks';
 import { ENDLESS } from '../data/endless';
 import { ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, HUD_AREAS, type Area } from '../data/layout';
 import { LEVELS } from '../data/levels';
-import { distance, inEllipse, type Point } from './geometry';
+import { closestPointOnPolyline, distance, inEllipse, type Point } from './geometry';
+import { bonusNestsFor } from './endless';
 import { parseLevel } from './level';
 import { makePath, pointAt } from './path';
 
@@ -114,33 +115,35 @@ for (const [index, info] of LEVELS.entries()) {
   });
 }
 
-describe('the Endless Pond map', () => {
-  it('keeps nests out from under the Pond Perks counter and the fix-the-duck-house button', () => {
-    const level = parseLevel(LEVELS[ENDLESS.level]!.map);
-    for (const area of [ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA]) {
-      for (const slot of level.slots) expect(circleHitsArea(slot, NEST_RADIUS, area), JSON.stringify(slot)).toBe(false);
-    }
-  });
-});
+for (const [index, info] of LEVELS.entries()) {
+  describe(`level ${index + 1} as the Endless Pond: ${info.name}`, () => {
+    const level = parseLevel(info.map);
+    const path = makePath(level.path);
+    const samples = Array.from({ length: Math.ceil(path.length / 5) + 1 }, (_, i) => pointAt(path, i * 5));
+    const door = level.path[level.path.length - 1]!;
 
-describe("the Endless Pond's extra nests (the New Nests boss reward)", () => {
-  const level = parseLevel(LEVELS[ENDLESS.level]!.map);
-  const path = makePath(level.path);
-  const samples = Array.from({ length: Math.ceil(path.length / 5) + 1 }, (_, i) => pointAt(path, i * 5));
-  const door = level.path[level.path.length - 1]!;
-
-  it('are clear of the path, the pond, the other nests, the duck house, and the buttons', () => {
-    const nests = ENDLESS.bonusNests;
-    nests.forEach((nest, i) => {
-      for (const p of samples) expect(distance(nest, p)).toBeGreaterThan(55);
-      for (const other of [...level.slots, ...nests.slice(i + 1)]) expect(distance(nest, other)).toBeGreaterThanOrEqual(75);
-      for (const pond of level.ponds) expect(inEllipse(nest, { ...pond, radiusX: pond.radiusX + 40, radiusY: pond.radiusY + 40 })).toBe(false);
-      for (const area of [...HUD_AREAS, ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, houseBox(door)]) {
-        expect(circleHitsArea(nest, NEST_RADIUS, area), JSON.stringify(nest)).toBe(false);
+    it('keeps nests out from under the Pond Perks counter and the fix-the-duck-house button', () => {
+      for (const area of [ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA]) {
+        for (const slot of level.slots) expect(circleHitsArea(slot, NEST_RADIUS, area), JSON.stringify(slot)).toBe(false);
       }
     });
+
+    it('finds spots for the New Nests boss reward clear of the path, the pond, the other nests, the duck house, and the buttons', () => {
+      const nests = bonusNestsFor(level);
+      expect(nests).toHaveLength(ENDLESS.bonusNestCount);
+      nests.forEach((nest, i) => {
+        for (const p of samples) expect(distance(nest, p)).toBeGreaterThan(55);
+        for (const other of [...level.slots, ...nests.slice(i + 1)]) expect(distance(nest, other)).toBeGreaterThanOrEqual(75);
+        for (const pond of level.ponds) expect(inEllipse(nest, { ...pond, radiusX: pond.radiusX + 40, radiusY: pond.radiusY + 40 })).toBe(false);
+        for (const area of [...HUD_AREAS, ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, houseBox(door)]) {
+          expect(circleHitsArea(nest, NEST_RADIUS, area), JSON.stringify(nest)).toBe(false);
+        }
+        // Near enough to the path to be useful.
+        expect(distance(nest, closestPointOnPolyline(nest, level.path))).toBeLessThan(200);
+      });
+    });
   });
-});
+}
 
 describe('parseLevel', () => {
   const map = (slot: object) =>

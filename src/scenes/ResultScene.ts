@@ -327,7 +327,7 @@ export class ResultScene extends Phaser.Scene {
         let posted: { id: number } | undefined;
         const ok = await askForName(async (name) => {
           const result = await postScore(
-            endless ? { name, difficulty, endless: true, waves: endlessWaves } : { name, level, difficulty, hearts: hearts!, peas: peas!, daily, trial },
+            endless ? { name, difficulty, endless: true, level, waves: endlessWaves } : { name, level, difficulty, hearts: hearts!, peas: peas!, daily, trial },
           );
           if (!result.ok) return result.error;
           posted = result.data;

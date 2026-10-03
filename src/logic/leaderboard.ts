@@ -1,7 +1,7 @@
 import { englishDataset, englishRecommendedTransformers, RegExpMatcher } from 'obscenity';
 import { isDifficulty, type Difficulty } from '../data/difficulty';
 import { LEVEL_COUNT } from '../data/levelCount';
-import { ENDLESS, ENDLESS_LEVEL } from '../data/endless';
+import { ENDLESS, endlessLevel } from '../data/endless';
 import { findTrial } from '../data/trials';
 import { challengeSettings, dailyFor, isPostableDate } from './daily';
 import { scoreFor } from './progress';
@@ -50,12 +50,14 @@ export function checkSubmission(body: unknown, now: Date = new Date()): Submissi
   if (!nameCheck.ok) return nameCheck;
   if (!isDifficulty(difficulty)) return { ok: false, reason: 'Unknown difficulty.' };
 
-  // An Endless Pond run: the score is how many waves were survived.
+  // An Endless Pond run: the score is how many waves were survived, on the map's own board.
   if (endless === true) {
     if (!Number.isInteger(waves) || (waves as number) < 1 || (waves as number) > ENDLESS.maxWaves) {
       return { ok: false, reason: 'That score is not possible.' };
     }
-    const entry: ScoreSubmission = { name: nameCheck.name, level: ENDLESS_LEVEL, difficulty, hearts: 0, peas: 0 };
+    const map = level === undefined ? 0 : level;
+    if (!Number.isInteger(map) || (map as number) < 0 || (map as number) >= LEVEL_COUNT) return { ok: false, reason: 'Unknown level.' };
+    const entry: ScoreSubmission = { name: nameCheck.name, level: endlessLevel(map as number), difficulty, hearts: 0, peas: 0 };
     return { ok: true, entry: { ...entry, score: waves as number } };
   }
 

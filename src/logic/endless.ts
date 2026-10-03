@@ -1,8 +1,12 @@
 import { ENDLESS } from '../data/endless';
 import type { EnemyKind } from '../data/enemies';
+import { ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, HUD_AREAS, type Area } from '../data/layout';
 import type { SpawnGroup, Wave } from '../data/waves';
+import { closestPointOnPolyline, distance, inEllipse, type Point } from './geometry';
+import type { Level } from './level';
 
-// Builds the Endless Pond's waves from the numbers in src/data/endless.ts.
+// Builds the Endless Pond's waves from the numbers in src/data/endless.ts, and finds spots
+// for the New Nests boss reward on whichever map is being played.
 
 /** Wave `n` of the Endless Pond (1 = the first wave). */
 export function endlessWave(n: number): Wave {
@@ -45,4 +49,57 @@ export function bossCount(n: number): number {
 /** Every Endless Pond wave, in order. */
 export function endlessWaves(): Wave[] {
   return Array.from({ length: ENDLESS.maxWaves }, (_, i) => endlessWave(i + 1));
+}
+
+// Where a bonus nest can go: the same clearances the level checks ask of a designed nest.
+export const NEST_CLEARANCE = {
+  path: 56, // at least this far from the path
+  nest: 75, // and from other nests
+  pond: 40, // outside the pond and its sandy shore
+  radius: 36, // the nest drawing's size, kept out from under buttons and the duck house
+  edge: 50, // inside the map by this much
+  grid: 20, // candidate spots are checked this far apart
+};
+
+/** The box the duck house drawing covers around the end of the path. */
+export function houseBox(door: Point): Area {
+  return { x: door.x - 75, y: door.y - 105, width: 150, height: 145 };
+}
+
+function circleHitsArea(c: Point, r: number, a: Area): boolean {
+  const nx = Math.max(a.x, Math.min(c.x, a.x + a.width));
+  const ny = Math.max(a.y, Math.min(c.y, a.y + a.height));
+  return distance(c, { x: nx, y: ny }) < r;
+}
+
+/**
+ * Spots for the New Nests boss reward on this map: the places nearest the path (so the ducks
+ * there have something to peck) that are still clear of the path, the pond, the other nests,
+ * the duck house, and the buttons. The same for everyone, so the leaderboard stays fair.
+ */
+export function bonusNestsFor(level: Level, count = ENDLESS.bonusNestCount): Point[] {
+  const { path, edge, grid, nest, pond, radius } = NEST_CLEARANCE;
+  const door = level.path[level.path.length - 1]!;
+  const blocked = [...HUD_AREAS, ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, houseBox(door)];
+  const width = 1280;
+  const height = 720;
+  const candidates: { at: Point; toPath: number }[] = [];
+  for (let y = edge; y <= height - edge; y += grid) {
+    for (let x = edge; x <= width - edge; x += grid) {
+      const at = { x, y };
+      const toPath = distance(at, closestPointOnPolyline(at, level.path));
+      if (toPath <= path) continue;
+      if (level.slots.some((slot) => distance(at, slot) < nest)) continue;
+      if (level.ponds.some((p) => inEllipse(at, { ...p, radiusX: p.radiusX + pond, radiusY: p.radiusY + pond }))) continue;
+      if (blocked.some((area) => circleHitsArea(at, radius, area))) continue;
+      candidates.push({ at, toPath });
+    }
+  }
+  candidates.sort((a, b) => a.toPath - b.toPath || a.at.y - b.at.y || a.at.x - b.at.x);
+  const picked: Point[] = [];
+  for (const { at } of candidates) {
+    if (picked.length >= count) break;
+    if (picked.every((other) => distance(at, other) >= nest)) picked.push(at);
+  }
+  return picked;
 }

@@ -5,6 +5,7 @@ import {
   dailyRecord,
   dailyStreak,
   emptyProgress,
+  endlessBest,
   hasWonTrial,
   isUnlocked,
   parseProgress,
@@ -34,9 +35,10 @@ describe('stars', () => {
 });
 
 describe('score', () => {
-  it('is 100 per heart plus leftover peas, doubled on Normal', () => {
+  it('is 100 per heart plus leftover peas, doubled on Normal and tripled on Hard', () => {
     expect(scoreFor(8, 150, 'easy')).toBe(950);
     expect(scoreFor(8, 150, 'normal')).toBe(1900);
+    expect(scoreFor(4, 150, 'hard')).toBe(1650);
   });
 });
 
@@ -60,8 +62,10 @@ describe('progress', () => {
   });
 
   it('survives being saved and loaded', () => {
-    const progress = recordWin(emptyProgress(), 'normal', 2, 2, 1800);
+    const progress = recordWin(recordWin(emptyProgress(), 'normal', 2, 2, 1800), 'hard', 0, 1, 900);
     expect(parseProgress(JSON.stringify(progress))).toEqual(progress);
+    // A save from before Hard existed still loads.
+    expect(parseProgress(JSON.stringify({ version: 1, levels: { easy: { 0: { stars: 2, bestScore: 5 } }, normal: {} } })).levels.easy[0]).toEqual({ stars: 2, bestScore: 5 });
   });
 
   it('ignores corrupt or tampered saves', () => {
@@ -123,12 +127,19 @@ describe('daily challenge progress', () => {
 });
 
 describe('Endless Pond progress', () => {
-  it('keeps the most waves survived on each difficulty, and survives saving', () => {
-    let progress = recordEndless(emptyProgress(), 'easy', 12);
-    progress = recordEndless(progress, 'easy', 8);
-    progress = recordEndless(progress, 'normal', 5);
-    expect(progress.endless).toEqual({ easy: 12, normal: 5 });
-    expect(parseProgress(JSON.stringify(progress)).endless).toEqual({ easy: 12, normal: 5 });
+  it('keeps the most waves survived on each map and difficulty, and survives saving', () => {
+    let progress = recordEndless(emptyProgress(), 'easy', 0, 12);
+    progress = recordEndless(progress, 'easy', 0, 8);
+    progress = recordEndless(progress, 'easy', 2, 3);
+    progress = recordEndless(progress, 'normal', 0, 5);
+    expect(progress.endless).toEqual({ easy: { 0: 12, 2: 3 }, normal: { 0: 5 } });
+    expect(endlessBest(progress, 'easy', 2)).toBe(3);
+    expect(endlessBest(progress, 'hard', 0)).toBe(0);
+    expect(parseProgress(JSON.stringify(progress)).endless).toEqual(progress.endless);
+  });
+
+  it('reads a save from when Endless was only on the first map', () => {
+    expect(parseProgress(JSON.stringify({ endless: { easy: 12, normal: 'lots' } })).endless).toEqual({ easy: { 0: 12 } });
   });
 });
 

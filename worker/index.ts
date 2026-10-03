@@ -2,15 +2,15 @@
 //
 //   GET    /api/scores?level=0&difficulty=easy          top scores for a level
 //   GET    /api/scores?daily=2026-09-29&difficulty=easy top scores for a Daily Challenge
-//   GET    /api/scores?endless=1&difficulty=easy        most Endless Pond waves survived
+//   GET    /api/scores?endless=1&level=0&difficulty=easy most Endless Pond waves survived on a map
 //   GET    /api/scores?trial=potatoPatrol&difficulty=easy top scores for a Level Trial
 //   POST   /api/scores                                  post a win { name, level, difficulty, hearts, peas, daily? | trial? }
-//                                                       or an Endless Pond run { name, difficulty, endless: true, waves }
+//                                                       or an Endless Pond run { name, difficulty, endless: true, level, waves }
 //   DELETE /api/scores/:id                       remove an entry (needs the ADMIN_TOKEN secret)
 
 import { checkSubmission } from '../src/logic/leaderboard';
 import { LEVEL_COUNT } from '../src/data/levelCount';
-import { ENDLESS_LEVEL } from '../src/data/endless';
+import { endlessLevel, endlessMap } from '../src/data/endless';
 import { dailyFor } from '../src/logic/daily';
 import { isDifficulty } from '../src/data/difficulty';
 import { findTrial } from '../src/data/trials';
@@ -72,9 +72,10 @@ async function listScores(url: URL, env: Env): Promise<Response> {
     if (!findTrial(trialParam)) return json({ error: 'Unknown trial.' }, 400);
     board = { column: 'trial', value: trialParam };
   } else {
-    const level = url.searchParams.get('endless') === '1' ? ENDLESS_LEVEL : Number(url.searchParams.get('level'));
+    const sent = Number(url.searchParams.get('level') ?? 0);
+    const level = url.searchParams.get('endless') === '1' ? endlessLevel(sent) : sent;
     const realLevel = Number.isInteger(level) && level >= 0 && level < LEVEL_COUNT;
-    if (!realLevel && level !== ENDLESS_LEVEL) return json({ error: 'Unknown level.' }, 400);
+    if (!realLevel && endlessMap(level) === undefined) return json({ error: 'Unknown level.' }, 400);
     board = { column: 'level', value: level };
   }
   const { results } = await env.DB.prepare(

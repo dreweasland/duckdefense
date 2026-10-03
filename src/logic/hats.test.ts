@@ -20,7 +20,7 @@ describe('hats', () => {
     expect(totalStars(withStars())).toBe(6);
   });
 
-  it('unlocks hats as stars are earned, and the crown needs every star', () => {
+  it('unlocks hats as stars are earned, and the crown needs every star on Easy and Normal', () => {
     expect(isHatUnlocked('party', earned(0))).toBe(true);
     expect(newlyUnlocked(earned(4), earned(7))).toEqual(HAT_ORDER.filter((h) => !HATS[h].ribbons && HATS[h].stars > 4 && HATS[h].stars <= 7));
     expect(Math.max(...Object.values(HATS).map((h) => h.stars))).toBe(LEVEL_COUNT * 3 * 2);

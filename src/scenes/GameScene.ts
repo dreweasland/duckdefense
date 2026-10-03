@@ -54,9 +54,9 @@ import { closestPointOnPolyline, type Ellipse, type Point } from '../logic/geome
 import { parseLevel, type Level } from '../logic/level';
 import { isFinalChoice, nameAt, nextUpgrade, statsAt, upgradeOptions } from '../logic/upgrades';
 import { challengeSettings, dailyFor } from '../logic/daily';
-import { dailyRecord, dailyStreak, recordDailyWin, recordEndless, recordTrialWin, recordWin, scoreFor, starsFor } from '../logic/progress';
+import { dailyRecord, dailyStreak, endlessBest, recordDailyWin, recordEndless, recordTrialWin, recordWin, scoreFor, starsFor } from '../logic/progress';
 import { ENDLESS } from '../data/endless';
-import { endlessWaves } from '../logic/endless';
+import { bonusNestsFor, endlessWaves } from '../logic/endless';
 import { loadProgress, saveProgress } from '../save';
 import type { HatKind } from '../data/hats';
 import { HINT_GAP, HINTS, type HintId } from '../data/hints';
@@ -141,7 +141,7 @@ export interface GameSceneData {
   level?: number;
   /** Play the Daily Challenge for this date (YYYY-MM-DD) instead; the date picks the level. */
   daily?: string;
-  /** Play the Endless Pond instead: waves until you run out of hearts. */
+  /** Play the Endless Pond on `level`'s map instead: waves until you run out of hearts. */
   endless?: boolean;
   /** Play a Level Trial (its id, see src/data/trials.ts) instead; the trial picks the level. */
   trial?: string;
@@ -214,6 +214,8 @@ export class GameScene extends Phaser.Scene {
   private daily?: { date: string; challenge: Challenge };
   /** The Level Trial being played, if any. */
   private trial?: Trial;
+  /** Endless Pond: where the New Nests boss reward puts its nests on this map. */
+  private bonusNests: Point[] = [];
   private level!: Level;
   private state!: Game;
   private selected: DuckKind = 'sunny';
@@ -287,7 +289,6 @@ export class GameScene extends Phaser.Scene {
     this.daily = daily && { date: daily.date, challenge: daily.challenge };
     if (daily) this.levelIndex = Math.min(daily.level, LEVELS.length - 1);
     this.endless = !daily && !!data.endless;
-    if (this.endless) this.levelIndex = ENDLESS.level;
     const found = !daily && !this.endless && data.trial ? findTrial(data.trial) : undefined;
     this.trial = found?.trial;
     if (found) this.levelIndex = found.level;
@@ -309,6 +310,7 @@ export class GameScene extends Phaser.Scene {
       if (hat) this.hats[kind] = hat;
     }
     this.level = parseLevel(info.map);
+    this.bonusNests = this.endless ? bonusNestsFor(this.level) : [];
     this.state = createGame(
       mapFromLevel(this.level),
       this.endless ? endlessWaves() : info.waves,
@@ -365,7 +367,7 @@ export class GameScene extends Phaser.Scene {
       if (this.state.phase === 'building' && this.state.waveIndex === 0) this.maybeHint({ type: 'noDucksYet' });
     });
     if (this.endless) {
-      this.time.delayedCall(350, () => this.showBanner(`${ENDLESS.name}: how long can you last?`));
+      this.time.delayedCall(350, () => this.showBanner(`${ENDLESS.name}: ${info.name}`));
     } else if (this.daily) {
       const { challenge } = this.daily;
       this.time.delayedCall(350, () => this.showBanner(`Daily Challenge: ${challenge.name}`));
@@ -470,7 +472,7 @@ export class GameScene extends Phaser.Scene {
     scatterDecor(
       this,
       // (The Endless Pond keeps bushes and rocks off the spots where the New Nests boss reward goes.)
-      { path: this.level.path, slots: [...this.level.slots, ...(this.endless ? ENDLESS.bonusNests : [])], ponds: this.level.ponds, house: door, blocked: HUD_AREAS },
+      { path: this.level.path, slots: [...this.level.slots, ...this.bonusNests], ponds: this.level.ponds, house: door, blocked: HUD_AREAS },
       seed + 2,
     );
   }
@@ -1806,10 +1808,10 @@ export class GameScene extends Phaser.Scene {
           // The score is waves survived (the one that got you doesn't count). Keep the best.
           const progress = loadProgress();
           result.endlessWaves = this.state.phase === 'won' ? this.state.waves.length : this.state.waveIndex;
-          const previousBest = progress.endless?.[this.difficulty] ?? 0;
+          const previousBest = endlessBest(progress, this.difficulty, this.levelIndex);
           result.newBest = previousBest > 0 && result.endlessWaves > previousBest;
           result.endlessBest = Math.max(previousBest, result.endlessWaves);
-          saveProgress(recordEndless(progress, this.difficulty, result.endlessWaves));
+          saveProgress(recordEndless(progress, this.difficulty, this.levelIndex, result.endlessWaves));
         } else if (result.won && this.trial) {
           // A trial win earns its ribbon (and ribbons can unlock hats). Its score goes on the trial's own board.
           result.hearts = this.state.hearts;
@@ -2218,7 +2220,7 @@ export class GameScene extends Phaser.Scene {
     if (PERKS[id].effect.hearts) this.tweens.add({ targets: this.heartsPill, scale: 1.25, duration: 120, yoyo: true });
     // New Nests: the extra nests pop up, ready for ducks.
     if (PERKS[id].effect.nests) {
-      for (const slot of ENDLESS.bonusNests) {
+      for (const slot of this.bonusNests) {
         this.drawNest(slot);
         this.fx.puff.explode(10, slot.x, slot.y);
         this.fx.stars.explode(8, slot.x, slot.y - 10);
@@ -2462,7 +2464,7 @@ export class GameScene extends Phaser.Scene {
       difficulty: this.difficulty,
       // Leaving an Endless Pond run part-way still counts the waves survived so far.
       onLeave: () => {
-        if (this.endless) saveProgress(recordEndless(loadProgress(), this.difficulty, this.state.waveIndex));
+        if (this.endless) saveProgress(recordEndless(loadProgress(), this.difficulty, this.levelIndex, this.state.waveIndex));
       },
     };
     this.scene.launch('PauseScene', data);

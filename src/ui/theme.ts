@@ -52,7 +52,16 @@ export const COLORS = {
   water: 0x9fd8ff,
   night: 0x0d1b3d,
   pink: 0xff7aa2,
+  red: 0xe0524c,
+  redDark: 0xa33a35,
 };
+
+/** Each difficulty's colour: the title screen's buttons and the chips on the other screens. */
+export const DIFFICULTY_COLORS = {
+  easy: { fill: COLORS.green, edge: COLORS.greenDark, css: '#3fbf5f' },
+  normal: { fill: COLORS.orange, edge: COLORS.orangeDark, css: '#f28c28' },
+  hard: { fill: COLORS.red, edge: COLORS.redDark, css: '#e0524c' },
+} as const;
 
 /** Draw order. Characters and scenery sort by their y within the "entities" band. */
 export const DEPTH = {

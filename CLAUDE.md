@@ -79,12 +79,16 @@ everywhere: dialogue, tooltips, code comments.
   numbers are in `src/data/ducks.ts`. A duck placed between waves can be sold for every
   pea it cost until the next wave starts, so a misplaced duck costs nothing.
 - **Score:** 100 per heart kept, plus peas left over and peas spent on the ducks still out
-  (`scorePeas` in `src/logic/game.ts`), doubled on Normal. Spending never costs score and
+  (`scorePeas` in `src/logic/game.ts`), doubled on Normal and tripled on Hard. Spending never costs score and
   selling never adds any.
 - **Pause:** The pause button above the sound button (or Esc) freezes the game and opens
   `PauseScene`: Play, Again, or Levels (the last two ask "are you sure?" first). Leaving an Endless Pond run this way still saves
   the waves survived.
 - **Lives:** The duck house has hearts. Each predator that reaches it costs one (the Night Bandit costs five).
+- **Difficulties:** Easy, Normal, and Hard (`src/data/difficulty.ts`: peas, hearts, predator speed
+  and health, score multiplier). Hard has 5 hearts and predators 10% faster, so a boss getting in
+  is the end. `npm test` checks every level can be won on Hard by a sensible team. Progress,
+  stars, and leaderboards are kept per difficulty.
 - **Day/night cycle:** Night waves are harder. The **solar battery meter** powers the
   pond fountain, whose refreshing spray makes nearby ducks hit harder. It charges during
   day waves and drains at night, just like the real Victron setup.
@@ -110,14 +114,16 @@ everywhere: dialogue, tooltips, code comments.
   yet), Craig pops up beside her button with a tip that fits: call her when hearts are low,
   the duck that beats the predator that got in, then general tips. Each hint shows once per
   visit. Words in `src/data/hints.ts`, rules in `src/logic/hints.ts`.
-- **Endless Pond:** Waves on the Backyard Pond map until the hearts run out; the score is
-  waves survived, with its own leaderboard tab. Waves are built by a formula (no randomness,
+- **Endless Pond:** Waves on any map you've opened (pick one from the Endless sheet on the level
+  select screen) until the hearts run out; the score is waves survived, with a leaderboard per map
+  (the Endless tab has a pill for each). Waves are built by a formula (no randomness,
   so it's fair) from the numbers in `src/data/endless.ts`: when each predator joins, how
   fast they grow, and how much tougher they get (`health` on a wave, growing 4.5% a wave on
   top of the last). A boss comes every 10th wave, then every 5th from wave 20, taking
   turns (Night Bandit, Storm Hawk, Silver Fox, Old Snapper), with one more boss at once
-  every 25 waves. Endless scores are
-  stored on the leaderboard as level -1 (`ENDLESS_LEVEL`).
+  every 25 waves. Endless scores are stored on the leaderboard with a negative level: -1 for the
+  first map, -2 for the second (`endlessLevel` in `src/data/endless.ts`). Best waves are saved
+  per map and difficulty.
   Endless only, so peas never pile up: fully upgraded ducks can keep **training** (+15%
   damage per level, each costing more), and a button under the hearts **fixes the duck
   house** (one heart back, up to the starting hearts, each costing more). Both in
@@ -131,7 +137,8 @@ everywhere: dialogue, tooltips, code comments.
   change a rule, each taken once: Craig's Watch (her blessing returns every 5 waves), Soggy
   Splash (Sunny's splashes slow predators), Sky Quack (Chester's quack blows hawks back),
   Prickly Curtis (predators near him lose health), Dizzy Flap (Potato's flap stuns), and New
-  Nests (two more nests, at `ENDLESS.bonusNests`). They're the perks marked `boss: true` in
+  Nests (two more nests; `bonusNestsFor` in `src/logic/endless.ts` finds spots for them on
+  whichever map is being played). They're the perks marked `boss: true` in
   `src/data/perks.ts`; once all are taken, boss waves offer the usual perks again.
 - **Level Trials:** Once a level is beaten on a difficulty, its sheet (tap the level card)
   lists two trials: the same level with the rules bent, like only some ducks playing, half
@@ -186,7 +193,7 @@ When adding a feature, prefer a design where the tunable part lives in a data fi
 - **M1: One duck, one raccoon.** A map loaded from Tiled, one path, one enemy walking it,
   click to place Sunny, Sunny attacks, the enemy dies or reaches the house.
 - **M2: Full flock and waves.** All four ducks, a wave system, peas, lives, win/lose
-  screens, and an Easy/Normal difficulty toggle.
+  screens, and an Easy/Normal difficulty toggle (Hard came later).
 - **M3: Depth.** Pecking Loop synergy, flying hawks, day/night cycle with the solar
   battery, the fountain tower, Craig's blessing.
 - **M4: Make it ours.** Sound system (the kids' recordings drop into `src/sounds/`; anything

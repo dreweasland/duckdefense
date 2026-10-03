@@ -3,7 +3,6 @@
 import type { Challenge } from '../data/challenges';
 import type { Difficulty } from '../data/difficulty';
 import { DUCKS, type DuckKind } from '../data/ducks';
-import { ENDLESS } from '../data/endless';
 import type { LevelInfo } from '../data/levels';
 import {
   buyDuck,
@@ -25,6 +24,7 @@ import {
 import { distance, type Point } from './geometry';
 import { parseLevel } from './level';
 import { makePath, pointAt } from './path';
+import { bonusNestsFor } from './endless';
 import { nextUpgrade } from './upgrades';
 
 /** Slots sorted so the ones that can see the most of every predator route come first. */
@@ -103,7 +103,7 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | r
     if (game.perkChoice) choosePerk(game, game.perkChoice[0]!);
     if (game.battle.mods.bonusNests && !usedBonusNests) {
       usedBonusNests = true;
-      slots.push(...ENDLESS.bonusNests);
+      slots.push(...bonusNestsFor(parseLevel(info.map)));
     }
     for (;;) {
       const kind = nextKind();

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DIFFICULTIES } from '../data/difficulty';
 import { LEVEL_COUNT } from '../data/levelCount';
 import { LEVELS } from '../data/levels';
-import { ENDLESS, ENDLESS_LEVEL } from '../data/endless';
+import { ENDLESS, endlessLevel, endlessMap } from '../data/endless';
 import { challengeSettings, dailyDate, dailyFor } from './daily';
 import { findTrial } from '../data/trials';
 import { MAX_PEAS, NAME_MAX_LENGTH, checkName, checkSubmission } from './leaderboard';
@@ -116,11 +116,20 @@ describe('level count', () => {
 });
 
 describe('Endless Pond submissions', () => {
-  it('scores the waves survived, on its own board', () => {
+  it("scores the waves survived, on the map's own board (the first map unless one is sent)", () => {
     expect(checkSubmission({ name: 'Pond Pro', difficulty: 'normal', endless: true, waves: 23, hearts: 5, peas: 9999 })).toEqual({
       ok: true,
-      entry: { name: 'Pond Pro', level: ENDLESS_LEVEL, difficulty: 'normal', hearts: 0, peas: 0, score: 23 },
+      entry: { name: 'Pond Pro', level: endlessLevel(0), difficulty: 'normal', hearts: 0, peas: 0, score: 23 },
     });
+    expect(checkSubmission({ name: 'Pond Pro', difficulty: 'easy', endless: true, waves: 5, level: 3 })).toMatchObject({ ok: true, entry: { level: endlessLevel(3) } });
+    expect(checkSubmission({ name: 'Pond Pro', difficulty: 'easy', endless: true, waves: 5, level: LEVEL_COUNT }).ok).toBe(false);
+  });
+
+  it('keeps Endless levels apart from real ones', () => {
+    expect(endlessLevel(0)).toBe(-1); // the Backyard Pond's old scores stay where they were
+    for (let map = 0; map < LEVEL_COUNT; map++) expect(endlessMap(endlessLevel(map))).toBe(map);
+    expect(endlessMap(0)).toBeUndefined();
+    expect(endlessMap(-1 - LEVEL_COUNT)).toBeUndefined();
   });
 
   it('rejects impossible wave counts', () => {

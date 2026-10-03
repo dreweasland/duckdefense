@@ -50,7 +50,7 @@ describe('Endless Pond waves', () => {
   });
 
   it("make predators tougher by the wave's health", () => {
-    const game = createGame(mapFromLevel(parseLevel(LEVELS[ENDLESS.level]!.map)), endlessWaves(), 'easy');
+    const game = createGame(mapFromLevel(parseLevel(LEVELS[0]!.map)), endlessWaves(), 'easy');
     game.waveIndex = 20;
     startWave(game);
     const raccoon = spawnEnemy(game.battle, 'raccoon');
@@ -59,7 +59,7 @@ describe('Endless Pond waves', () => {
 });
 
 describe('Endless Pond extras', () => {
-  const newGame = (endless = true) => createGame(mapFromLevel(parseLevel(LEVELS[ENDLESS.level]!.map)), endlessWaves(), 'easy', undefined, endless);
+  const newGame = (endless = true) => createGame(mapFromLevel(parseLevel(LEVELS[0]!.map)), endlessWaves(), 'easy', undefined, endless);
 
   it('let a fully upgraded duck keep training, each level costing more', () => {
     const game = newGame();
@@ -106,7 +106,7 @@ describe('Endless Pond extras', () => {
 });
 
 describe('Endless Pond balance', () => {
-  const info = { ...LEVELS[ENDLESS.level]!, waves: endlessWaves() };
+  const info = { ...LEVELS[0]!, waves: endlessWaves() };
 
   it('lets a simple Easy player last a good while, but not forever', () => {
     // Bigger simulation steps keep this long run quick.

@@ -33,6 +33,8 @@ export interface ScheduledSpawn {
 export interface Game {
   battle: Battle;
   waves: readonly Wave[];
+  /** The difficulty's health multiplier for every predator (on top of a wave's own). */
+  enemyHealth: number;
   peas: number;
   hearts: number;
   /** The wave being fought, or the next one while building (0-based). */
@@ -119,6 +121,7 @@ export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Dif
       specialNests: map.specialNests,
     }),
     waves: challengeWaves(waves, challenge),
+    enemyHealth: settings.enemyHealth,
     peas: settings.startingPeas,
     hearts: settings.hearts,
     waveIndex: 0,
@@ -352,7 +355,7 @@ function beginWave(game: Game): void {
   game.waveTime = 0;
   game.pending = scheduleWave(wave);
   game.battle.night = wave.time === 'night';
-  game.battle.enemyHealth = wave.health ?? 1;
+  game.battle.enemyHealth = (wave.health ?? 1) * game.enemyHealth;
 }
 
 /** Whether you can send the next wave now: every predator in this wave is out, and there's another wave. */

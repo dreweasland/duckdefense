@@ -1,8 +1,9 @@
 import type { EnemyKind } from './enemies';
+import { LEVEL_COUNT } from './levelCount';
 
 // The Endless Pond: waves keep coming, bigger and tougher each time, until the duck
-// house runs out of hearts. Your score is how many waves you survive. There's no
-// randomness, so everyone faces the same waves and the leaderboard is fair.
+// house runs out of hearts, on whichever map you pick. Your score is how many waves you
+// survive. There's no randomness, so everyone faces the same waves and the leaderboard is fair.
 
 export interface EndlessGroup {
   enemy: EnemyKind;
@@ -14,7 +15,6 @@ export interface EndlessGroup {
 }
 
 export const ENDLESS = {
-  level: 0, // which map (index into LEVELS): the Backyard Pond
   name: 'Endless Pond',
   maxWaves: 999, // nobody will get this far... right?
   nightEvery: 3, // every 3rd wave is at night
@@ -34,11 +34,9 @@ export const ENDLESS = {
   minEvery: 0.35, // but never closer than this many seconds apart
   bonusPeas: { first: 50, perWave: 4 }, // peas for clearing a wave
   perkEvery: 5, // after every 5th wave, pick a Pond Perk (see src/data/perks.ts)
-  // The New Nests boss reward opens these (spots on the Backyard Pond map, clear of the path and buttons).
-  bonusNests: [
-    { x: 350, y: 665 },
-    { x: 940, y: 665 },
-  ],
+  // The New Nests boss reward opens this many extra nests. The game finds spots for them on
+  // whichever map is being played (bonusNestsFor in src/logic/endless.ts).
+  bonusNestCount: 2,
   craigEvery: 10, // after every 10th wave, Craig's Guardian Blessing is ready again (if it was used)
   // Training: once a duck has both upgrades, it can keep training to hit harder.
   training: {
@@ -61,5 +59,14 @@ export const ENDLESS = {
   ] satisfies EndlessGroup[],
 };
 
-// Endless scores are stored on the leaderboard as this "level" (real levels start at 0).
-export const ENDLESS_LEVEL = -1;
+// Endless scores are stored on the leaderboard with a negative level: -1 for an Endless run on
+// the first map, -2 for the second, and so on (real levels start at 0).
+export function endlessLevel(map: number): number {
+  return -1 - map;
+}
+
+/** The map an Endless leaderboard level stands for, or undefined if it isn't one. */
+export function endlessMap(level: number): number | undefined {
+  const map = -1 - level;
+  return Number.isInteger(map) && map >= 0 && map < LEVEL_COUNT ? map : undefined;
+}

@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
 import { drawGrass, drawOutskirts, drawPond, scatterDecor } from '../art/terrain';
 import type { Difficulty } from '../data/difficulty';
-import { DIFFICULTIES } from '../data/difficulty';
+import { DIFFICULTIES, DIFFICULTY_ORDER } from '../data/difficulty';
 import { DUCK_ORDER } from '../data/ducks';
-import { COLORS, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
+import { COLORS, DIFFICULTY_COLORS, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
 import { playSound } from '../audio/sfx';
 import { hatFor } from '../logic/hats';
 import { loadProgress } from '../save';
@@ -54,8 +54,11 @@ export class TitleScene extends Phaser.Scene {
       const data: LevelSelectSceneData = { difficulty };
       fadeToScene(this, 'LevelSelectScene', data, 250);
     };
-    drawBigButton(this, cx - 170, 610, DIFFICULTIES.easy.label, COLORS.green, COLORS.greenDark, () => start('easy')).setDepth(100);
-    drawBigButton(this, cx + 170, 610, DIFFICULTIES.normal.label, COLORS.orange, COLORS.orangeDark, () => start('normal')).setDepth(100);
+    DIFFICULTY_ORDER.forEach((difficulty, i) => {
+      const x = cx + (i - (DIFFICULTY_ORDER.length - 1) / 2) * 300;
+      const { fill, edge } = DIFFICULTY_COLORS[difficulty];
+      drawBigButton(this, x, 610, DIFFICULTIES[difficulty].label, fill, edge, () => start(difficulty)).setDepth(100);
+    });
 
     drawSoundButton(this, WORLD.width - 40, WORLD.height - 40, 100);
 

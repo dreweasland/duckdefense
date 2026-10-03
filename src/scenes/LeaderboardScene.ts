@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { fetchScores, type ScoreRow } from '../api';
 import { playSound } from '../audio/sfx';
 import { drawGrass, drawOutskirts } from '../art/terrain';
-import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
+import { DIFFICULTIES, DIFFICULTY_ORDER, type Difficulty } from '../data/difficulty';
 import { LEVELS } from '../data/levels';
 import { TRIALS, findTrial } from '../data/trials';
 import { dailyDate, dailyFor } from '../logic/daily';
@@ -13,7 +13,7 @@ export interface LeaderboardSceneData {
   level?: number;
   /** Show this date's Daily Challenge board (YYYY-MM-DD) instead of a level's. */
   daily?: string;
-  /** Show the Endless Pond board. */
+  /** Show the Endless Pond board for `level`'s map. */
   endless?: boolean;
   /** Show a Level Trial's board (its id) instead of its level's. */
   trial?: string;
@@ -33,7 +33,7 @@ export class LeaderboardScene extends Phaser.Scene {
   private level = 0;
   /** The Daily Challenge date the Daily tab shows, and whether that tab is picked. */
   private dailyDate = '';
-  /** Which tab is picked: the Daily Challenge, a level (this.level), one of its trials (this.trial), or the Endless Pond. */
+  /** Which tab is picked: the Daily Challenge, a level (this.level), one of its trials (this.trial), or the Endless Pond (on this.level's map). */
   private board: 'daily' | 'level' | 'trial' | 'endless' = 'level';
   private trial = '';
   private subTabs?: Phaser.GameObjects.Container;
@@ -89,8 +89,9 @@ export class LeaderboardScene extends Phaser.Scene {
       });
     });
     this.drawTab(tabX(tabs - 1), 138, tabWidth, '∞ Endless', () => this.board === 'endless', () => (this.board = 'endless'));
-    (['easy', 'normal'] as const).forEach((difficulty, i) => {
-      this.drawTab(cx + (i - 0.5) * 170, 192, 150, DIFFICULTIES[difficulty].label, () => this.difficulty === difficulty, () => (this.difficulty = difficulty));
+    DIFFICULTY_ORDER.forEach((difficulty, i) => {
+      const x = cx + (i - (DIFFICULTY_ORDER.length - 1) / 2) * 170;
+      this.drawTab(x, 192, 150, DIFFICULTIES[difficulty].label, () => this.difficulty === difficulty, () => (this.difficulty = difficulty));
     });
 
     drawBackButton(this, () => fadeToScene(this, this.back.scene, this.back.data));
@@ -101,30 +102,36 @@ export class LeaderboardScene extends Phaser.Scene {
     void this.loadScores();
   }
 
-  /** Under a level's tab: the level's own board, or one of its trials'. (Nothing for the other boards.) */
+  /**
+   * Under a level's tab: the level's own board, or one of its trials'. Under the Endless tab:
+   * a pill for each map. (Nothing for the Daily Challenge.)
+   */
   private drawSubTabs(): void {
     this.subTabs?.destroy();
     this.subTabs = undefined;
     this.tabs.length = this.mainTabCount;
-    if (this.board !== 'level' && this.board !== 'trial') return;
+    if (this.board === 'daily') return;
     const level = this.level;
-    const trials = TRIALS[level] ?? [];
-    const choices = [
-      { label: LEVELS[level]?.name ?? 'Level', isOn: () => this.board === 'level', select: () => (this.board = 'level') },
-      ...trials.map((trial) => ({
-        label: trial.name,
-        isOn: () => this.board === 'trial' && this.trial === trial.id,
-        select: () => {
-          this.board = 'trial';
-          this.trial = trial.id;
-        },
-      })),
-    ];
+    const choices: { label: string; ribbon?: boolean; isOn: () => boolean; select: () => void }[] =
+      this.board === 'endless'
+        ? LEVELS.map((info, map) => ({ label: info.name, isOn: () => this.level === map, select: () => (this.level = map) }))
+        : [
+            { label: LEVELS[level]?.name ?? 'Level', isOn: () => this.board === 'level', select: () => (this.board = 'level') },
+            ...(TRIALS[level] ?? []).map((trial) => ({
+              label: trial.name,
+              ribbon: true,
+              isOn: () => this.board === 'trial' && this.trial === trial.id,
+              select: () => {
+                this.board = 'trial';
+                this.trial = trial.id;
+              },
+            })),
+          ];
     this.subTabs = this.add.container(0, 0);
     choices.forEach((choice, i) => {
       const x = WORLD.width / 2 + (i - (choices.length - 1) / 2) * SUB_TABS.spacing;
       const parts: Phaser.GameObjects.GameObject[] = [];
-      if (i > 0) parts.push(this.add.image(-SUB_TABS.width / 2 + 22, 0, 'ribbon').setDisplaySize(26, 26).setTint(COLORS.pink));
+      if (choice.ribbon) parts.push(this.add.image(-SUB_TABS.width / 2 + 22, 0, 'ribbon').setDisplaySize(26, 26).setTint(COLORS.pink));
       this.drawTab(x, SUB_TABS.y, SUB_TABS.width, choice.label, choice.isOn, choice.select, { parent: this.subTabs, icon: parts, small: true });
     });
   }
@@ -185,7 +192,7 @@ export class LeaderboardScene extends Phaser.Scene {
       this.board === 'daily'
         ? { daily: this.dailyDate }
         : this.board === 'endless'
-          ? ({ endless: true } as const)
+          ? ({ endless: true, level: this.level } as const)
           : this.board === 'trial'
             ? { trial: this.trial }
             : { level: this.level };

@@ -26,8 +26,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T
   }
 }
 
-/** Which leaderboard: a level's, a day's Daily Challenge (YYYY-MM-DD), a Level Trial's (its id), or the Endless Pond. */
-export type Board = { level: number } | { daily: string } | { trial: string } | { endless: true };
+/** Which leaderboard: a level's, a day's Daily Challenge (YYYY-MM-DD), a Level Trial's (its id), or the Endless Pond on a map. */
+export type Board = { level: number } | { daily: string } | { trial: string } | { endless: true; level: number };
 
 export async function fetchScores(board: Board, difficulty: Difficulty): Promise<ApiResult<ScoreRow[]>> {
   const query =
@@ -36,7 +36,7 @@ export async function fetchScores(board: Board, difficulty: Difficulty): Promise
       : 'trial' in board
         ? `trial=${encodeURIComponent(board.trial)}`
         : 'endless' in board
-          ? 'endless=1'
+          ? `endless=1&level=${board.level}`
           : `level=${board.level}`;
   const result = await request<{ scores: ScoreRow[] }>(`/api/scores?${query}&difficulty=${difficulty}`);
   return result.ok ? { ok: true, data: result.data.scores } : result;
@@ -45,7 +45,7 @@ export async function fetchScores(board: Board, difficulty: Difficulty): Promise
 export async function postScore(
   entry:
     | { name: string; level: number; difficulty: Difficulty; hearts: number; peas: number; daily?: string; trial?: string }
-    | { name: string; difficulty: Difficulty; endless: true; waves: number },
+    | { name: string; difficulty: Difficulty; endless: true; level: number; waves: number },
 ): Promise<ApiResult<{ id: number; score: number; rank: number }>> {
   return request('/api/scores', {
     method: 'POST',

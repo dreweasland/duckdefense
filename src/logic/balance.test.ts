@@ -30,6 +30,12 @@ for (const [index, info] of LEVELS.entries()) {
     it('Normal can be won placing ducks and upgrading with spare peas', () => {
       expect(play(info, 'normal', 'sunny', { upgrades: 'place-first' }).phase).toBe('won');
     });
+
+    it('Hard can be won by a sensible team, upgrading with spare peas and calling Craig for the last wave', () => {
+      const teams: DuckKind[][] = [['sunny'], ['potato'], ['sunny', 'curtis'], ['potato', 'curtis'], ['potato', 'sunny', 'curtis', 'chester'], ['sunny', 'potato']];
+      const won = teams.some((team) => play(info, 'hard', team, { upgrades: 'place-first', craig: true }).phase === 'won');
+      expect(won).toBe(true);
+    });
   });
 }
 

@@ -49,6 +49,15 @@ describe('game', () => {
     expect(game.hearts).toBe(DIFFICULTIES.easy.hearts);
   });
 
+  it('makes predators tougher and quicker on Hard', () => {
+    const hard = createGame({ path }, [oneRaccoon], 'hard');
+    hard.enemyHealth = 1.5; // (the setting itself is tuned in src/data/difficulty.ts)
+    startWave(hard);
+    update(hard, 0);
+    expect(hard.battle.enemies[0]!.maxHp).toBe(ENEMIES.raccoon.maxHp * 1.5);
+    expect(hard.battle.enemies[0]!.speed).toBe(ENEMIES.raccoon.speed * DIFFICULTIES.hard.enemySpeed);
+  });
+
   it('makes predators slower on Easy', () => {
     const easy = createGame({ path }, [oneRaccoon], 'easy');
     startWave(easy);

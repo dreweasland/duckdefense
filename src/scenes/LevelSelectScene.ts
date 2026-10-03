@@ -7,9 +7,9 @@ import { TRIALS } from '../data/trials';
 import { parseLevel, type Level } from '../logic/level';
 import { ENDLESS } from '../data/endless';
 import { dailyDate, dailyFor } from '../logic/daily';
-import { dailyRecord, dailyStreak, hasWonTrial, isUnlocked, trialsUnlocked, trialsWon, type LevelRecord, type Progress } from '../logic/progress';
+import { dailyRecord, dailyStreak, endlessBest, hasWonTrial, isUnlocked, trialsUnlocked, trialsWon, type LevelRecord, type Progress } from '../logic/progress';
 import { loadProgress } from '../save';
-import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
+import { COLORS, DIFFICULTY_COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
 import { drawBackButton, drawBigButton, drawCard, drawRoundButton, drawSoundButton, fadeToScene } from '../ui/widgets';
 import type { GameSceneData } from './GameScene';
 
@@ -51,7 +51,7 @@ export class LevelSelectScene extends Phaser.Scene {
     const cx = WORLD.width / 2;
 
     this.add.text(cx, 70, 'Pick a level', textStyle(64, { weight: '700', strokeThickness: 10 })).setOrigin(0.5);
-    const chipColor = this.difficulty === 'easy' ? '#3fbf5f' : '#f28c28';
+    const chipColor = DIFFICULTY_COLORS[this.difficulty].css;
     this.add
       .text(cx, 128, DIFFICULTIES[this.difficulty].label, textStyle(28, { color: chipColor, stroke: '#ffffff', strokeThickness: 6 }))
       .setOrigin(0.5);
@@ -192,7 +192,7 @@ export class LevelSelectScene extends Phaser.Scene {
     const rightX = mapX + SHEET.map.width / 2 + 40;
     parts.push(this.add.text(rightX, top + 52, `Level ${index + 1}`, textStyle(22, grey)).setOrigin(0, 0.5));
     parts.push(this.add.text(rightX, top + 96, info.name, textStyle(40, { ...ink, weight: '700' })).setOrigin(0, 0.5));
-    const chipColor = this.difficulty === 'easy' ? '#3fbf5f' : '#f28c28';
+    const chipColor = DIFFICULTY_COLORS[this.difficulty].css;
     parts.push(this.add.text(rightX, top + 136, DIFFICULTIES[this.difficulty].label, textStyle(20, { ...ink, color: chipColor, weight: '700' })).setOrigin(0, 0.5));
     parts.push(
       drawBigButton(this, rightX + 140, top + 214, 'Play  ▶', COLORS.green, COLORS.greenDark, () => play({ difficulty: this.difficulty, level: index }), {
@@ -289,18 +289,71 @@ export class LevelSelectScene extends Phaser.Scene {
     });
   }
 
-  /** The Endless Pond: waves until you run out of hearts. Shows your best. */
+  /** The Endless Pond: waves until you run out of hearts, on any map you've opened. Shows your best. */
   private drawEndlessButton(x: number, y: number, progress: Progress): void {
-    const best = progress.endless?.[this.difficulty];
-    const data: GameSceneData = { difficulty: this.difficulty, endless: true };
+    const best = Math.max(...LEVELS.map((_, map) => endlessBest(progress, this.difficulty, map)));
+    const bestMap = LEVELS.findIndex((_, map) => endlessBest(progress, this.difficulty, map) === best);
     this.drawModeButton(x, y, {
       icon: this.add.text(0, -2, '∞', textStyle(46, { weight: '700', color: '#3d8fe0', stroke: COLORS.inkCss, strokeThickness: 6 })).setOrigin(0.5),
       title: ENDLESS.name,
-      subtitle: best ? `Your best: ${best} ${best === 1 ? 'wave' : 'waves'}` : 'How long can you last?',
+      subtitle: best > 0 ? `Your best: ${best} ${best === 1 ? 'wave' : 'waves'} on ${LEVELS[bestMap]!.name}` : 'How long can you last? Pick a pond!',
       fill: 0xdff1ff,
       border: COLORS.blue,
-      data,
+      onTap: () => this.openEndlessSheet(),
     });
+  }
+
+  /** The Endless sheet: every map you've opened, your best waves on each, and a Play button. */
+  private openEndlessSheet(): void {
+    if (this.sheet) return;
+    const ROW = 72;
+    const W = 760;
+    const H = 110 + LEVELS.length * ROW;
+    const top = -H / 2;
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    const grey = { ...ink, color: '#8a7f85' };
+
+    const backdrop = this.add.rectangle(WORLD.width / 2, WORLD.height / 2, WORLD.width, WORLD.height, 0x2b2233, 0.55).setInteractive();
+    backdrop.on('pointerdown', () => this.closeSheet());
+    const parts: Phaser.GameObjects.GameObject[] = [drawCard(this.add.graphics(), W, H, { radius: 28, borderWidth: 5, border: COLORS.blue })];
+    parts.push(this.add.text(-W / 2 + 40, top + 44, '∞', textStyle(44, { weight: '700', color: '#3d8fe0', stroke: COLORS.inkCss, strokeThickness: 6 })).setOrigin(0, 0.5));
+    parts.push(this.add.text(-W / 2 + 90, top + 44, ENDLESS.name, textStyle(34, { ...ink, weight: '700' })).setOrigin(0, 0.5));
+    parts.push(this.add.text(-W / 2 + 40, top + 84, 'Waves keep coming until the hearts run out. Pick a pond:', textStyle(18, grey)).setOrigin(0, 0.5));
+
+    LEVELS.forEach((info, map) => {
+      const y = top + 110 + map * ROW + ROW / 2;
+      const open = isUnlocked(this.progress, this.difficulty, map);
+      const best = endlessBest(this.progress, this.difficulty, map);
+      const textColor = open ? ink : grey;
+      const mini = this.drawMiniMap(parseLevel(info.map), -W / 2 + 84, y, { width: 88, height: 50 });
+      if (!open) mini.setAlpha(0.5);
+      parts.push(mini);
+      parts.push(this.add.text(-W / 2 + 144, y - 13, info.name, textStyle(22, { ...textColor, weight: '700' })).setOrigin(0, 0.5));
+      parts.push(
+        this.add
+          .text(-W / 2 + 144, y + 13, !open ? `Beat level ${map} to open it` : best > 0 ? `Your best: ${best} ${best === 1 ? 'wave' : 'waves'}` : 'Not played yet', textStyle(16, grey))
+          .setOrigin(0, 0.5),
+      );
+      if (open) {
+        const data: GameSceneData = { difficulty: this.difficulty, endless: true, level: map };
+        parts.push(drawBigButton(this, W / 2 - 100, y, 'Play', COLORS.blue, COLORS.blueDark, () => fadeToScene(this, 'GameScene', data), { width: 130, height: 54, fontSize: 24 }));
+      }
+    });
+
+    const cross = this.add.graphics().lineStyle(6, 0xffffff).lineBetween(-10, -10, 10, 10).lineBetween(-10, 10, 10, -10);
+    const close = drawRoundButton(this, W / 2 - 14, top + 14, 26, COLORS.pink, 0xc2507a, [cross]);
+    close.hit.on('pointerdown', () => {
+      playSound(this, 'tap');
+      this.closeSheet();
+    });
+    parts.push(close.container);
+    const catcher = this.add.zone(0, 0, W, H).setInteractive();
+    this.sheet = this.add.container(WORLD.width / 2, WORLD.height / 2, [catcher, ...parts]).setDepth(DEPTH.sheet);
+    backdrop.setDepth(DEPTH.sheet - 1);
+    this.sheet.setData('backdrop', backdrop);
+    this.sheet.setScale(0.9).setAlpha(0);
+    this.tweens.add({ targets: this.sheet, scale: 1, alpha: 1, duration: 220, ease: 'Back.Out' });
+    this.input.keyboard?.once('keydown-ESC', () => this.closeSheet());
   }
 
   /** A wide button for a way to play (Daily Challenge, Endless Pond): icon, title, subtitle, and a play button or stars. */
@@ -316,7 +369,9 @@ export class LevelSelectScene extends Phaser.Scene {
       stars?: number;
       /** A little pink tag on the top corner (the Daily Challenge streak). */
       badge?: string;
-      data: GameSceneData;
+      /** Start the game with this, or run `onTap` instead (the Endless Pond opens a sheet). */
+      data?: GameSceneData;
+      onTap?: () => void;
     },
   ): void {
     const W = MODE_BUTTON.width;
@@ -356,7 +411,8 @@ export class LevelSelectScene extends Phaser.Scene {
     hit.on('pointerdown', () => {
       playSound(this, 'tap');
       this.tweens.add({ targets: container, scale: 0.96, duration: 80, yoyo: true });
-      fadeToScene(this, 'GameScene', options.data);
+      if (options.onTap) options.onTap();
+      else fadeToScene(this, 'GameScene', options.data);
     });
   }
 
