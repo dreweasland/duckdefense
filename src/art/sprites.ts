@@ -798,6 +798,27 @@ function starSvg(): string {
   return svg(64, 64, '', `<polygon points="${points.join(' ')}" fill="#ffffff"/>`);
 }
 
+// A prize rosette, for Level Trials: a pleated disc with two tails. Drawn in white with
+// ink outlines so it can be tinted (pink for a trial won, grey for one still to do).
+function ribbonSvg(): string {
+  const points: string[] = [];
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    const r = i % 2 === 0 ? 24 : 20;
+    points.push(`${(32 + Math.cos(a) * r).toFixed(1)},${(26 + Math.sin(a) * r).toFixed(1)}`);
+  }
+  return svg(
+    64,
+    64,
+    '',
+    `<path d="M22 40 L16 62 L24 57 L30 62 L30 44 Z" fill="#ffffff" ${stroke(3)}/>` +
+      `<path d="M42 40 L48 62 L40 57 L34 62 L34 44 Z" fill="#ffffff" ${stroke(3)}/>` +
+      `<polygon points="${points.join(' ')}" fill="#ffffff" ${stroke(3)}/>` +
+      `<circle cx="32" cy="26" r="13" fill="#ffffff" stroke="${INK}" stroke-width="2.5" opacity="0.9"/>` +
+      `<circle cx="32" cy="26" r="7" fill="${INK}" opacity="0.18"/>`,
+  );
+}
+
 function featherSvg(): string {
   return svg(32, 64, '', `<path d="M16 4 C28 20 28 44 16 60 C4 44 4 20 16 4 Z" fill="#ffffff"/><path d="M16 8 V60" stroke="#cccccc" stroke-width="2"/>`);
 }
@@ -859,6 +880,7 @@ export function allSprites(): SpriteArt[] {
     { key: 'icon-trophy', svg: trophySvg(), width: 40, height: 40 },
     { key: 'glow', svg: glowSvg(), width: 128, height: 128 },
     { key: 'star', svg: starSvg(), width: 24, height: 24 },
+    { key: 'ribbon', svg: ribbonSvg(), width: 48, height: 48 },
     { key: 'feather', svg: featherSvg(), width: 12, height: 24 },
     { key: 'grass', svg: grassSvg(), width: 256, height: 256 },
   ];

@@ -3,6 +3,7 @@ import { drawBrambles, drawGrass, drawMud, drawOutskirts, drawPath, drawPathEntr
 import { TILES, type NestKind } from '../data/tiles';
 import { BATTERY, FOUNTAIN } from '../data/dayNight';
 import type { Challenge } from '../data/challenges';
+import { findTrial, type Trial } from '../data/trials';
 import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { CHASES } from '../data/synergy';
@@ -17,6 +18,7 @@ import {
   buyDuck,
   callNextWave,
   canBuy,
+  isFlockFull,
   canCallEarly,
   canSell,
   choosePerk,
@@ -52,7 +54,7 @@ import { closestPointOnPolyline, type Ellipse, type Point } from '../logic/geome
 import { parseLevel, type Level } from '../logic/level';
 import { isFinalChoice, nameAt, nextUpgrade, statsAt, upgradeOptions } from '../logic/upgrades';
 import { challengeSettings, dailyFor } from '../logic/daily';
-import { dailyRecord, dailyStreak, recordDailyWin, recordEndless, recordWin, scoreFor, starsFor } from '../logic/progress';
+import { dailyRecord, dailyStreak, recordDailyWin, recordEndless, recordTrialWin, recordWin, scoreFor, starsFor } from '../logic/progress';
 import { ENDLESS } from '../data/endless';
 import { endlessWaves } from '../logic/endless';
 import { loadProgress, saveProgress } from '../save';
@@ -141,6 +143,8 @@ export interface GameSceneData {
   daily?: string;
   /** Play the Endless Pond instead: waves until you run out of hearts. */
   endless?: boolean;
+  /** Play a Level Trial (its id, see src/data/trials.ts) instead; the trial picks the level. */
+  trial?: string;
 }
 
 interface DuckSprite {
@@ -208,6 +212,8 @@ export class GameScene extends Phaser.Scene {
   private endless = false;
   /** The Daily Challenge being played, if any. */
   private daily?: { date: string; challenge: Challenge };
+  /** The Level Trial being played, if any. */
+  private trial?: Trial;
   private level!: Level;
   private state!: Game;
   private selected: DuckKind = 'sunny';
@@ -282,6 +288,14 @@ export class GameScene extends Phaser.Scene {
     if (daily) this.levelIndex = Math.min(daily.level, LEVELS.length - 1);
     this.endless = !daily && !!data.endless;
     if (this.endless) this.levelIndex = ENDLESS.level;
+    const found = !daily && !this.endless && data.trial ? findTrial(data.trial) : undefined;
+    this.trial = found?.trial;
+    if (found) this.levelIndex = found.level;
+  }
+
+  /** The twist on the rules this game is played with: a Daily Challenge's or a Level Trial's. */
+  private get challenge(): Challenge | undefined {
+    return this.daily?.challenge ?? this.trial;
   }
 
   create(): void {
@@ -299,7 +313,7 @@ export class GameScene extends Phaser.Scene {
       mapFromLevel(this.level),
       this.endless ? endlessWaves() : info.waves,
       this.difficulty,
-      this.daily?.challenge,
+      this.challenge,
       this.endless,
     );
     this.selected = DUCK_ORDER.find((kind) => isDuckAllowed(this.state, kind)) ?? 'sunny';
@@ -356,6 +370,10 @@ export class GameScene extends Phaser.Scene {
       const { challenge } = this.daily;
       this.time.delayedCall(350, () => this.showBanner(`Daily Challenge: ${challenge.name}`));
       this.time.delayedCall(2500, () => this.showChallengeInfo(challenge));
+    } else if (this.trial) {
+      const trial = this.trial;
+      this.time.delayedCall(350, () => this.showBanner(`Trial: ${trial.name}`));
+      this.time.delayedCall(2500, () => this.showChallengeInfo(trial));
     } else {
       this.time.delayedCall(350, () => this.showBanner(`Level ${this.levelIndex + 1}: ${info.name}`));
     }
@@ -363,8 +381,8 @@ export class GameScene extends Phaser.Scene {
     const mapKey = this.endless ? 'endless' : String(this.levelIndex);
     if (this.tilesOnMap().length > 0 && !shownMapKeys.has(mapKey)) {
       shownMapKeys.add(mapKey);
-      // After the level banner (and after a Daily Challenge's twist card).
-      this.time.delayedCall(this.daily ? 9000 : 2400, () => this.showMapKey());
+      // After the level banner (and after a Daily Challenge's or trial's twist card).
+      this.time.delayedCall(this.challenge ? 9000 : 2400, () => this.showMapKey());
     }
   }
 
@@ -738,7 +756,7 @@ export class GameScene extends Phaser.Scene {
     return image.setScale(fit);
   }
 
-  /** The Daily Challenge's twist, shown when the level starts. */
+  /** The Daily Challenge's (or Level Trial's) twist, shown when the level starts. */
   private showChallengeInfo(challenge: Challenge): void {
     if (this.popup) return;
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
@@ -746,7 +764,9 @@ export class GameScene extends Phaser.Scene {
     const popup = this.add
       .container(WORLD.width / 2, 250, [
         card,
-        this.add.image(-172, -38, 'star').setDisplaySize(40, 40).setTint(COLORS.gold),
+        this.trial
+          ? this.add.image(-172, -38, 'ribbon').setDisplaySize(44, 44).setTint(COLORS.pink)
+          : this.add.image(-172, -38, 'star').setDisplaySize(40, 40).setTint(COLORS.gold),
         this.add.text(-142, -38, challenge.name, textStyle(28, { ...ink, weight: '700' })).setOrigin(0, 0.5),
         this.add.text(-186, -6, challenge.description, { ...textStyle(19, ink), wordWrap: { width: 372 } }).setOrigin(0, 0),
       ])
@@ -801,7 +821,7 @@ export class GameScene extends Phaser.Scene {
       }
       const allowed = isDuckAllowed(this.state, kind);
       if (!allowed) {
-        // Not playing in today's Daily Challenge: a big "no" sign over the card.
+        // Not playing today (a Daily Challenge or trial left it out): a big "no" sign over the card.
         parts.push(
           this.add
             .graphics()
@@ -911,7 +931,13 @@ export class GameScene extends Phaser.Scene {
     this.closePopup();
     const duck = buyDuck(this.state, this.selected, nest.slot);
     if (!duck) {
-      this.wigglePeas();
+      // A trial can cap the flock; otherwise it's the peas.
+      if (isFlockFull(this.state)) {
+        playSound(this, 'noPeas');
+        popSpeechBubble(this, nest.slot.x, nest.slot.y - 60, "The flock's full!", DEPTH.floatText);
+      } else {
+        this.wigglePeas();
+      }
       return;
     }
     playSound(this, 'place');
@@ -1773,6 +1799,7 @@ export class GameScene extends Phaser.Scene {
           difficulty: this.difficulty,
           level: this.levelIndex,
           daily: this.daily?.date,
+          trial: this.trial?.id,
           report: this.state.battle.report,
         };
         if (this.endless) {
@@ -1783,6 +1810,11 @@ export class GameScene extends Phaser.Scene {
           result.newBest = previousBest > 0 && result.endlessWaves > previousBest;
           result.endlessBest = Math.max(previousBest, result.endlessWaves);
           saveProgress(recordEndless(progress, this.difficulty, result.endlessWaves));
+        } else if (result.won && this.trial) {
+          // A trial win earns its ribbon. (It's played with the rules bent, so it has no score.)
+          const progress = loadProgress();
+          result.newRibbon = !progress.trials?.[this.difficulty]?.includes(this.trial.id);
+          saveProgress(recordTrialWin(progress, this.difficulty, this.trial.id));
         } else if (result.won) {
           // Save progress: this unlocks the next level and keeps the best stars and score.
           // (A Daily Challenge win is saved on its own and doesn't unlock anything.)
@@ -2421,7 +2453,7 @@ export class GameScene extends Phaser.Scene {
     if (isOver(this.state) || this.scene.isPaused()) return;
     playSound(this, 'tap');
     const data: PauseSceneData = {
-      again: { difficulty: this.difficulty, level: this.levelIndex, daily: this.daily?.date, endless: this.endless },
+      again: { difficulty: this.difficulty, level: this.levelIndex, daily: this.daily?.date, endless: this.endless, trial: this.trial?.id },
       difficulty: this.difficulty,
       // Leaving an Endless Pond run part-way still counts the waves survived so far.
       onLeave: () => {

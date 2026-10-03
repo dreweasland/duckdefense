@@ -7,6 +7,7 @@ import { hatFor } from '../logic/hats';
 import { loadProgress } from '../save';
 import { duckWithHat } from '../ui/hats';
 import { LEVELS } from '../data/levels';
+import { findTrial } from '../data/trials';
 import { postScore } from '../api';
 import { topDuck, type KindReport } from '../logic/battle';
 import { shortNumber } from '../logic/display';
@@ -28,6 +29,8 @@ export interface ResultSceneData {
   hearts?: number; // hearts left and peas that count (see scorePeas), for posting to the leaderboard
   peas?: number;
   daily?: string; // the Daily Challenge date, if that's what was played
+  trial?: string; // the Level Trial's id, if that's what was played
+  newRibbon?: boolean; // a trial won for the first time on this difficulty
   streak?: number; // Daily Challenges won on days in a row, counting this one
   report?: Partial<Record<DuckKind, KindReport>>; // what each kind of duck did (the damage report)
   newHats?: HatKind[]; // hats this win unlocked
@@ -54,10 +57,11 @@ export class ResultScene extends Phaser.Scene {
   create(): void {
     setupCamera(this);
     const cx = WORLD.width / 2;
-    const { won, difficulty, level, daily } = this.result;
+    const { won, difficulty, level, daily, trial } = this.result;
     const endless = this.result.endlessWaves !== undefined;
-    const hasNext = won && !daily && !endless && level + 1 < LEVELS.length;
-    const beatEverything = won && !daily && !hasNext;
+    const hasNext = won && !daily && !trial && !endless && level + 1 < LEVELS.length;
+    const beatEverything = won && !daily && !trial && !hasNext;
+    const trialName = trial && findTrial(trial)?.trial.name;
 
     drawGrass(this, 41);
     drawOutskirts(this, 44);
@@ -70,7 +74,7 @@ export class ResultScene extends Phaser.Scene {
 
     // Losing should never feel harsh: silly message, same big "again" button.
     this.add
-      .text(cx, 108, endless ? this.endlessHeadline() : won ? 'You saved the duck house!' : 'The raccoons had a snack party!', {
+      .text(cx, 108, endless ? this.endlessHeadline() : won ? (trial ? 'Trial complete!' : 'You saved the duck house!') : 'The raccoons had a snack party!', {
         ...textStyle(52, { weight: '700', strokeThickness: 10 }),
         color: won || endless ? '#ffd23f' : '#ffb3c1',
         align: 'center',
@@ -84,6 +88,10 @@ export class ResultScene extends Phaser.Scene {
         172,
         endless
           ? `Your best: ${this.result.endlessBest ?? 0} ${this.result.endlessBest === 1 ? 'wave' : 'waves'}`
+          : trial && won
+            ? `${trialName}: done! ${this.result.newRibbon ? 'A ribbon for the flock!' : 'The flock is so proud.'}`
+            : trial
+              ? `${trialName} is a tough one. The ducks want a rematch!`
           : daily && won
           ? (this.result.streak ?? 0) >= 2
             ? `You beat today's Daily Challenge! ${this.result.streak} days in a row!`
@@ -121,9 +129,24 @@ export class ResultScene extends Phaser.Scene {
       if ((this.result.endlessWaves ?? 0) > 0) this.drawPostButton(cx + 300, 296);
     }
 
+    // A trial win: a big ribbon (the rules were bent, so there's no score to post).
+    if (won && trial) {
+      const ribbon = this.add.image(cx, 258, 'ribbon').setDisplaySize(120, 120).setTint(COLORS.pink).setDepth(52);
+      const full = ribbon.scaleX;
+      ribbon.setScale(0);
+      this.tweens.add({ targets: ribbon, scale: full, delay: 300, duration: 400, ease: 'Back.Out' });
+      if (this.result.newRibbon) {
+        this.add
+          .text(cx + 80, 228, 'New ribbon!', textStyle(28, { color: '#e0447a', stroke: '#ffffff', strokeThickness: 6, weight: '700' }))
+          .setOrigin(0, 0.5)
+          .setDepth(51)
+          .setAngle(-8);
+      }
+    }
+
     // Stars and score for a win.
     const stars = this.result.stars ?? 0;
-    if (won && !endless) {
+    if (won && !endless && !trial) {
       for (let s = 0; s < 3; s++) {
         const earned = s < stars;
         const star = this.add
@@ -194,7 +217,7 @@ export class ResultScene extends Phaser.Scene {
     }
 
     const go = (scene: string, data?: object) => fadeToScene(this, scene, data, 250);
-    const again: GameSceneData = { difficulty, level, daily, endless };
+    const again: GameSceneData = { difficulty, level, daily, endless, trial };
     const levels: LevelSelectSceneData = { difficulty };
     const y = 560;
     if (hasNext) {

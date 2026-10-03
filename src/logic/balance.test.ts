@@ -3,8 +3,9 @@
 // these fails, the level probably got too easy or too hard.
 import { describe, expect, it } from 'vitest';
 import { CHALLENGES } from '../data/challenges';
-import { DUCKS } from '../data/ducks';
+import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { LEVELS } from '../data/levels';
+import { TRIALS } from '../data/trials';
 import { play } from './simulate';
 
 for (const [index, info] of LEVELS.entries()) {
@@ -39,6 +40,31 @@ describe('daily challenge balance', () => {
     for (const [index, info] of LEVELS.entries()) {
       it(`${challenge.name} can be won on Easy on level ${index + 1} by placing ${DUCKS[kind].name}s and upgrading`, () => {
         expect(play(info, 'easy', kind, { challenge, upgrades: 'place-first' }).phase).toBe('won');
+      });
+    }
+  }
+});
+
+describe('level trial balance', () => {
+  for (const [index, trials] of TRIALS.entries()) {
+    const info = LEVELS[index]!;
+    for (const trial of trials) {
+      const allowed = DUCK_ORDER.filter((kind) => trial.ducks?.includes(kind) ?? true);
+      const names = allowed.map((kind) => DUCKS[kind].name).join(', ');
+
+      it(`${trial.name} (level ${index + 1}) can be won on Easy by taking turns placing ${names} and upgrading`, () => {
+        expect(play(info, 'easy', allowed, { challenge: trial, upgrades: 'place-first', craig: !trial.noCraig }).phase).toBe('won');
+      });
+
+      it(`${trial.name} (level ${index + 1}) can be won on Normal by a sensible team`, () => {
+        // Sunnys or Potatoes alone, Potato with Curtis slowing things down for him, a team led
+        // by Potato, or everyone who's playing: one of them should manage it.
+        const only = (...team: DuckKind[]) => team.filter((kind) => allowed.includes(kind));
+        const teams = [only('sunny'), only('potato'), only('potato', 'curtis'), only('potato', 'sunny', 'curtis', 'chester'), allowed].filter(
+          (team) => team.length > 0,
+        );
+        const won = teams.some((team) => play(info, 'normal', team, { challenge: trial, upgrades: 'place-first', craig: !trial.noCraig }).phase === 'won');
+        expect(won).toBe(true);
       });
     }
   }

@@ -4,7 +4,7 @@ import { DIFFICULTIES } from '../data/difficulty';
 import { LEVEL_COUNT } from '../data/levelCount';
 import type { Wave } from '../data/waves';
 import { challengeSettings, challengeWaves, dailyDate, dailyFor, isPostableDate } from './daily';
-import { buyDuck, canBuy, canSell, canUseBlessing, createGame, sellDuck } from './game';
+import { buyDuck, canBuy, canSell, canUseBlessing, createGame, isFlockFull, sellDuck } from './game';
 import { makePath } from './path';
 
 describe('daily challenge', () => {
@@ -73,5 +73,19 @@ describe('daily challenge', () => {
     expect(canSell(game)).toBe(false);
     expect(sellDuck(game, sunny.id)).toBeUndefined();
     expect(canUseBlessing(game)).toBe(false);
+  });
+
+  it('can cap how many ducks are out at once (selling one makes room)', () => {
+    const path = makePath([{ x: 0, y: 0 }, { x: 200, y: 0 }]);
+    const wave: Wave = { time: 'day', groups: [{ enemy: 'raccoon', count: 1, every: 1 }], bonusPeas: 0 };
+    const game = createGame({ path }, [wave], 'easy', { name: 'x', description: 'x', maxDucks: 2 });
+    expect(isFlockFull(game)).toBe(false);
+    const first = buyDuck(game, 'curtis', { x: 0, y: 50 })!;
+    buyDuck(game, 'curtis', { x: 100, y: 50 });
+    expect(isFlockFull(game)).toBe(true);
+    expect(canBuy(game, 'curtis')).toBe(false);
+    expect(buyDuck(game, 'curtis', { x: 200, y: 50 })).toBeUndefined();
+    sellDuck(game, first.id);
+    expect(canBuy(game, 'curtis')).toBe(true);
   });
 });

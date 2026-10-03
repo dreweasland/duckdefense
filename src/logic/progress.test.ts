@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { dailyRecord, dailyStreak, emptyProgress, isUnlocked, parseProgress, recordDailyWin, recordEndless, recordWin, scoreFor, starsFor } from './progress';
+import { LEVELS } from '../data/levels';
+import { TRIALS } from '../data/trials';
+import {
+  dailyRecord,
+  dailyStreak,
+  emptyProgress,
+  hasWonTrial,
+  isUnlocked,
+  parseProgress,
+  recordDailyWin,
+  recordEndless,
+  recordTrialWin,
+  recordWin,
+  scoreFor,
+  starsFor,
+  trialsUnlocked,
+  trialsWon,
+} from './progress';
 
 describe('stars', () => {
   it('gives 3 stars for keeping almost every heart', () => {
@@ -112,5 +129,41 @@ describe('Endless Pond progress', () => {
     progress = recordEndless(progress, 'normal', 5);
     expect(progress.endless).toEqual({ easy: 12, normal: 5 });
     expect(parseProgress(JSON.stringify(progress)).endless).toEqual({ easy: 12, normal: 5 });
+  });
+});
+
+describe('Level Trials progress', () => {
+  const first = TRIALS[0]![0]!.id;
+  const second = TRIALS[0]![1]!.id;
+
+  it('has a list of trials for every level, with ids that are all different', () => {
+    expect(TRIALS).toHaveLength(LEVELS.length);
+    const ids = TRIALS.flat().map((trial) => trial.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(TRIALS.every((trials) => trials.length >= 1 && trials.length <= 3)).toBe(true);
+  });
+
+  it('opens a level’s trials once the level is beaten on that difficulty', () => {
+    const progress = recordWin(emptyProgress(), 'easy', 0, 1, 100);
+    expect(trialsUnlocked(progress, 'easy', 0)).toBe(true);
+    expect(trialsUnlocked(progress, 'normal', 0)).toBe(false);
+    expect(trialsUnlocked(progress, 'easy', 1)).toBe(false);
+  });
+
+  it('remembers each trial won, once, per difficulty', () => {
+    let progress = recordTrialWin(emptyProgress(), 'easy', first);
+    expect(recordTrialWin(progress, 'easy', first)).toBe(progress); // already won: nothing changes
+    progress = recordTrialWin(progress, 'easy', second);
+    expect(hasWonTrial(progress, 'easy', first)).toBe(true);
+    expect(hasWonTrial(progress, 'normal', first)).toBe(false);
+    expect(trialsWon(progress, 'easy', 0)).toBe(2);
+    expect(trialsWon(progress, 'easy', 1)).toBe(0);
+  });
+
+  it('survives saving, dropping trials that no longer exist', () => {
+    const progress = recordTrialWin(emptyProgress(), 'normal', first);
+    expect(parseProgress(JSON.stringify(progress))).toEqual(progress);
+    const saved = JSON.stringify({ trials: { easy: [first, first, 'gone', 7], normal: 'nope' } });
+    expect(parseProgress(saved).trials).toEqual({ easy: [first] });
   });
 });

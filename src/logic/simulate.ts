@@ -1,5 +1,5 @@
 // A simple computer player, used by the balance tests to check levels can be won (or lost).
-// It places one kind of duck in the best nests and optionally upgrades.
+// It places ducks (one kind, or a team taking turns) in the best nests and optionally upgrades.
 import type { Challenge } from '../data/challenges';
 import type { Difficulty } from '../data/difficulty';
 import { DUCKS, type DuckKind } from '../data/ducks';
@@ -71,10 +71,17 @@ export interface Strategy {
   path?: number;
 }
 
-/** Before each wave, spend peas on `kind` ducks in the best slots (and upgrades, per the strategy). */
-export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | null, strategy: Strategy = {}): Game {
+/**
+ * Before each wave, spend peas on ducks in the best slots (and upgrades, per the strategy).
+ * `kind` is one kind of duck, a team that takes turns (first one first), or null for no ducks.
+ */
+export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | readonly DuckKind[] | null, strategy: Strategy = {}): Game {
   const game = createGame(mapFromLevel(parseLevel(info.map)), info.waves, difficulty, strategy.challenge, strategy.endless);
-  const slots = bestSlots(info, kind ? DUCKS[kind].range : 0);
+  const team = kind === null ? [] : typeof kind === 'string' ? [kind] : [...kind];
+  const slots = bestSlots(info, team[0] ? DUCKS[team[0]].range : 0);
+  let placed = 0;
+  /** The next duck on the team to place. */
+  const nextKind = () => team[placed % team.length];
   const upgrades = strategy.upgrades ?? 'none';
   const path = strategy.path ?? 0;
 
@@ -99,6 +106,7 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | n
       slots.push(...ENDLESS.bonusNests);
     }
     for (;;) {
+      const kind = nextKind();
       const canPlace = !!kind && slots.length > 0 && canBuy(game, kind);
       const upgrade = upgrades === 'none' ? undefined : cheapestUpgrade();
       if (upgrades === 'upgrade-first' && anyUpgradeLeft()) {
@@ -107,6 +115,7 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | n
         else break;
       } else if (canPlace) {
         buyDuck(game, kind!, slots.shift()!);
+        placed++;
       } else if (upgrade) {
         upgradeDuck(game, upgrade.id, path);
       } else if (strategy.extras && repairHouse(game)) {

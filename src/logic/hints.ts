@@ -1,9 +1,9 @@
-import { DUCKS, type DuckKind } from '../data/ducks';
+import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import type { EnemyKind } from '../data/enemies';
 import type { HintId } from '../data/hints';
 import { CHASES } from '../data/synergy';
 import { chasePartner } from './battle';
-import { canBuy, canUpgrade, canUseBlessing, type Game } from './game';
+import { canBuy, canUpgrade, canUseBlessing, isDuckAllowed, type Game } from './game';
 import { challengeSettings } from './daily';
 import type { Difficulty } from '../data/difficulty';
 
@@ -49,8 +49,10 @@ export function pickHint(
   const candidates: [HintId, boolean][] = [
     ['callCraig', canUseBlessing(game) && game.hearts <= startingHearts * LOW_HEARTS],
   ];
+  // (No point naming a duck that's staying home today in a Daily Challenge or trial.)
+  const allowed = DUCK_ORDER.filter((kind) => isDuckAllowed(game, kind));
   const counter = COUNTER_HINTS[moment.enemy];
-  if (counter) candidates.push([counter.hint, !counter.answered(kinds)]);
+  if (counter) candidates.push([counter.hint, counter.answered(allowed) && !counter.answered(kinds)]);
   candidates.push(
     ['spendPeas', emptyNests > 0 && Object.keys(DUCKS).some((k) => canBuy(game, k as DuckKind))],
     ['upgrade', ducks.some((d) => canUpgrade(game, d.id))],

@@ -3,26 +3,35 @@ import { playSound } from '../audio/sfx';
 import { drawGrass, drawOutskirts } from '../art/terrain';
 import { DIFFICULTIES, type Difficulty } from '../data/difficulty';
 import { LEVELS } from '../data/levels';
+import { TRIALS } from '../data/trials';
 import { parseLevel, type Level } from '../logic/level';
 import { ENDLESS } from '../data/endless';
 import { dailyDate, dailyFor } from '../logic/daily';
-import { dailyRecord, dailyStreak, isUnlocked, type Progress } from '../logic/progress';
+import { dailyRecord, dailyStreak, hasWonTrial, isUnlocked, trialsUnlocked, trialsWon, type LevelRecord, type Progress } from '../logic/progress';
 import { loadProgress } from '../save';
 import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
-import { drawBackButton, drawCard, drawSoundButton, fadeToScene } from '../ui/widgets';
+import { drawBackButton, drawBigButton, drawCard, drawRoundButton, drawSoundButton, fadeToScene } from '../ui/widgets';
 import type { GameSceneData } from './GameScene';
 
 export interface LevelSelectSceneData {
   difficulty: Difficulty;
 }
 
-// Two rows of three wide cards: a little map on the left, the level's number and stars on the right.
+// Two rows of three wide cards: a little map on the left, the level's number, stars, and
+// trial ribbons on the right. Tap one to open the level sheet.
 const CARD = { width: 340, height: 196, spacing: 380, rows: [268, 482] };
 const MAP = { width: 160, height: 90 }; // 16:9, like the real map
 const MODE_BUTTON = { width: 430, height: 84, gap: 24 }; // Daily Challenge and Endless Pond, side by side
+// The level sheet: a big map, stars and best score, a Play button, and the level's trials.
+// Its height grows by a row for each trial (three fit).
+const SHEET = { width: 860, baseHeight: 398, map: { width: 320, height: 180 }, trialRow: 78 };
+const DEPTH = { sheet: 200 };
 
 export class LevelSelectScene extends Phaser.Scene {
   private difficulty: Difficulty = 'easy';
+  private progress!: Progress;
+  /** The open level sheet, if any. */
+  private sheet?: Phaser.GameObjects.Container;
 
   constructor() {
     super('LevelSelectScene');
@@ -37,6 +46,8 @@ export class LevelSelectScene extends Phaser.Scene {
     drawGrass(this, 51);
     drawOutskirts(this, 52);
     const progress = loadProgress();
+    this.progress = progress;
+    this.sheet = undefined;
     const cx = WORLD.width / 2;
 
     this.add.text(cx, 70, 'Pick a level', textStyle(64, { weight: '700', strokeThickness: 10 })).setOrigin(0.5);
@@ -52,7 +63,7 @@ export class LevelSelectScene extends Phaser.Scene {
       const col = i % 3;
       const x = cx + (col - (inRow - 1) / 2) * CARD.spacing;
       const y = CARD.rows[row] ?? CARD.rows[CARD.rows.length - 1]!;
-      this.drawLevelCard(x, y, i, info.name, parseLevel(info.map), progress.levels[this.difficulty][i]?.stars ?? 0, isUnlocked(progress, this.difficulty, i));
+      this.drawLevelCard(x, y, i, parseLevel(info.map), isUnlocked(progress, this.difficulty, i));
     });
 
     this.drawDailyButton(cx - (MODE_BUTTON.width + MODE_BUTTON.gap) / 2, 648, progress);
@@ -65,20 +76,34 @@ export class LevelSelectScene extends Phaser.Scene {
     this.cameras.main.fadeIn(250, 0, 0, 0);
   }
 
-  private drawLevelCard(x: number, y: number, index: number, name: string, level: Level, stars: number, unlocked: boolean): void {
+  private drawLevelCard(x: number, y: number, index: number, level: Level, unlocked: boolean): void {
+    const name = LEVELS[index]!.name;
+    const stars = this.progress.levels[this.difficulty][index]?.stars ?? 0;
     const card = drawCard(this.add.graphics(), CARD.width, CARD.height, { radius: 24, borderWidth: 4 });
-    const parts: Phaser.GameObjects.GameObject[] = [card, this.drawMiniMap(level, -76, -30)];
+    const parts: Phaser.GameObjects.GameObject[] = [card, this.drawMiniMap(level, -76, -30, MAP)];
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
-    parts.push(this.add.text(86, -58, `Level ${index + 1}`, textStyle(20, { ...ink, color: '#8a7f85' })).setOrigin(0.5));
+    parts.push(this.add.text(86, -62, `Level ${index + 1}`, textStyle(20, { ...ink, color: '#8a7f85' })).setOrigin(0.5));
     parts.push(this.add.text(0, 56, name, textStyle(30, { ...ink, weight: '700' })).setOrigin(0.5));
     for (let s = 0; s < 3; s++) {
       parts.push(
         this.add
-          .image(86 + (s - 1) * 40, -18, 'star')
+          .image(86 + (s - 1) * 40, -26, 'star')
           .setDisplaySize(36, 36)
           .setTint(s < stars ? 0xffd23f : 0xd8d2cc),
       );
     }
+    // A ribbon for each of the level's trials: pink once it's won.
+    const trials = TRIALS[index] ?? [];
+    trials.forEach((trial, t) => {
+      const won = hasWonTrial(this.progress, this.difficulty, trial.id);
+      parts.push(
+        this.add
+          .image(86 + (t - (trials.length - 1) / 2) * 34, 10, 'ribbon')
+          .setDisplaySize(30, 30)
+          .setTint(won ? COLORS.pink : 0xd8d2cc)
+          .setAlpha(won ? 1 : 0.7),
+      );
+    });
 
     if (!unlocked) {
       // Dim the card and show a padlock.
@@ -118,9 +143,128 @@ export class LevelSelectScene extends Phaser.Scene {
       }
       playSound(this, 'tap');
       this.tweens.add({ targets: container, scale: 0.95, duration: 80, yoyo: true });
-      const data: GameSceneData = { difficulty: this.difficulty, level: index };
-      fadeToScene(this, 'GameScene', data);
+      this.openSheet(index, level);
     });
+  }
+
+  /**
+   * The level sheet: a big map, stars and best score, a Play button, and the level's trials
+   * (each with a ribbon and its own Play button, once the level's been beaten).
+   */
+  private openSheet(index: number, level: Level): void {
+    if (this.sheet) return;
+    const info = LEVELS[index]!;
+    const record: LevelRecord | undefined = this.progress.levels[this.difficulty][index];
+    const trials = TRIALS[index] ?? [];
+    const open = trialsUnlocked(this.progress, this.difficulty, index);
+    const W = SHEET.width;
+    const H = SHEET.baseHeight + trials.length * SHEET.trialRow;
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    const grey = { ...ink, color: '#8a7f85' };
+    const play = (data: GameSceneData) => fadeToScene(this, 'GameScene', data);
+
+    // A dark sheet over the level cards; tapping it closes the sheet.
+    const backdrop = this.add.rectangle(WORLD.width / 2, WORLD.height / 2, WORLD.width, WORLD.height, 0x2b2233, 0.55).setInteractive();
+    backdrop.on('pointerdown', () => this.closeSheet());
+
+    const top = -H / 2;
+    const parts: Phaser.GameObjects.GameObject[] = [drawCard(this.add.graphics(), W, H, { radius: 28, borderWidth: 5 })];
+
+    // Left: the map, stars, and best score.
+    const mapX = -W / 2 + 40 + SHEET.map.width / 2;
+    parts.push(this.drawMiniMap(level, mapX, top + 40 + SHEET.map.height / 2, SHEET.map));
+    const stars = record?.stars ?? 0;
+    for (let s = 0; s < 3; s++) {
+      parts.push(
+        this.add
+          .image(mapX + (s - 1) * 52, top + 262, 'star')
+          .setDisplaySize(46, 46)
+          .setTint(s < stars ? 0xffd23f : 0xd8d2cc),
+      );
+    }
+    parts.push(
+      this.add
+        .text(mapX, top + 300, record ? `Best score  ${record.bestScore}` : 'Not beaten yet', textStyle(20, record ? { ...ink, weight: '700' } : grey))
+        .setOrigin(0.5),
+    );
+
+    // Right: the level's name and a big Play button.
+    const rightX = mapX + SHEET.map.width / 2 + 40;
+    parts.push(this.add.text(rightX, top + 52, `Level ${index + 1}`, textStyle(22, grey)).setOrigin(0, 0.5));
+    parts.push(this.add.text(rightX, top + 96, info.name, textStyle(40, { ...ink, weight: '700' })).setOrigin(0, 0.5));
+    const chipColor = this.difficulty === 'easy' ? '#3fbf5f' : '#f28c28';
+    parts.push(this.add.text(rightX, top + 136, DIFFICULTIES[this.difficulty].label, textStyle(20, { ...ink, color: chipColor, weight: '700' })).setOrigin(0, 0.5));
+    parts.push(
+      drawBigButton(this, rightX + 140, top + 214, 'Play  ▶', COLORS.green, COLORS.greenDark, () => play({ difficulty: this.difficulty, level: index }), {
+        width: 280,
+        height: 90,
+      }),
+    );
+
+    // Below: the trials.
+    const listTop = top + 336;
+    const won = trialsWon(this.progress, this.difficulty, index);
+    parts.push(this.add.text(-W / 2 + 40, listTop, 'Trials', textStyle(26, { ...ink, weight: '700' })).setOrigin(0, 0.5));
+    parts.push(this.add.image(-W / 2 + 140, listTop, 'ribbon').setDisplaySize(30, 30).setTint(COLORS.pink));
+    parts.push(this.add.text(-W / 2 + 160, listTop, `${won}/${trials.length}`, textStyle(22, { ...ink, weight: '700' })).setOrigin(0, 0.5));
+    if (!open) {
+      parts.push(this.add.text(-W / 2 + 230, listTop, 'Beat the level to open its trials!', textStyle(20, grey)).setOrigin(0, 0.5));
+    }
+    parts.push(this.add.graphics().lineStyle(3, 0xe6ddd0).lineBetween(-W / 2 + 40, listTop + 22, W / 2 - 40, listTop + 22));
+    trials.forEach((trial, t) => {
+      const y = listTop + 46 + t * SHEET.trialRow + SHEET.trialRow / 2 - 8;
+      const done = hasWonTrial(this.progress, this.difficulty, trial.id);
+      const textColor = open ? ink : grey;
+      parts.push(
+        this.add
+          .image(-W / 2 + 70, y, 'ribbon')
+          .setDisplaySize(44, 44)
+          .setTint(done ? COLORS.pink : 0xd8d2cc)
+          .setAlpha(open ? 1 : 0.6),
+      );
+      parts.push(this.add.text(-W / 2 + 106, y - 15, trial.name, textStyle(22, { ...textColor, weight: '700' })).setOrigin(0, 0.5));
+      parts.push(
+        this.add
+          .text(-W / 2 + 106, y + 12, trial.description, { ...textStyle(16, textColor), wordWrap: { width: W - 106 - 40 - 150 } })
+          .setOrigin(0, 0.5),
+      );
+      if (open) {
+        const label = done ? 'Again' : 'Play';
+        parts.push(
+          drawBigButton(this, W / 2 - 110, y, label, done ? COLORS.blue : COLORS.green, done ? COLORS.blueDark : COLORS.greenDark, () => play({ difficulty: this.difficulty, trial: trial.id }), {
+            width: 130,
+            height: 54,
+            fontSize: 24,
+          }),
+        );
+      }
+    });
+
+    // Close button in the corner.
+    const cross = this.add.graphics().lineStyle(6, 0xffffff).lineBetween(-10, -10, 10, 10).lineBetween(-10, 10, 10, -10);
+    const close = drawRoundButton(this, W / 2 - 14, top + 14, 26, COLORS.pink, 0xc2507a, [cross]);
+    close.hit.on('pointerdown', () => {
+      playSound(this, 'tap');
+      this.closeSheet();
+    });
+    parts.push(close.container);
+
+    // Taps on the sheet itself shouldn't fall through to the backdrop.
+    const catcher = this.add.zone(0, 0, W, H).setInteractive();
+    this.sheet = this.add.container(WORLD.width / 2, WORLD.height / 2 + 10, [catcher, ...parts]).setDepth(DEPTH.sheet);
+    backdrop.setDepth(DEPTH.sheet - 1);
+    this.sheet.setData('backdrop', backdrop);
+    this.sheet.setScale(0.9).setAlpha(0);
+    this.tweens.add({ targets: this.sheet, scale: 1, alpha: 1, duration: 220, ease: 'Back.Out' });
+    this.input.keyboard?.once('keydown-ESC', () => this.closeSheet());
+  }
+
+  private closeSheet(): void {
+    const sheet = this.sheet;
+    if (!sheet) return;
+    this.sheet = undefined;
+    (sheet.getData('backdrop') as Phaser.GameObjects.Rectangle).destroy();
+    this.tweens.add({ targets: sheet, scale: 0.9, alpha: 0, duration: 150, onComplete: () => sheet.destroy() });
   }
 
   /** Today's Daily Challenge: the same level and twist for everyone, with its own leaderboard. */
@@ -217,28 +361,29 @@ export class LevelSelectScene extends Phaser.Scene {
   }
 
   /** A small drawing of the level: grass, pond, path, nests, and the duck house. */
-  private drawMiniMap(level: Level, x: number, y: number): Phaser.GameObjects.Container {
-    const scale = MAP.width / WORLD.width;
+  private drawMiniMap(level: Level, x: number, y: number, size: { width: number; height: number }): Phaser.GameObjects.Container {
+    const scale = size.width / WORLD.width;
+    const k = scale / (MAP.width / WORLD.width); // lines and dots grow with the map
     const clamp = (p: { x: number; y: number }) => ({
-      x: Math.max(0, Math.min(WORLD.width, p.x)) * scale - MAP.width / 2,
-      y: Math.max(0, Math.min(WORLD.height, p.y)) * scale - MAP.height / 2,
+      x: Math.max(0, Math.min(WORLD.width, p.x)) * scale - size.width / 2,
+      y: Math.max(0, Math.min(WORLD.height, p.y)) * scale - size.height / 2,
     });
     const g = this.add.graphics();
-    g.fillStyle(0x6db24c).fillRoundedRect(-MAP.width / 2, -MAP.height / 2, MAP.width, MAP.height, 8);
+    g.fillStyle(0x6db24c).fillRoundedRect(-size.width / 2, -size.height / 2, size.width, size.height, 8 * k);
     for (const pond of level.ponds) {
       const c = clamp(pond.center);
       g.fillStyle(0x4aa3df).fillEllipse(c.x, c.y, pond.radiusX * 2 * scale, pond.radiusY * 2 * scale);
     }
     const path = level.path.map(clamp);
-    g.lineStyle(5, 0xc99d64).strokePoints(path);
+    g.lineStyle(5 * k, 0xc99d64).strokePoints(path);
     g.fillStyle(0xc99d64);
-    path.forEach((p) => g.fillCircle(p.x, p.y, 2.5));
+    path.forEach((p) => g.fillCircle(p.x, p.y, 2.5 * k));
     g.fillStyle(0xf3d480);
-    level.slots.map(clamp).forEach((p) => g.fillCircle(p.x, p.y, 2.5));
+    level.slots.map(clamp).forEach((p) => g.fillCircle(p.x, p.y, 2.5 * k));
     const door = path[path.length - 1]!;
-    g.fillStyle(0xe0654c).fillTriangle(door.x - 6, door.y - 4, door.x + 6, door.y - 4, door.x, door.y - 11);
-    g.fillStyle(0xf3dfb6).fillRect(door.x - 4.5, door.y - 4, 9, 7);
-    g.lineStyle(3, COLORS.ink).strokeRoundedRect(-MAP.width / 2, -MAP.height / 2, MAP.width, MAP.height, 8);
+    g.fillStyle(0xe0654c).fillTriangle(door.x - 6 * k, door.y - 4 * k, door.x + 6 * k, door.y - 4 * k, door.x, door.y - 11 * k);
+    g.fillStyle(0xf3dfb6).fillRect(door.x - 4.5 * k, door.y - 4 * k, 9 * k, 7 * k);
+    g.lineStyle(3, COLORS.ink).strokeRoundedRect(-size.width / 2, -size.height / 2, size.width, size.height, 8 * k);
     return this.add.container(x, y, [g]);
   }
 }

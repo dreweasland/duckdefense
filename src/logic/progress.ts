@@ -1,6 +1,7 @@
 import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, type DuckKind } from '../data/ducks';
 import { HATS, type HatKind } from '../data/hats';
+import { TRIALS, findTrial } from '../data/trials';
 import { daysBetween } from './daily';
 
 // Saved progress: which levels are beaten, stars, and best scores, per difficulty.
@@ -21,6 +22,29 @@ export interface Progress {
   hats?: Partial<Record<DuckKind, HatKind>>;
   /** The most Endless Pond waves survived on each difficulty. */
   endless?: Partial<Record<Difficulty, number>>;
+  /** Level Trials won (their ids, see src/data/trials.ts) on each difficulty. */
+  trials?: Partial<Record<Difficulty, string[]>>;
+}
+
+/** Records a Level Trial win. Returns a new Progress (the same one if it was already won). */
+export function recordTrialWin(progress: Progress, difficulty: Difficulty, trialId: string): Progress {
+  const won = progress.trials?.[difficulty] ?? [];
+  if (won.includes(trialId)) return progress;
+  return { ...progress, trials: { ...progress.trials, [difficulty]: [...won, trialId] } };
+}
+
+export function hasWonTrial(progress: Progress, difficulty: Difficulty, trialId: string): boolean {
+  return progress.trials?.[difficulty]?.includes(trialId) ?? false;
+}
+
+/** How many of a level's trials have been won on a difficulty. */
+export function trialsWon(progress: Progress, difficulty: Difficulty, level: number): number {
+  return (TRIALS[level] ?? []).filter((trial) => hasWonTrial(progress, difficulty, trial.id)).length;
+}
+
+/** Trials open once the level itself has been beaten on that difficulty. */
+export function trialsUnlocked(progress: Progress, difficulty: Difficulty, level: number): boolean {
+  return !!progress.levels[difficulty][level];
 }
 
 /** Records an Endless Pond run, keeping the most waves survived. Returns a new Progress. */
@@ -118,6 +142,7 @@ export function parseProgress(text: string | null): Progress {
       dailyStreak?: { count?: unknown; last?: unknown };
       hats?: Record<string, unknown>;
       endless?: Record<string, unknown>;
+      trials?: Record<string, unknown>;
     };
     for (const difficulty of ['easy', 'normal'] as const) {
       for (const [key, record] of Object.entries(data.levels?.[difficulty] ?? {})) {
@@ -148,6 +173,13 @@ export function parseProgress(text: string | null): Progress {
     for (const difficulty of ['easy', 'normal'] as const) {
       const waves = Number(data.endless?.[difficulty]);
       if (Number.isInteger(waves) && waves > 0) progress.endless = { ...progress.endless, [difficulty]: waves };
+    }
+    for (const difficulty of ['easy', 'normal'] as const) {
+      const ids = data.trials?.[difficulty];
+      if (!Array.isArray(ids)) continue;
+      // Only trials that still exist, each counted once.
+      const won = [...new Set(ids.filter((id): id is string => typeof id === 'string' && !!findTrial(id)))];
+      if (won.length > 0) progress.trials = { ...progress.trials, [difficulty]: won };
     }
   } catch {
     // Corrupt save: start fresh rather than crash.

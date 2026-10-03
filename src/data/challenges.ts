@@ -4,6 +4,7 @@ import type { EnemyKind } from './enemies';
 // Daily Challenge twists. Every day, everyone gets the same level with the same twist,
 // and a leaderboard just for that day. Add a new twist to the end of the list and it
 // joins the rotation. `npm test` checks every twist can still be won on Easy on every level.
+// (Level Trials in src/data/trials.ts use the same rules, one level at a time.)
 
 export interface Challenge {
   name: string; // short, it goes on a button
@@ -15,6 +16,7 @@ export interface Challenge {
   allNight?: boolean; // every wave happens at night
   noSelling?: boolean; // placed ducks can't be sold (moving is fine)
   noCraig?: boolean; // Craig takes the day off
+  maxDucks?: number; // only this many ducks can be out at once (sell one to place another)
   // Added to every wave, on top of the level's usual predators.
   extra?: { enemy: EnemyKind; count: number; every: number; after?: number };
 }

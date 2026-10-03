@@ -163,8 +163,14 @@ export function isDuckAllowed(game: Game, kind: DuckKind): boolean {
   return game.challenge?.ducks?.includes(kind) ?? true;
 }
 
+/** Whether no more ducks can be placed right now (a trial can cap how many are out at once). */
+export function isFlockFull(game: Game): boolean {
+  const max = game.challenge?.maxDucks;
+  return max !== undefined && game.battle.ducks.length >= max;
+}
+
 export function canBuy(game: Game, kind: DuckKind): boolean {
-  return !isOver(game) && isDuckAllowed(game, kind) && game.peas >= DUCKS[kind].cost;
+  return !isOver(game) && isDuckAllowed(game, kind) && !isFlockFull(game) && game.peas >= DUCKS[kind].cost;
 }
 
 /** Whether ducks can be sold (a Daily Challenge can turn it off). */

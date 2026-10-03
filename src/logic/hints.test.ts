@@ -40,6 +40,13 @@ describe("Craig's hints", () => {
     expect(pickHint(g, 'easy', { type: 'heartLost', enemy: 'hawk' }, 5, none)).not.toBe('hawks');
   });
 
+  it("doesn't name a duck that's staying home today (a Daily Challenge or trial)", () => {
+    const g = createGame({ path, sky: [{ x: 0, y: -100 }] }, [wave], 'easy', { name: 'x', description: 'x', ducks: ['potato', 'chester'] });
+    buyDuck(g, 'chester', { x: 100, y: 50 });
+    expect(pickHint(g, 'easy', { type: 'heartLost', enemy: 'turtle' }, 5, none)).not.toBe('turtles'); // Sunny's home
+    expect(pickHint(g, 'easy', { type: 'heartLost', enemy: 'hawk' }, 5, none)).toBe('hawks'); // Potato could still help
+  });
+
   it('falls back to general tips: spend peas, upgrade, the Pecking Loop, then bends', () => {
     const g = game();
     buyDuck(g, 'sunny', { x: 100, y: 50 });

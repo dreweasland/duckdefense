@@ -133,6 +133,15 @@ everywhere: dialogue, tooltips, code comments.
   Prickly Curtis (predators near him lose health), Dizzy Flap (Potato's flap stuns), and New
   Nests (two more nests, at `ENDLESS.bonusNests`). They're the perks marked `boss: true` in
   `src/data/perks.ts`; once all are taken, boss waves offer the usual perks again.
+- **Level Trials:** Once a level is beaten on a difficulty, its sheet (tap the level card)
+  lists two trials: the same level with the rules bent, like only some ducks playing, half
+  the peas, every wave at night, or only four ducks out at once (`maxDucks`). The first trial
+  on each level leaves Sunny out or picks a small team, so players learn the other ducks.
+  Winning one earns a **ribbon** on the level card (saved per difficulty in `trials` in
+  `src/logic/progress.ts`); trial runs have no score and don't post to the leaderboard. Trials
+  reuse the Daily Challenge `Challenge` rules and live in `src/data/trials.ts`; `npm test`
+  checks every trial can be won on Easy by the simulator and on Normal by at least one
+  sensible team (`src/logic/balance.test.ts`). The level sheet also shows the best score.
 - **Daily Challenge:** One level and one twist per UTC day, the same for everyone, with its
   own leaderboard. Winning on days in a row builds a streak, shown on the Daily Challenge
   button and the win screen from the second day (`dailyStreak` in `src/logic/progress.ts`). Twists live in `src/data/challenges.ts`; the rules shared with the server
