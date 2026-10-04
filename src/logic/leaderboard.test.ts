@@ -25,9 +25,17 @@ describe('leaderboard names', () => {
     expect(checkName('sh1t head').ok).toBe(false);
   });
 
+  it('rejects rude words spread out with spaces', () => {
+    expect(checkName('s h i t').ok).toBe(false);
+    expect(checkName('a s s').ok).toBe(false);
+    expect(checkName('S H I T head').ok).toBe(false);
+  });
+
   it("doesn't reject normal names that happen to contain rude letters", () => {
     expect(checkName('Assassin').ok).toBe(true);
     expect(checkName('Scunthorpe').ok).toBe(true);
+    expect(checkName('Potato Dad').ok).toBe(true);
+    expect(checkName('Scun thorpe').ok).toBe(true);
   });
 });
 

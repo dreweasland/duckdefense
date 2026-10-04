@@ -22,7 +22,10 @@ export function checkName(raw: string): NameCheck {
   if (name.length === 0) return { ok: false, reason: 'Type a name first!' };
   if (name.length > NAME_MAX_LENGTH) return { ok: false, reason: `Names can be up to ${NAME_MAX_LENGTH} letters.` };
   if (!/^[A-Za-z0-9 ]+$/.test(name)) return { ok: false, reason: 'Just letters and numbers, please.' };
-  if (profanity.hasMatch(name)) return { ok: false, reason: 'Try a different name.' };
+  // Check the name with its spaces taken out too, so "f u c k" doesn't slip past the filter.
+  if (profanity.hasMatch(name) || profanity.hasMatch(name.replace(/ /g, ''))) {
+    return { ok: false, reason: 'Try a different name.' };
+  }
   return { ok: true, name };
 }
 
