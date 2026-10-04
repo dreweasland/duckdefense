@@ -136,6 +136,21 @@ export function drawRoundButton(
   return { container, hit: face };
 }
 
+/**
+ * Stops every tween on these objects and everything inside them. Phaser keeps a tween running
+ * after its target is destroyed, so a looping tween (a spinning star, a pulsing badge) on
+ * something inside a container must be killed before the container goes.
+ */
+export function killTweensDeep(scene: Phaser.Scene, ...targets: Phaser.GameObjects.GameObject[]): void {
+  const all: Phaser.GameObjects.GameObject[] = [];
+  const collect = (object: Phaser.GameObjects.GameObject): void => {
+    all.push(object);
+    if (object instanceof Phaser.GameObjects.Container) object.each(collect);
+  };
+  targets.forEach(collect);
+  scene.tweens.killTweensOf(all);
+}
+
 /** Fades the screen to black, then starts another scene. */
 export function fadeToScene(scene: Phaser.Scene, key: string, data?: object, duration = 220): void {
   scene.cameras.main.fadeOut(duration, 0, 0, 0);

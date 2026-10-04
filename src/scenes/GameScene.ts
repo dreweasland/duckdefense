@@ -70,7 +70,7 @@ import { duckWithHat, hatImage, placeHat } from '../ui/hats';
 import type { PauseSceneData } from './PauseScene';
 import type { ResultSceneData } from './ResultScene';
 import { BACKDROP, COLORS, DEPTH, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
-import { drawBigButton, drawCard, drawPill, drawRoundButton, drawSoundButton, popSpeechBubble } from '../ui/widgets';
+import { drawBigButton, drawCard, drawPill, drawRoundButton, drawSoundButton, killTweensDeep, popSpeechBubble } from '../ui/widgets';
 import { playSound } from '../audio/sfx';
 
 const DUCK_SIZE = 84;
@@ -743,6 +743,7 @@ export class GameScene extends Phaser.Scene {
     const key = game.phase === 'building' ? `${game.waveIndex}` : '';
     if (key === this.previewKey) return;
     this.previewKey = key;
+    killTweensDeep(this, this.preview);
     this.preview.removeAll(true);
     if (!key) return;
 
@@ -1341,6 +1342,7 @@ export class GameScene extends Phaser.Scene {
   private closePopup(): void {
     this.popupTimer?.remove();
     this.popupTimer = undefined;
+    if (this.popup) killTweensDeep(this, this.popup);
     this.popup?.destroy();
     this.popup = undefined;
     if (this.focusedDuckId !== undefined) {
@@ -1427,7 +1429,7 @@ export class GameScene extends Phaser.Scene {
     this.showPopup(popup, 5000);
   }
 
-  /** "On this map": a key to the special tiles, shown when a level starts. Tap anywhere to close it. */
+  /** "On this map": a key to the special tiles, shown when a level starts. Fades on its own. */
   private showMapKey(): void {
     if (this.popup || isOver(this.state)) return;
     const kinds = this.tilesOnMap();
@@ -1732,7 +1734,7 @@ export class GameScene extends Phaser.Scene {
     playSound(this, 'sell');
     this.duckSprites.delete(duckId);
     sprite.range.destroy();
-    this.tweens.killTweensOf(sprite.art);
+    killTweensDeep(this, sprite.root);
     this.tweens.add({
       targets: sprite.root,
       scale: 0,
@@ -1976,7 +1978,7 @@ export class GameScene extends Phaser.Scene {
     const sprite = this.enemySprites.get(id);
     if (!sprite) return;
     this.enemySprites.delete(id);
-    this.tweens.killTweensOf([sprite.root, sprite.art, ...(sprite.ripple ? [sprite.ripple] : [])]);
+    killTweensDeep(this, sprite.root, ...(sprite.ripple ? [sprite.ripple] : []));
     sprite.root.setAlpha(1);
     const { root } = sprite;
     const done = () => root.destroy();
