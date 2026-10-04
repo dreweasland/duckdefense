@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { drawBrambles, drawGrass, drawMud, drawOutskirts, drawPath, drawPathEntrance, drawPond, scatterDecor } from '../art/terrain';
+import { bakeScenery, drawBrambles, drawGrass, drawMud, drawOutskirts, drawPath, drawPathEntrance, drawPond, scatterDecor } from '../art/terrain';
 import { TILES, type NestKind } from '../data/tiles';
 import { BATTERY, FOUNTAIN } from '../data/dayNight';
 import type { Challenge } from '../data/challenges';
@@ -261,6 +261,8 @@ export class GameScene extends Phaser.Scene {
   private shield!: Phaser.GameObjects.Container;
   private goButton!: Phaser.GameObjects.Container;
   private speedButton!: { container: Phaser.GameObjects.Container; draw: () => void };
+  /** Static ground drawings waiting to be baked into one picture when the world is built. */
+  private scenery: Phaser.GameObjects.Graphics[] = [];
   /** When the start button was last tapped (scene time), so the speed button can ignore a double-tap. */
   private waveStartedAt = -Infinity;
   /** Endless Pond: the Pond Perks counter under the peas, and the "pick a perk" card while it's open. */
@@ -378,6 +380,9 @@ export class GameScene extends Phaser.Scene {
     this.fx = this.createEffects();
     this.peckingLoop = this.add.container(0, 0).setDepth(DEPTH.entities - 0.5);
     this.level.slots.forEach((slot) => this.drawNest(slot));
+    // Everything static from the lawn up to the nest mounds becomes one picture (see bakeScenery).
+    bakeScenery(this, this.scenery, DEPTH.path);
+    this.scenery = [];
     this.drawNight();
     this.drawShield();
 
@@ -463,15 +468,16 @@ export class GameScene extends Phaser.Scene {
   private drawWorld(): void {
     // Different seeds per level, so each level's scenery is different (but always the same).
     const seed = 11 + this.levelIndex * 100;
-    drawGrass(this, seed);
+    // The static drawings, in the order they stack up, to be baked into one picture.
+    this.scenery.push(drawGrass(this, seed));
     drawOutskirts(this, seed + 3);
     this.level.paths.forEach((trail, i) => {
-      drawPath(this, trail, seed + 1 + i * 7);
+      this.scenery.push(drawPath(this, trail, seed + 1 + i * 7));
       drawPathEntrance(this, trail, seed + 4 + i * 7);
     });
-    this.level.ponds.forEach((pond, i) => drawPond(this, pond, seed + 9 + i));
-    this.level.mud.forEach((patch, i) => drawMud(this, patch, seed + 20 + i));
-    this.level.brambles.forEach((patch, i) => drawBrambles(this, patch, seed + 30 + i));
+    this.level.mud.forEach((patch, i) => this.scenery.push(drawMud(this, patch, seed + 20 + i)));
+    this.level.brambles.forEach((patch, i) => this.scenery.push(drawBrambles(this, patch, seed + 30 + i)));
+    this.level.ponds.forEach((pond, i) => this.scenery.push(drawPond(this, pond, seed + 9 + i)));
     // Tap a mud or bramble patch to learn what it does.
     const tappable: [TileKind, Ellipse[]][] = [['mud', this.level.mud], ['brambles', this.level.brambles]];
     for (const [kind, patches] of tappable) {
@@ -974,12 +980,16 @@ export class GameScene extends Phaser.Scene {
       const r = POWER_BUTTON.radius;
       button.shade.clear();
       if (state === 'resting') {
-        // A pie slice of shade, full at the start of the rest and gone when it's ready.
+        // A pie slice of shade, full at the start of the rest and gone when it's ready. Drawn as a
+        // polygon with a point every 15 degrees: Phaser's own slice() would be 100 points, redone every frame.
         const share = left / POWERS[kind].cooldown;
-        button.shade
-          .fillStyle(COLORS.ink, 0.55)
-          .slice(0, 0, r - 2, Phaser.Math.DegToRad(-90), Phaser.Math.DegToRad(-90 + 360 * share), false)
-          .fillPath();
+        const points = [new Phaser.Geom.Point(0, 0)];
+        const steps = Math.max(1, Math.ceil(24 * share));
+        for (let i = 0; i <= steps; i++) {
+          const a = -Math.PI / 2 + Math.PI * 2 * share * (i / steps);
+          points.push(new Phaser.Geom.Point(Math.cos(a) * (r - 2), Math.sin(a) * (r - 2)));
+        }
+        button.shade.fillStyle(COLORS.ink, 0.55).fillPoints(points, true);
         button.seconds.setText(String(Math.ceil(left)));
       } else {
         button.seconds.setText('');
@@ -1119,6 +1129,7 @@ export class GameScene extends Phaser.Scene {
     const kind = nestAt(this.state.battle, slot);
     if (!kind) return;
     const under = this.add.graphics().setDepth(entityDepth(slot.y - 21));
+    this.scenery.push(under); // baked with the rest of the ground
     // The badge sits at the nest's front corner, above any duck in it, so it always shows.
     const badge = this.add.container(slot.x - 34, slot.y + 22).setDepth(entityDepth(slot.y + 30));
     // Tap the badge to learn what the nest does (a generous tap area for small fingers).

@@ -26,7 +26,45 @@ export interface Rect {
 /** How far past the world's edges the forest ring and patches reach (wide or tall screens). */
 const OUTSKIRTS = 420;
 
-export function drawGrass(scene: Phaser.Scene, seed: number): void {
+/**
+ * Points around a circle or ellipse drawn with Graphics. Phaser's own fillCircle turns every
+ * circle into a 100-point polygon and re-triangulates it every frame; a dozen points look the
+ * same at these sizes and cost a fraction. (Baked scenery doesn't care, but live shapes do.)
+ */
+export const ROUND = 16;
+
+/**
+ * Paints static scenery (paths, the pond, mud, nest mounds...) into one texture, so the
+ * renderer draws a single image each frame instead of re-triangulating every shape.
+ * The graphics are kept, hidden, so the picture can be painted again if the browser ever
+ * drops the WebGL context (which wipes textures made like this).
+ */
+export function bakeScenery(scene: Phaser.Scene, parts: Phaser.GameObjects.Graphics[], depth: number): void {
+  const S = RENDER_SCALE;
+  const rt = scene.add
+    .renderTexture(0, 0, Math.round(WORLD.width * S), Math.round(WORLD.height * S))
+    .setOrigin(0)
+    .setScale(1 / S)
+    .setDepth(depth);
+  const paint = () => {
+    rt.clear();
+    parts.forEach((g) => g.setScale(S).setVisible(true));
+    rt.draw(parts, 0, 0);
+    parts.forEach((g) => g.setVisible(false));
+  };
+  paint();
+  const renderer = scene.game.renderer;
+  renderer.on(Phaser.Renderer.Events.RESTORE_WEBGL, paint);
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => renderer.off(Phaser.Renderer.Events.RESTORE_WEBGL, paint));
+}
+
+/** Whether an ellipse lies entirely inside the world (so it can go in the baked scenery). */
+function insideWorld(x: number, y: number, w: number, h: number): boolean {
+  return x - w / 2 >= 0 && x + w / 2 <= WORLD.width && y - h / 2 >= 0 && y + h / 2 <= WORLD.height;
+}
+
+/** Draws the lawn. Returns the static part for baking. */
+export function drawGrass(scene: Phaser.Scene, seed: number): Phaser.GameObjects.Graphics {
   // Covers the whole backdrop so no edge ever shows, whatever the screen shape.
   scene.add
     .tileSprite(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height, 'grass')
@@ -35,18 +73,21 @@ export function drawGrass(scene: Phaser.Scene, seed: number): void {
     .setTilePosition(-BACKDROP.x * RENDER_SCALE, -BACKDROP.y * RENDER_SCALE)
     .setDepth(DEPTH.ground);
 
-  // Soft light and shadow patches so the lawn isn't flat.
+  // Soft light and shadow patches so the lawn isn't flat. The ones inside the world are baked;
+  // the ones reaching past its edges (seen on wide screens) stay live, drawn with few points.
   const rng = seededRandom(seed);
-  const g = scene.add.graphics().setDepth(DEPTH.ground);
+  const inside = scene.add.graphics().setDepth(DEPTH.ground);
+  const outside = scene.add.graphics().setDepth(DEPTH.ground);
   for (let i = 0; i < 28; i++) {
     const light = rng() < 0.5;
-    g.fillStyle(light ? 0xfff6c0 : 0x1f4d1a, light ? 0.07 : 0.08).fillEllipse(
-      -OUTSKIRTS + rng() * (WORLD.width + OUTSKIRTS * 2),
-      -OUTSKIRTS + rng() * (WORLD.height + OUTSKIRTS * 2),
-      160 + rng() * 260,
-      110 + rng() * 180,
-    );
+    const x = -OUTSKIRTS + rng() * (WORLD.width + OUTSKIRTS * 2);
+    const y = -OUTSKIRTS + rng() * (WORLD.height + OUTSKIRTS * 2);
+    const w = 160 + rng() * 260;
+    const h = 110 + rng() * 180;
+    const target = insideWorld(x, y, w, h) ? inside : outside;
+    target.fillStyle(light ? 0xfff6c0 : 0x1f4d1a, light ? 0.07 : 0.08).fillEllipse(x, y, w, h, ROUND);
   }
+  return inside;
 }
 
 /**
@@ -77,18 +118,29 @@ export function drawOutskirts(scene: Phaser.Scene, seed: number): void {
   for (const key of ['flower-white', 'flower-pink', 'flower-purple']) place(key, 18, 0, 22, 22, true);
 }
 
-export function drawPath(scene: Phaser.Scene, points: Point[], seed: number): void {
-  // Draw the path running on past its start, off into the forest, so it doesn't just end.
+/**
+ * Draws a trail. Returns the static part for baking: the trail itself. The bit running on
+ * past its start into the forest (so it doesn't just end, on wide screens) lies outside the
+ * baked picture, so it stays a live drawing; it's one straight segment, so that's cheap.
+ */
+export function drawPath(scene: Phaser.Scene, points: Point[], seed: number): Phaser.GameObjects.Graphics {
+  const g = scene.add.graphics().setDepth(DEPTH.path);
+  paintTrail(g, points, seed);
   const [first, second] = points;
   if (first && second) {
     const dir = unit(first, second);
-    points = [{ x: first.x - dir.x * OUTSKIRTS, y: first.y - dir.y * OUTSKIRTS }, ...points];
+    const outside = { x: first.x - dir.x * OUTSKIRTS, y: first.y - dir.y * OUTSKIRTS };
+    // Drawn after the trail, in the same layer order, so the join at the trail's start is seamless.
+    paintTrail(scene.add.graphics().setDepth(DEPTH.path), [outside, first], seed + 1);
   }
-  const g = scene.add.graphics().setDepth(DEPTH.path);
+  return g;
+}
+
+function paintTrail(g: Phaser.GameObjects.Graphics, points: Point[], seed: number): void {
   const layer = (width: number, color: number) => {
     g.lineStyle(width, color).strokePoints(points);
     g.fillStyle(color);
-    points.forEach((p) => g.fillCircle(p.x, p.y, width / 2));
+    points.forEach((p) => g.fillEllipse(p.x, p.y, width, width, ROUND));
   };
   layer(60, 0x7a5530); // edge
   layer(50, 0xc99d64); // dirt
@@ -102,11 +154,12 @@ export function drawPath(scene: Phaser.Scene, points: Point[], seed: number): vo
     const x = p.x + (rng() - 0.5) * 38;
     const y = p.y + (rng() - 0.5) * 38;
     const size = 3 + rng() * 4;
-    g.fillStyle(rng() < 0.5 ? 0xa57b4a : 0xe6c898).fillEllipse(x, y, size * 1.4, size);
+    g.fillStyle(rng() < 0.5 ? 0xa57b4a : 0xe6c898).fillEllipse(x, y, size * 1.4, size, 8);
   }
 }
 
-export function drawPond(scene: Phaser.Scene, pond: Ellipse, seed: number): void {
+/** Draws a pond. Returns the static part (the water) for baking; the shimmer stays live. */
+export function drawPond(scene: Phaser.Scene, pond: Ellipse, seed: number): Phaser.GameObjects.Graphics {
   const { center: c, radiusX: rx, radiusY: ry } = pond;
   const g = scene.add.graphics().setDepth(DEPTH.pond);
   g.fillStyle(0x000000, 0.15).fillEllipse(c.x, c.y + 6, rx * 2 + 36, ry * 2 + 36);
@@ -120,9 +173,9 @@ export function drawPond(scene: Phaser.Scene, pond: Ellipse, seed: number): void
   // Shimmering highlights.
   const shine = scene.add.graphics().setDepth(DEPTH.pond);
   shine.fillStyle(0xffffff, 1);
-  shine.fillEllipse(c.x - rx * 0.45, c.y - ry * 0.5, rx * 0.4, 6);
-  shine.fillEllipse(c.x + rx * 0.3, c.y + ry * 0.35, rx * 0.3, 5);
-  shine.fillEllipse(c.x + rx * 0.55, c.y - ry * 0.3, rx * 0.15, 4);
+  shine.fillEllipse(c.x - rx * 0.45, c.y - ry * 0.5, rx * 0.4, 6, ROUND);
+  shine.fillEllipse(c.x + rx * 0.3, c.y + ry * 0.35, rx * 0.3, 5, ROUND);
+  shine.fillEllipse(c.x + rx * 0.55, c.y - ry * 0.3, rx * 0.15, 4, ROUND);
   shine.setAlpha(0.3);
   scene.tweens.add({ targets: shine, alpha: 0.55, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
 
@@ -149,6 +202,7 @@ export function drawPond(scene: Phaser.Scene, pond: Ellipse, seed: number): void
     const reed = scene.add.image(x, y, 'reeds').setDisplaySize(30, 50).setOrigin(0.5, 0.9).setFlipX(rng() < 0.5);
     reed.setDepth(entityDepth(y));
   }
+  return g;
 }
 
 export interface DecorAvoid {
@@ -252,8 +306,8 @@ export function drawPathEntrance(scene: Phaser.Scene, points: Point[], seed: num
   }
 }
 
-/** A muddy puddle on the path: dark, wet, and glossy. */
-export function drawMud(scene: Phaser.Scene, patch: Ellipse, seed: number): void {
+/** A muddy puddle on the path: dark, wet, and glossy. Returned for baking. */
+export function drawMud(scene: Phaser.Scene, patch: Ellipse, seed: number): Phaser.GameObjects.Graphics {
   const { center: c, radiusX: rx, radiusY: ry } = patch;
   const rng = seededRandom(seed);
   const g = scene.add.graphics().setDepth(DEPTH.path + 0.1);
@@ -279,10 +333,11 @@ export function drawMud(scene: Phaser.Scene, patch: Ellipse, seed: number): void
     const r = 0.75 + rng() * 0.2;
     g.fillCircle(c.x + Math.cos(a) * rx * r, c.y + Math.sin(a) * ry * r, 2.5 + rng() * 3);
   }
+  return g;
 }
 
-/** A tangle of thorny brambles across the path. */
-export function drawBrambles(scene: Phaser.Scene, patch: Ellipse, seed: number): void {
+/** A tangle of thorny brambles across the path. Returned for baking. */
+export function drawBrambles(scene: Phaser.Scene, patch: Ellipse, seed: number): Phaser.GameObjects.Graphics {
   const { center: c, radiusX: rx, radiusY: ry } = patch;
   const rng = seededRandom(seed);
   const g = scene.add.graphics().setDepth(DEPTH.path + 0.2);
@@ -317,4 +372,5 @@ export function drawBrambles(scene: Phaser.Scene, patch: Ellipse, seed: number):
     const r = rng() * 0.8;
     g.fillStyle(0x6a2a5a).fillCircle(c.x + Math.cos(a) * rx * r, c.y + Math.sin(a) * ry * r, 3.5);
   }
+  return g;
 }

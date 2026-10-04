@@ -30,6 +30,8 @@ game mechanics come from how they actually behave.
 - **Art:** Original vector-cartoon art: bold outlines, soft shading. Every sprite is an SVG
   built in `src/art/sprites.ts` (the ducks share one silhouette in their real breed colors)
   and loaded as textures by `BootScene`. Terrain and scenery are drawn in `src/art/terrain.ts`;
+  the static parts (paths, pond, mud, nest mounds) are baked into one texture per level
+  (`bakeScenery`), since Phaser re-triangulates every `Graphics` shape every frame;
   shared colors, fonts (Fredoka), and draw layers live in `src/ui/theme.ts`. The canvas
   renders at 2x for sharp art on phones, so scenes lay out in 1280 x 720 world units.
 

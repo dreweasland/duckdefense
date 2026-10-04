@@ -8,6 +8,10 @@ import { ResultScene } from './scenes/ResultScene';
 import { TitleScene } from './scenes/TitleScene';
 import { WardrobeScene } from './scenes/WardrobeScene';
 import { RENDER_SCALE, viewSize } from './ui/theme';
+import { installCheapRoundedRects } from './art/roundedRects';
+
+// Before any scene draws: see roundedRects.ts.
+installCheapRoundedRects();
 
 // Size the canvas to the window's shape (at RENDER_SCALE for sharp art), so it fills the screen.
 function canvasSize(): { width: number; height: number } {
