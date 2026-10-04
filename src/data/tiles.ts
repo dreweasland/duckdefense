@@ -13,7 +13,7 @@ export const TILES = {
   // Brambles on the path: prickly! Ground predators lose health while they're in them.
   brambles: {
     name: 'Brambles',
-    description: 'Ouch! Predators lose health while they walk through the thorns.',
+    description: 'Ouch! The thorns hurt predators walking through.',
     damagePerSecond: 8,
   },
   // Special nests: a nest point in Tiled with its class (or type) set to one of these.

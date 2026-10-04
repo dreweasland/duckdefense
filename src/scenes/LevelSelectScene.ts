@@ -83,7 +83,7 @@ export class LevelSelectScene extends Phaser.Scene {
     const parts: Phaser.GameObjects.GameObject[] = [card, this.drawMiniMap(level, -64, -24, MAP)];
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const right = 72; // the stars and ribbons sit in a column to the right of the map
-    parts.push(this.add.text(right, -56, `Level ${index + 1}`, textStyle(18, { ...ink, color: '#8a7f85' })).setOrigin(0.5));
+    parts.push(this.add.text(right, -56, `Level ${index + 1}`, textStyle(18, { ...ink, color: COLORS.textGrey })).setOrigin(0.5));
     parts.push(this.add.text(0, 50, name, textStyle(name.length > 12 ? 22 : 26, { ...ink, weight: '700' })).setOrigin(0.5));
     for (let s = 0; s < 3; s++) {
       parts.push(
@@ -161,7 +161,7 @@ export class LevelSelectScene extends Phaser.Scene {
     const W = SHEET.width;
     const H = SHEET.baseHeight + trials.length * SHEET.trialRow;
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
-    const grey = { ...ink, color: '#8a7f85' };
+    const grey = { ...ink, color: COLORS.textGrey };
     const play = (data: GameSceneData) => fadeToScene(this, 'GameScene', data);
 
     // A dark sheet over the level cards; tapping it closes the sheet.
@@ -320,7 +320,7 @@ export class LevelSelectScene extends Phaser.Scene {
     const H = 110 + LEVELS.length * ROW;
     const top = -H / 2;
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
-    const grey = { ...ink, color: '#8a7f85' };
+    const grey = { ...ink, color: COLORS.textGrey };
 
     const backdrop = this.add.rectangle(WORLD.width / 2, WORLD.height / 2, WORLD.width, WORLD.height, 0x2b2233, 0.55).setInteractive();
     backdrop.on('pointerdown', () => this.closeSheet());

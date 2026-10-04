@@ -54,6 +54,11 @@ export const COLORS = {
   pink: 0xff7aa2,
   red: 0xe0524c,
   redDark: 0xa33a35,
+  // Text on cream cards. All at least 4.5:1 against cream, so they read on a phone in the sun.
+  textGrey: '#6b6168', // second-rank text: labels, "Level 3", hints under a heading
+  textGold: '#8a5a10', // Big Move names, "Final upgrade"
+  textGreen: '#1f6b34', // good news: "Best duck", a bonus
+  blueDarkCss: '#2a66a8', // a duck's power name
 };
 
 /** Each difficulty's colour: the title screen's buttons and the chips on the other screens. */

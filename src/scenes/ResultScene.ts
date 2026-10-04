@@ -253,14 +253,14 @@ export class ResultScene extends Phaser.Scene {
   private drawDuckReport(x: number, y: number, kind: DuckKind, stats: KindReport | undefined, top: boolean): void {
     const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     if (!stats?.placed) {
-      this.add.text(x, y + 8, 'Stayed home', textStyle(16, { ...ink, color: '#8a7f85' })).setOrigin(0.5).setDepth(51);
+      this.add.text(x, y + 8, 'Stayed home', textStyle(16, { ...ink, color: COLORS.textGrey })).setOrigin(0.5).setDepth(51);
       return;
     }
     const name = stats.placed > 1 ? `${DUCKS[kind].name} ×${stats.placed}` : DUCKS[kind].name;
     const lines = [
-      this.add.text(x, y, name, textStyle(15, { ...ink, color: '#8a7f85' })),
-      this.add.text(x, y + 19, `Chased off ${shortNumber(stats.chasedOff)}`, textStyle(17, { ...ink, weight: '700' })),
-      this.add.text(x, y + 39, `${shortNumber(stats.damage)} damage · ${DUCKS[kind].power.stat} ${shortNumber(stats.special)}`, textStyle(13, ink)),
+      this.add.text(x, y, name, textStyle(17, { ...ink, color: COLORS.textGrey })),
+      this.add.text(x, y + 21, `Chased off ${shortNumber(stats.chasedOff)}`, textStyle(18, { ...ink, weight: '700' })),
+      this.add.text(x, y + 43, `${shortNumber(stats.damage)} damage · ${DUCKS[kind].power.stat} ${shortNumber(stats.special)}`, textStyle(16, ink)),
     ];
     lines.forEach((line) => {
       line.setOrigin(0.5, 0).setDepth(51);
@@ -295,7 +295,7 @@ export class ResultScene extends Phaser.Scene {
       this.add
         .text(0, 40, shown.length === 1 ? HATS[shown[0]!].name : `${hats.length} new hats`, textStyle(18, { ...ink, weight: '700' }))
         .setOrigin(0.5),
-      this.add.text(0, 66, 'Try it on in the Wardrobe!', textStyle(14, { ...ink, color: '#8a7f85' })).setOrigin(0.5),
+      this.add.text(0, 67, 'Try it on in the Wardrobe!', textStyle(16, { ...ink, color: COLORS.textGrey })).setOrigin(0.5),
     );
     const card = this.add.container(WORLD.width - 110, 300, parts).setDepth(80).setScale(0).setAngle(4);
     this.tweens.add({ targets: card, scale: 1, duration: 350, ease: 'Back.Out' });
