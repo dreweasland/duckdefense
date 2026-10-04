@@ -91,6 +91,8 @@ const shownHints = new Set<HintId>();
 
 // Maps whose "On this map" key has been shown this visit (so it shows once per map).
 const shownMapKeys = new Set<string>();
+// Big Moves that have been introduced (a card the first time each one is ready), once per visit.
+const introducedPowers = new Set<DuckKind>();
 
 // Things that happen all the time in a battle and don't change the HUD.
 const QUIET_EVENTS: ReadonlySet<GameEvent['type']> = new Set(['attack', 'alarmQuack', 'scared']);
@@ -977,6 +979,11 @@ export class GameScene extends Phaser.Scene {
         button.seconds.setText('');
       }
       if (state !== button.state) {
+        // The first time a Big Move is ready, say what it does.
+        if (state === 'ready' && !introducedPowers.has(kind)) {
+          introducedPowers.add(kind);
+          if (!this.popup) this.showPowerInfo(kind, 'Ready! Tap the gold button.');
+        }
         button.state = state;
         button.container.setAlpha(state === 'noDuck' ? 0.4 : state === 'notNow' ? 0.75 : 1);
         if (state === 'ready') button.face.clearTint();
@@ -984,6 +991,31 @@ export class GameScene extends Phaser.Scene {
         button.glow.setAlpha(state === 'ready' ? 0.75 : 0);
       }
     }
+  }
+
+  /** A card beside the Big Move buttons: the move's name, what it does, and a note (why it can't be used yet, say). */
+  private showPowerInfo(kind: DuckKind, note: string): void {
+    this.closePopup();
+    const power = POWERS[kind];
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    const words = this.add.text(-150, 0, power.description, { ...textStyle(17, ink), wordWrap: { width: 300 } }).setOrigin(0, 0);
+    const H = 108 + words.height;
+    const top = -H / 2;
+    words.setY(top + 62);
+    const card = drawCard(this.add.graphics(), 330, H, { radius: 18, border: COLORS.gold, borderWidth: 4 });
+    const button = this.powerButtons[kind]!;
+    const y = Math.max(H / 2 + 20, Math.min(WORLD.height - H / 2 - 20, button.container.y));
+    const popup = this.add
+      .container(POWER_BUTTON.x - POWER_BUTTON.radius - 185, y, [
+        card,
+        this.add.image(-126, top + 32, `duck-${kind}`).setDisplaySize(40, 40),
+        this.add.text(-100, top + 22, `${DUCKS[kind].name}'s Big Move`, textStyle(14, { ...ink, color: '#8a7f85' })).setOrigin(0, 0.5),
+        this.add.text(-100, top + 42, power.name, textStyle(24, { ...ink, color: '#b8791a', weight: '700' })).setOrigin(0, 0.5),
+        words,
+        this.add.text(-150, H / 2 - 24, note, textStyle(15, { ...ink, color: '#2a66a8', weight: '700' })).setOrigin(0, 0.5),
+      ])
+      .setDepth(DEPTH.hud + 5);
+    this.showPopup(popup, 5000);
   }
 
   private onPowerTap(kind: DuckKind): void {
@@ -996,9 +1028,9 @@ export class GameScene extends Phaser.Scene {
         state === 'noDuck'
           ? `Put a ${DUCKS[kind].name} out first!`
           : state === 'notNow'
-            ? 'Wait for the wave!'
-            : `Resting: ${Math.ceil(powerCooldown(this.state, kind))}s`;
-      popSpeechBubble(this, button.container.x - 120, button.container.y - 10, why, DEPTH.floatText);
+            ? 'Wait for the wave, then tap!'
+            : `Resting: ready in ${Math.ceil(powerCooldown(this.state, kind))}s`;
+      this.showPowerInfo(kind, why);
       return;
     }
     const result = usePower(this.state, kind);
@@ -1320,8 +1352,17 @@ export class GameScene extends Phaser.Scene {
   /** A card under the picker explaining the duck you just picked. Fades on its own. */
   private showPickerInfo(kind: DuckKind): void {
     this.closePopup();
-    const card = drawCard(this.add.graphics(), 310, 196, { radius: 18 });
-    const popup = this.add.container(196, 214, [card, ...this.duckInfoLines(kind)]).setDepth(DEPTH.hud + 5);
+    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
+    // The duck's card, plus its Big Move (the tap-to-use one, on the buttons down the right).
+    const card = drawCard(this.add.graphics(), 310, 232, { radius: 18 });
+    const lines = this.add.container(0, -22, this.duckInfoLines(kind)); // the usual card's lines, shifted up to make room
+    const bigMove = [
+      this.add.image(-126, 86, 'glow').setDisplaySize(30, 30).setTint(COLORS.gold),
+      this.add.image(-126, 86, `duck-${kind}`).setDisplaySize(22, 22),
+      this.add.text(-108, 86, `Big Move: ${POWERS[kind].name}`, textStyle(16, { ...ink, color: '#b8791a', weight: '700' })).setOrigin(0, 0.5),
+      this.add.text(-108, 103, 'tap the gold button on the right', textStyle(13, { ...ink, color: '#8a7f85' })).setOrigin(0, 0.5),
+    ];
+    const popup = this.add.container(196, 232, [card, lines, ...bigMove]).setDepth(DEPTH.hud + 5);
     this.showPopup(popup, 4000);
   }
 

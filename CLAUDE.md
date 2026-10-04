@@ -119,9 +119,10 @@ flyers. `enemyStats(enemy)` in `src/logic/battle.ts` is the stats-with-twist loo
 - **Sandbox:** On a level's sheet, under Play. The level with 9999 peas and 99 hearts and
   arrows under the counters to jump to any wave (`src/data/sandbox.ts`), for trying things
   out and for tuning a new wave. Nothing is saved or posted.
-- **Flock powers:** One big move per kind of duck, on a column of round buttons down the
-  right edge (`src/data/powers.ts`, logic in `src/logic/powers.ts`, moves in
-  `src/logic/battle.ts`). A power is ready once a duck of that kind is out and a wave is on,
+- **Flock powers ("Big Moves" in the game):** One big move per kind of duck, on a column of
+  round buttons down the right edge (`src/data/powers.ts`, logic in `src/logic/powers.ts`,
+  moves in `src/logic/battle.ts`). Each is explained on its duck's picker card, on a card
+  when its button is tapped before it's ready, and the first time it's ready in a level. A power is ready once a duck of that kind is out and a wave is on,
   then rests for its cooldown (shown as a shrinking shade and a countdown). Every duck of the
   kind joins in: **Tidal Wave** (Sunny: a giant soaking splash in each Sunny's reach), **Flap
   Storm** (Potato: everything in reach blown back and dizzy), **Mega Quack** (Chester: every
