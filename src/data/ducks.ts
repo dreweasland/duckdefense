@@ -169,7 +169,7 @@ export const DUCKS: Record<DuckKind, DuckStats> = {
   // hawks and the Night Bandit scare everyone else.
   curtis: {
     name: 'Curtis',
-    power: { name: 'Hold the Line', description: 'Never gets scared. Predators near him slow to a trudge.', icon: 'hold', stat: 'Slowed' },
+    power: { name: 'Unbothered', description: 'Never gets scared. Predators near him slow to a trudge.', icon: 'hold', stat: 'Slowed' },
     cost: 80,
     range: 160, // his slow zone: big enough to cover a bend in the path
     damage: 4,

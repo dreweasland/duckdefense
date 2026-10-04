@@ -1,7 +1,7 @@
 import type { DuckKind } from './ducks';
 
-// Flock powers: one big move per kind of duck, used by tapping its button under the duck
-// picker during a wave. A power is ready once a duck of that kind is out, then needs a
+// Flock powers ("Big Moves" in the game): one per kind of duck, used by tapping its round
+// button in the column down the right edge during a wave. A power is ready once a duck of that kind is out, then needs a
 // rest (the cooldown, in seconds) after each use. Every duck of the kind joins in.
 // Keep them big and dramatic: the point is to give the player something to do mid-wave.
 

@@ -28,7 +28,7 @@ export const HINTS: Record<HintId, string> = {
   foxes: 'Foxes are super fast! Curtis slows them down.',
   bandit: "The Night Bandit scares the flock. Curtis isn't scared of anybody!",
   spendPeas: "You've got peas to spend! Tap an empty nest to add a duck.",
-  powers: 'See the glowing buttons under the ducks? Tap one for a big move during a wave!',
+  powers: 'See the round buttons down the right side? Tap one for a Big Move during a wave!',
   upgrade: 'Tap a duck to make it stronger with an upgrade!',
   peckingLoop: 'Put Sunny next to Chester, or Potato next to Sunny. They go faster!',
   bends: 'Ducks inside a bend in the path can reach more predators.',
