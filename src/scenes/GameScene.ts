@@ -10,26 +10,18 @@ import { CHASES } from '../data/synergy';
 import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { VARIANTS, type VariantKind } from '../data/variants';
 import { POWERS } from '../data/powers';
-import { powerCooldown, powerState, usePower, type PowerState } from '../logic/powers';
 import { GAME_SPEEDS, SPEED_TAP_GUARD } from '../data/gameSpeed';
 import { TARGETING, TARGETING_ORDER, type Targeting } from '../data/targeting';
-import { ENDLESS_PERKS_AREA, ENDLESS_REPAIR_AREA, HUD_AREAS } from '../data/layout';
-import { PERKS, type PerkId } from '../data/perks';
+import { HUD_AREAS } from '../data/layout';
 import { LEVELS } from '../data/levels';
-import { chasePartner, duckStats, enemyName, enemyPosition, enemyStats, findDuck, type PowerResult, inBrambles, inMud, isFlying, isHidden, isRefreshed, nestAt, type Duck, type Enemy } from '../logic/battle';
+import { chasePartner, duckStats, enemyName, enemyPosition, enemyStats, findDuck, inBrambles, inMud, isFlying, isHidden, isRefreshed, nestAt, type Duck, type Enemy } from '../logic/battle';
 import {
   buyDuck,
-  callNextWave,
   canBuy,
   isFlockFull,
   jumpToWave,
-  canCallEarly,
   canSell,
-  choosePerk,
-  earlyCallPeas,
   killPeas,
-  repairCost,
-  repairHouse,
   trainDuck,
   trainingCost,
   isDuckAllowed,
@@ -63,8 +55,6 @@ import { ENDLESS } from '../data/endless';
 import { bonusNestsFor, endlessWaves } from '../logic/endless';
 import { loadProgress, saveProgress } from '../save';
 import type { HatKind } from '../data/hats';
-import { HINT_GAP, HINTS, type HintId } from '../data/hints';
-import { pickHint, type HintMoment } from '../logic/hints';
 import { hatFor } from '../logic/hats';
 import { duckWithHat, hatImage, placeHat } from '../ui/hats';
 import type { PauseSceneData } from './PauseScene';
@@ -72,12 +62,18 @@ import type { ResultSceneData } from './ResultScene';
 import { BACKDROP, COLORS, DEPTH, WORLD, entityDepth, setupCamera, textStyle, INK, INK_GREY } from '../ui/theme';
 import { drawBigButton, drawCard, drawPill, drawRoundButton, drawSoundButton, killTweensDeep, popSpeechBubble } from '../ui/widgets';
 import { playSound } from '../audio/sfx';
+import { BossBar } from './game/BossBar';
+import { CallEarly } from './game/CallEarly';
+import { EndlessPanel } from './game/EndlessPanel';
+import { Hints } from './game/Hints';
+import type { DuckSprite, Effects, EnemySprite, GameHost } from './game/host';
+import { CARD, CRAIG_BUTTON, GO_BUTTON, PAUSE_BUTTON, PEA_ICON, PREVIEW, SOUND_BUTTON } from './game/layout';
+import { PowerButtons } from './game/PowerButtons';
 
 const DUCK_SIZE = 84;
 const NEST_SIZE = 72;
 const HP_BAR_WIDTH = 46;
 const BATTERY_BAR_WIDTH = 88;
-const BOSS_BAR_WIDTH = 360;
 const SLOW_RING = 0xb08a58; // dusty ring at the feet of predators Curtis is slowing
 const NIGHT_ALPHA = 0.45;
 const MAX_STEP = 0.1; // seconds; stops predators teleporting after a stalled frame
@@ -87,41 +83,13 @@ const SIM_STEP = 1 / 60; // the rules always run in slices this small, so fast-f
 // Easy starts every level at normal speed, so a speed set by accident doesn't stick.
 let speedIndex = 0;
 
-// Craig's hints already given this visit (each one only once, until the page reloads).
-const shownHints = new Set<HintId>();
-
 // Maps whose "On this map" key has been shown this visit (so it shows once per map).
 const shownMapKeys = new Set<string>();
-// Big Moves that have been introduced (a card the first time each one is ready), once per visit.
-const introducedPowers = new Set<DuckKind>();
 
 // Things that happen all the time in a battle and don't change the HUD.
 const QUIET_EVENTS: ReadonlySet<GameEvent['type']> = new Set(['attack', 'alarmQuack', 'scared']);
 
 type TileKind = 'mud' | 'brambles' | NestKind;
-const HINT_SHOW_MS = 6500; // how long a hint stays up (real time, even on fast-forward)
-
-// HUD positions.
-const PEA_ICON = { x: 596, y: 38 };
-// Duck picker cards along the top-left, kept short so the path below stays visible.
-// Low enough that the raised (selected) card and its corner badges never go off the top of the screen.
-const CARD = { width: 84, height: 90, y: 54, spacing: 92, lift: 3 };
-// Flock power buttons: a column down the right edge, between the wave preview and the pause
-// button (see HUD_AREAS in src/data/layout.ts), one per duck in picker order.
-const POWER_BUTTON = { x: 1250, y: 250, spacing: 86, radius: 30 };
-const GO_BUTTON = { x: 1200, y: 70 };
-const REPAIR_BUTTON = {
-  x: ENDLESS_REPAIR_AREA.x + ENDLESS_REPAIR_AREA.width / 2,
-  y: ENDLESS_REPAIR_AREA.y + ENDLESS_REPAIR_AREA.height / 2,
-  width: ENDLESS_REPAIR_AREA.width,
-  height: 40,
-};
-// "Coming next" chips, in a row that ends just left of the start button.
-// Call the next wave early (during a wave, left of the fast-forward button).
-const CALL_EARLY = { x: 1110, y: 112 };
-const PREVIEW = { right: 1146, y: 112, chip: 58, gap: 4, maxWidth: 256 };
-const CRAIG_BUTTON = { x: 100, y: 640 };
-const PAUSE_BUTTON = { x: 1245, y: 615 }; // just above the sound button
 
 // How each walking predator looks: its picture's size, the shadow under it, and how it waddles.
 const GROUND_LOOKS: Record<Exclude<EnemyKind, 'hawk' | 'stormHawk'>, { width: number; height: number; shadow: number; wobble: number; wobbleTime: number }> = {
@@ -160,42 +128,11 @@ export interface GameSceneData {
   sandbox?: boolean;
 }
 
-interface DuckSprite {
-  root: Phaser.GameObjects.Container;
-  art: Phaser.GameObjects.Image;
-  range: Phaser.GameObjects.Arc;
-  /** Gold chevrons showing how many upgrades the duck has. */
-  badge: Phaser.GameObjects.Graphics;
-  /** Display size before upgrades (ducks grow a little with each one). */
-  baseSize: number;
-  /** Blue glow while the fountain's spray is refreshing this duck. */
-  refresh: Phaser.GameObjects.Image;
-  /** The hat it's wearing (kept on its head every frame). */
-  hat?: Phaser.GameObjects.Image;
-  /** Endless Pond: a gold star showing its training level. */
-  training?: Phaser.GameObjects.Container;
-}
-
 interface Nest {
   slot: Point;
   image: Phaser.GameObjects.Image;
   plus?: Phaser.GameObjects.Text;
   duckId?: number;
-}
-
-interface EnemySprite {
-  root: Phaser.GameObjects.Container;
-  art: Phaser.GameObjects.Image;
-  ripple?: Phaser.GameObjects.Ellipse;
-  hpBar: Phaser.GameObjects.Container;
-  hpFill: Phaser.GameObjects.Rectangle;
-  dizzy: Phaser.GameObjects.Container;
-  lastX: number;
-  flashUntil: number;
-  /** Its waddle (or wing flap), which plays in slow motion in mud. */
-  waddle: Phaser.Tweens.Tween;
-  /** When it next splashes in mud or gets prickled by brambles (so the effects come in little bursts). */
-  nextTileFx: number;
 }
 
 interface PickerCard {
@@ -204,30 +141,8 @@ interface PickerCard {
   card: Phaser.GameObjects.Graphics;
 }
 
-interface PowerButton {
-  container: Phaser.GameObjects.Container;
-  face: Phaser.GameObjects.Image;
-  shade: Phaser.GameObjects.Graphics;
-  seconds: Phaser.GameObjects.Text;
-  glow: Phaser.GameObjects.Image;
-  /** What it last showed, so it only redraws on a change. */
-  state: PowerState | undefined;
-}
-
-interface Effects {
-  splash: Phaser.GameObjects.Particles.ParticleEmitter;
-  feathers: Phaser.GameObjects.Particles.ParticleEmitter;
-  puff: Phaser.GameObjects.Particles.ParticleEmitter;
-  stars: Phaser.GameObjects.Particles.ParticleEmitter;
-  sparkles: Phaser.GameObjects.Particles.ParticleEmitter;
-  fountainSpray: Phaser.GameObjects.Particles.ParticleEmitter;
-  fireflies: Phaser.GameObjects.Particles.ParticleEmitter;
-  mudSplash: Phaser.GameObjects.Particles.ParticleEmitter;
-  thorns: Phaser.GameObjects.Particles.ParticleEmitter;
-}
-
-export class GameScene extends Phaser.Scene {
-  private difficulty: Difficulty = 'easy';
+export class GameScene extends Phaser.Scene implements GameHost {
+  difficulty: Difficulty = 'easy';
   private levelIndex = 0;
   /** The hat each duck is wearing (from the Wardrobe). */
   private hats: Partial<Record<DuckKind, HatKind>> = {};
@@ -240,24 +155,24 @@ export class GameScene extends Phaser.Scene {
   /** Whether this is the Sandbox (see src/data/sandbox.ts). */
   private sandbox = false;
   /** Endless Pond: where the New Nests boss reward puts its nests on this map. */
-  private bonusNests: Point[] = [];
+  bonusNests: Point[] = [];
   private level!: Level;
-  private state!: Game;
+  state!: Game;
   private selected: DuckKind = 'sunny';
   private duckSprites = new Map<number, DuckSprite>();
-  private enemySprites = new Map<number, EnemySprite>();
+  enemySprites = new Map<number, EnemySprite>();
   private pickerCards: PickerCard[] = [];
   /** The flock power buttons under the picker, by duck kind. */
-  private powerButtons: Partial<Record<DuckKind, PowerButton>> = {};
+  private powers!: PowerButtons;
   private nests: Nest[] = [];
   /** The panel shown for a tapped duck (or the info card for a tapped picker card). */
-  private popup?: Phaser.GameObjects.Container;
+  popup?: Phaser.GameObjects.Container;
   private popupTimer?: Phaser.Time.TimerEvent;
   private focusedDuckId?: number;
   /** While moving a duck: its id, and the things drawn to show where it can go. */
   private moving?: { duckId: number; marks: Phaser.GameObjects.GameObject[] };
-  private fx!: Effects;
-  private house!: Phaser.GameObjects.Image;
+  fx!: Effects;
+  house!: Phaser.GameObjects.Image;
   private shield!: Phaser.GameObjects.Container;
   private goButton!: Phaser.GameObjects.Container;
   private speedButton!: { container: Phaser.GameObjects.Container; draw: () => void };
@@ -265,26 +180,19 @@ export class GameScene extends Phaser.Scene {
   private scenery: Phaser.GameObjects.Graphics[] = [];
   /** When the start button was last tapped (scene time), so the speed button can ignore a double-tap. */
   private waveStartedAt = -Infinity;
-  /** Endless Pond: the Pond Perks counter under the peas, and the "pick a perk" card while it's open. */
-  private perksButton?: { container: Phaser.GameObjects.Container; count: Phaser.GameObjects.Text };
-  private perkCard?: Phaser.GameObjects.Container;
-  /** Endless Pond: the "fix the duck house" button under the hearts, and its price. */
-  private repairButton?: { container: Phaser.GameObjects.Container; cost: Phaser.GameObjects.Text; pea: Phaser.GameObjects.Image };
-  private callEarlyButton!: { container: Phaser.GameObjects.Container; label: Phaser.GameObjects.Text };
-  /** Craig's hint bubble, and when (real time) she last gave one. */
-  private hintBubble?: Phaser.GameObjects.Container;
-  private lastHintAt = -Infinity;
+  // The screen's parts (src/scenes/game/), each made fresh in create().
+  private endlessPanel?: EndlessPanel;
+  private callEarly!: CallEarly;
+  private hints!: Hints;
   /** The open duck panel's report numbers, refreshed as the battle goes on. */
   private panelReport?: { row: Phaser.GameObjects.Container; refresh: () => void };
-  /** The open call-early card, if any, and its peas text (kept up to date as predators are chased off). */
-  private callEarlyCard?: { popup: Phaser.GameObjects.Container; bonus: Phaser.GameObjects.Text };
   private craigButton!: Phaser.GameObjects.Container;
   /** Whether Craig's blessing could be used at the last look (to notice when it comes back). */
   private blessingReady = true;
   private craigGlow!: Phaser.GameObjects.Image;
   private peasText!: Phaser.GameObjects.Text;
   private heartsText!: Phaser.GameObjects.Text;
-  private heartsPill!: Phaser.GameObjects.Container;
+  heartsPill!: Phaser.GameObjects.Container;
   private waveText!: Phaser.GameObjects.Text;
   private dayIcon!: Phaser.GameObjects.Image;
   private batteryFill!: Phaser.GameObjects.Rectangle;
@@ -301,13 +209,7 @@ export class GameScene extends Phaser.Scene {
   private preview!: Phaser.GameObjects.Container;
   /** Which wave the preview is showing, so it's only rebuilt when that changes. */
   private previewKey = '';
-  private bossBar?: {
-    container: Phaser.GameObjects.Container;
-    fill: Phaser.GameObjects.Rectangle;
-    face: Phaser.GameObjects.Image;
-    name: Phaser.GameObjects.Text;
-    enemyId: number;
-  };
+  private bosses!: BossBar;
 
   constructor() {
     super('GameScene');
@@ -361,23 +263,15 @@ export class GameScene extends Phaser.Scene {
     this.duckSprites.clear();
     this.enemySprites.clear();
     this.pickerCards = [];
-    this.powerButtons = {};
     this.nests = [];
     this.popup = undefined;
     this.popupTimer = undefined;
     this.focusedDuckId = undefined;
     this.moving = undefined;
     this.nightLights = [];
-    this.bossBar = undefined;
     this.previewKey = '';
     this.bannerQueue = [];
-    this.callEarlyCard = undefined;
-    this.repairButton = undefined;
-    this.perksButton = undefined;
-    this.perkCard = undefined;
     this.panelReport = undefined;
-    this.hintBubble = undefined;
-    this.lastHintAt = -Infinity;
     this.blessingReady = true;
     this.bannerShowing = false;
 
@@ -392,23 +286,22 @@ export class GameScene extends Phaser.Scene {
     this.drawShield();
 
     this.drawPicker();
-    this.drawPowerButtons();
+    this.powers = new PowerButtons(this);
+    this.bosses = new BossBar(this);
     this.drawHud();
     this.preview = this.add.container(0, 0).setDepth(DEPTH.hud);
-    if (this.endless) {
-      this.repairButton = this.drawRepairButton();
-      this.perksButton = this.drawPerksButton();
-    }
+    this.endlessPanel = this.endless ? new EndlessPanel(this) : undefined;
     this.goButton = this.drawGoButton();
     this.speedButton = this.drawSpeedButton();
-    this.callEarlyButton = this.drawCallEarlyButton();
+    this.callEarly = new CallEarly(this);
     this.craigButton = this.drawCraigButton();
-    drawSoundButton(this, 1245, 685, DEPTH.hud);
+    this.hints = new Hints(this, this.craigButton, () => this.nests.filter((n) => n.duckId === undefined).length);
+    drawSoundButton(this, SOUND_BUTTON.x, SOUND_BUTTON.y, DEPTH.hud);
     this.drawPauseButton();
     this.refreshHud();
     // A new player who hasn't placed a duck gets a nudge from Craig.
     this.time.delayedCall(7000, () => {
-      if (this.state.phase === 'building' && this.state.waveIndex === 0) this.maybeHint({ type: 'noDucksYet' });
+      if (this.state.phase === 'building' && this.state.waveIndex === 0) this.hints.maybe({ type: 'noDucksYet' });
     });
     if (this.endless) {
       this.time.delayedCall(350, () => this.showBanner(`${ENDLESS.name}: ${info.name}`));
@@ -441,7 +334,7 @@ export class GameScene extends Phaser.Scene {
     this.setTimeScale(speed);
     const events: GameEvent[] = [];
     // Everything waits while you pick a Pond Perk.
-    let remaining = this.perkCard ? 0 : Math.min(deltaMs / 1000, MAX_STEP) * speed;
+    let remaining = this.endlessPanel?.choosing ? 0 : Math.min(deltaMs / 1000, MAX_STEP) * speed;
     while (remaining > 1e-6 && !isOver(this.state)) {
       const dt = Math.min(remaining, SIM_STEP);
       events.push(...update(this.state, dt));
@@ -459,7 +352,7 @@ export class GameScene extends Phaser.Scene {
     const shielded = this.state.shieldTime > 0;
     this.shield.setVisible(shielded);
     this.fx.sparkles.emitting = shielded;
-    this.syncPowerButtons();
+    this.powers.sync();
 
     if (events.length > 0) {
       // Attacks, quacks, and scares happen constantly and change nothing the HUD shows.
@@ -693,7 +586,7 @@ export class GameScene extends Phaser.Scene {
     this.batteryFill = hud(this.add.rectangle(1046, 38, 0, 16, COLORS.gold).setOrigin(0, 0.5));
   }
 
-  private refreshHud(): void {
+  refreshHud(): void {
     const game = this.state;
     this.peasText.setText(String(game.peas));
     this.heartsText.setText(String(game.hearts));
@@ -715,34 +608,8 @@ export class GameScene extends Phaser.Scene {
     this.goButton.setVisible(game.phase === 'building');
     this.refreshPreview();
     this.speedButton.container.setVisible(game.phase === 'wave');
-    const early = canCallEarly(game);
-    if (early && !this.callEarlyButton.container.visible) {
-      this.callEarlyButton.container.setScale(0);
-      this.tweens.add({ targets: this.callEarlyButton.container, scale: 1, duration: 250, ease: 'Back.Out' });
-    }
-    this.callEarlyButton.container.setVisible(early);
-    const peas = early ? `+${earlyCallPeas(game)}` : '';
-    if (early) this.callEarlyButton.label.setText(peas);
-    // The call-early card keeps its peas up to date, and closes if the chance has passed.
-    const card = this.callEarlyCard;
-    if (card && this.popup === card.popup) {
-      if (early) card.bonus.setText(`${peas} peas`);
-      else this.closePopup();
-    }
-    if (this.perksButton) {
-      const picked = Object.values(game.perks).reduce((sum, n) => sum + n, 0);
-      this.perksButton.count.setText(String(picked));
-      this.perksButton.container.setAlpha(picked > 0 ? 1 : 0.5);
-    }
-    // Pond Perks on offer: show the card to pick one.
-    if (game.perkChoice && !this.perkCard && !isOver(game)) this.showPerkChoice(game.perkChoice);
-    if (this.repairButton) {
-      // Shows its price when the house needs fixing, dimmed if you can't afford it yet.
-      const cost = repairCost(game);
-      this.repairButton.cost.setText(cost === undefined ? 'Full' : String(cost)).setX(cost === undefined ? -6 : 22);
-      this.repairButton.pea.setVisible(cost !== undefined);
-      this.repairButton.container.setAlpha(cost !== undefined && game.peas >= cost ? 1 : 0.5);
-    }
+    this.callEarly.refresh();
+    this.endlessPanel?.refresh();
     const blessing = canUseBlessing(game);
     // Endless Pond: Craig says so when her blessing comes back.
     if (blessing && !this.blessingReady) popSpeechBubble(this, CRAIG_BUTTON.x + 30, CRAIG_BUTTON.y - 60, "I'm ready again!", DEPTH.floatText);
@@ -786,7 +653,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** One "coming next" chip: the predator, how many, and a NEW badge the first time it shows up. */
-  private drawPreviewChip(entry: PreviewEntry, x: number, y: number, scale = 1): Phaser.GameObjects.Container {
+  drawPreviewChip(entry: PreviewEntry, x: number, y: number, scale = 1): Phaser.GameObjects.Container {
     const parts: Phaser.GameObjects.GameObject[] = [
       drawPill(this, 0, 0, PREVIEW.chip, 48),
       this.enemyIcon(entry.enemy, 0, -4, 40, 30, entry.variant),
@@ -804,7 +671,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** A predator's picture, fit inside a box (hawks look down from above, so they get a square). */
-  private enemyIcon(kind: EnemyKind, x: number, y: number, maxWidth: number, maxHeight: number, variant?: VariantKind): Phaser.GameObjects.Image {
+  enemyIcon(kind: EnemyKind, x: number, y: number, maxWidth: number, maxHeight: number, variant?: VariantKind): Phaser.GameObjects.Image {
     const image = this.add.image(x, y, kind);
     const fit = Math.min(maxWidth / image.width, maxHeight / image.height);
     if (variant) image.setTint(VARIANTS[variant].tint);
@@ -950,164 +817,9 @@ export class GameScene extends Phaser.Scene {
 
   // --- Flock powers --------------------------------------------------------
 
-  /** One big round button per kind of duck, down the right edge: tap it during a wave for the kind's power. */
-  private drawPowerButtons(): void {
-    DUCK_ORDER.forEach((kind, i) => {
-      const x = POWER_BUTTON.x;
-      const y = POWER_BUTTON.y + i * POWER_BUTTON.spacing;
-      const r = POWER_BUTTON.radius;
-      const glow = this.add.image(0, 0, 'glow').setDisplaySize(r * 3.4, r * 3.4).setTint(COLORS.gold).setAlpha(0);
-      const face = this.add.image(0, -2, `duck-${kind}`).setDisplaySize(r * 1.45, r * 1.45);
-      const shade = this.add.graphics(); // the dark "pie" that shrinks as the power recharges
-      const seconds = this.add.text(0, 2, '', textStyle(22, { weight: '700', strokeThickness: 5 })).setOrigin(0.5);
-      const badge = this.add.container(r * 0.62, -r * 0.62, [
-        this.add.circle(0, 0, 11, 0xffffff).setStrokeStyle(2.5, COLORS.ink),
-        this.add.image(0, 0, `power-${DUCKS[kind].power.icon}`).setDisplaySize(15, 15),
-      ]);
-      const button = drawRoundButton(this, x, y, r, COLORS.gold, COLORS.goldDark, [face, shade, seconds, badge]);
-      button.container.addAt(glow, 0).setDepth(DEPTH.hud);
-      this.tweens.add({ targets: glow, scale: 1.15, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
-      button.hit.on('pointerdown', () => this.onPowerTap(kind));
-      this.powerButtons[kind] = { container: button.container, face, shade, seconds, glow, state: undefined };
-    });
-    this.syncPowerButtons();
-  }
-
-  /** Shows each power button as ready (glowing), resting (a shrinking shade and a countdown), or not usable yet. */
-  private syncPowerButtons(): void {
-    for (const kind of DUCK_ORDER) {
-      const button = this.powerButtons[kind];
-      if (!button) continue;
-      const state = powerState(this.state, kind);
-      const left = powerCooldown(this.state, kind);
-      const r = POWER_BUTTON.radius;
-      button.shade.clear();
-      if (state === 'resting') {
-        // A pie slice of shade, full at the start of the rest and gone when it's ready. Drawn as a
-        // polygon with a point every 15 degrees: Phaser's own slice() would be 100 points, redone every frame.
-        const share = left / POWERS[kind].cooldown;
-        const points = [new Phaser.Geom.Point(0, 0)];
-        const steps = Math.max(1, Math.ceil(24 * share));
-        for (let i = 0; i <= steps; i++) {
-          const a = -Math.PI / 2 + Math.PI * 2 * share * (i / steps);
-          points.push(new Phaser.Geom.Point(Math.cos(a) * (r - 2), Math.sin(a) * (r - 2)));
-        }
-        button.shade.fillStyle(COLORS.ink, 0.55).fillPoints(points, true);
-        button.seconds.setText(String(Math.ceil(left)));
-      } else {
-        button.seconds.setText('');
-      }
-      if (state !== button.state) {
-        // The first time a Big Move is ready, say what it does.
-        if (state === 'ready' && !introducedPowers.has(kind)) {
-          introducedPowers.add(kind);
-          if (!this.popup) this.showPowerInfo(kind, 'Ready! Tap the gold button.');
-        }
-        button.state = state;
-        button.container.setAlpha(state === 'noDuck' ? 0.4 : state === 'notNow' ? 0.75 : 1);
-        if (state === 'ready') button.face.clearTint();
-        else button.face.setTint(0x9a9a9a);
-        button.glow.setAlpha(state === 'ready' ? 0.75 : 0);
-      }
-    }
-  }
-
-  /** A card beside the Big Move buttons: the move's name, what it does, and a note (why it can't be used yet, say). */
-  private showPowerInfo(kind: DuckKind, note: string): void {
-    this.closePopup();
-    const power = POWERS[kind];
-    const words = this.add.text(-150, 0, power.description, { ...textStyle(19, INK), wordWrap: { width: 300 } }).setOrigin(0, 0);
-    const H = 108 + words.height;
-    const top = -H / 2;
-    words.setY(top + 62);
-    const card = drawCard(this.add.graphics(), 330, H, { radius: 18, border: COLORS.gold, borderWidth: 4 });
-    const button = this.powerButtons[kind]!;
-    const y = Math.max(H / 2 + 20, Math.min(WORLD.height - H / 2 - 20, button.container.y));
-    const popup = this.add
-      .container(POWER_BUTTON.x - POWER_BUTTON.radius - 185, y, [
-        card,
-        this.add.image(-126, top + 32, `duck-${kind}`).setDisplaySize(40, 40),
-        this.add.text(-100, top + 20, `${DUCKS[kind].name}'s Big Move`, textStyle(17, INK_GREY)).setOrigin(0, 0.5),
-        this.add.text(-100, top + 43, power.name, textStyle(24, { ...INK, color: COLORS.textGold, weight: '700' })).setOrigin(0, 0.5),
-        words,
-        this.add.text(-150, H / 2 - 24, note, textStyle(17, { ...INK, color: COLORS.blueDarkCss, weight: '700' })).setOrigin(0, 0.5),
-      ])
-      .setDepth(DEPTH.hud + 5);
-    this.showPopup(popup, 5000);
-  }
-
-  private onPowerTap(kind: DuckKind): void {
-    const button = this.powerButtons[kind]!;
-    const state = powerState(this.state, kind);
-    if (state !== 'ready') {
-      playSound(this, 'noPeas');
-      this.tweens.add({ targets: button.container, x: button.container.x - 6, duration: 50, yoyo: true, repeat: 3 });
-      const why =
-        state === 'noDuck'
-          ? `Put a ${DUCKS[kind].name} out first!`
-          : state === 'notNow'
-            ? 'Wait for the wave, then tap!'
-            : `Resting: ready in ${Math.ceil(powerCooldown(this.state, kind))}s`;
-      this.showPowerInfo(kind, why);
-      return;
-    }
-    const result = usePower(this.state, kind);
-    if (!result) return;
-    this.closePopup();
-    this.tweens.add({ targets: button.container, scale: 1.2, duration: 120, yoyo: true });
-    this.showPower(kind, result);
-    this.refreshHud();
-  }
-
-  /** The big show when a flock power goes off. */
-  private showPower(kind: DuckKind, result: PowerResult): void {
-    this.showBanner(`${POWERS[kind].name}!`);
-    for (const id of result.hitIds) {
-      const sprite = this.enemySprites.get(id);
-      if (sprite) sprite.flashUntil = this.time.now + 200;
-    }
-    for (const duckId of result.duckIds) {
-      const found = this.duckSprite(duckId);
-      if (!found) continue;
-      const { sprite, duck } = found;
-      const { range } = duckStats(this.state.battle, duck);
-      this.tweens.add({ targets: sprite.art, scale: sprite.art.scale * 1.3, duration: 140, yoyo: true });
-      switch (kind) {
-        case 'sunny':
-          playSound(this, 'splash');
-          this.ring(duck.position.x, duck.position.y - 20, range, COLORS.blue, 600);
-          this.fx.splash.explode(40, duck.position.x, duck.position.y - 30);
-          for (const id of result.hitIds) {
-            const enemy = this.enemySprites.get(id);
-            if (enemy) this.fx.splash.explode(14, enemy.root.x, enemy.root.y - 20);
-          }
-          break;
-        case 'potato':
-          playSound(this, 'flap');
-          this.ring(duck.position.x, duck.position.y - 20, range, 0xffffff, 500);
-          this.fx.feathers.explode(24, duck.position.x, duck.position.y - 30);
-          this.fx.puff.explode(16, duck.position.x, duck.position.y);
-          break;
-        case 'chester':
-          playSound(this, 'quack');
-          this.cameras.main.shake(350, 0.006);
-          this.ring(duck.position.x, duck.position.y - 30, 900, COLORS.gold, 900);
-          this.time.delayedCall(150, () => this.ring(duck.position.x, duck.position.y - 30, 700, COLORS.gold, 800));
-          this.floatText({ x: duck.position.x, y: duck.position.y - 80 }, 'QUAAACK!', COLORS.goldCss);
-          break;
-        case 'curtis':
-          playSound(this, 'upgrade');
-          this.ring(duck.position.x, duck.position.y - 20, 900, COLORS.green, 900);
-          this.fx.stars.explode(14, duck.position.x, duck.position.y - 40);
-          this.floatText({ x: duck.position.x, y: duck.position.y - 80 }, 'Hold the line!', COLORS.peaCss);
-          break;
-      }
-    }
-  }
-
   // --- Ducks -------------------------------------------------------------
 
-  private drawNest(slot: Point): void {
+  drawNest(slot: Point): void {
     this.drawSpecialNest(slot);
     const image = this.add.image(slot.x, slot.y + 10, 'nest').setDisplaySize(NEST_SIZE, NEST_SIZE * 0.8);
     image.setDepth(entityDepth(slot.y - 20));
@@ -1310,13 +1022,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Pops something into view (cards, panels). */
-  private popIn(target: Phaser.GameObjects.Container): void {
+  popIn(target: Phaser.GameObjects.Container): void {
     target.setScale(0.8).setAlpha(0);
     this.tweens.add({ targets: target, scale: 1, alpha: 1, duration: 160, ease: 'Back.Out' });
   }
 
   /** Shows an info card as the open popup. It fades away on its own after `life` milliseconds. */
-  private showPopup(popup: Phaser.GameObjects.Container, life: number): void {
+  showPopup(popup: Phaser.GameObjects.Container, life: number): void {
     this.popIn(popup);
     this.popup = popup;
     this.popupTimer = this.time.delayedCall(life, () => {
@@ -1326,7 +1038,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** An invisible sheet over the whole screen that catches taps (to close a panel, or cancel a move). */
-  private tapCatcher(depth: number, onTap: () => void): Phaser.GameObjects.Zone {
+  tapCatcher(depth: number, onTap: () => void): Phaser.GameObjects.Zone {
     const zone = this.add
       .zone(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height)
       .setInteractive()
@@ -1356,7 +1068,7 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private closePopup(): void {
+  closePopup(): void {
     this.popupTimer?.remove();
     this.popupTimer = undefined;
     if (this.popup) killTweensDeep(this, this.popup);
@@ -1829,7 +1541,7 @@ export class GameScene extends Phaser.Scene {
     this.moving = { duckId, marks };
   }
 
-  private cancelMove(): void {
+  cancelMove(): void {
     if (!this.moving) return;
     const { duckId, marks } = this.moving;
     this.moving = undefined;
@@ -1907,7 +1619,7 @@ export class GameScene extends Phaser.Scene {
 
   // --- Predators -----------------------------------------------------------
 
-  private addEnemySprite(enemy: Enemy): void {
+  addEnemySprite(enemy: Enemy): void {
     const pos = enemyPosition(enemy);
     const flying = isFlying(enemy);
     const root = this.add.container(pos.x, pos.y);
@@ -1971,10 +1683,9 @@ export class GameScene extends Phaser.Scene {
       if (!flying) sprite.root.setDepth(entityDepth(pos.y));
 
       const health = Math.max(0, enemy.hp / enemy.maxHp);
-      // Bosses use the big bar at the bottom of the screen instead.
-      const boss = this.bossBar?.enemyId === enemy.id;
-      sprite.hpBar.setVisible(health < 1 && !boss);
-      if (boss) this.bossBar!.fill.width = BOSS_BAR_WIDTH * health;
+      // The boss the big bar at the bottom follows doesn't need its own little one.
+      sprite.hpBar.setVisible(health < 1 && !this.bosses.follows(enemy.id));
+      this.bosses.syncHealth(enemy.id, health);
       sprite.hpFill.width = HP_BAR_WIDTH * health;
       sprite.hpFill.fillColor = health > 0.5 ? 0x6ee06e : health > 0.25 ? COLORS.gold : COLORS.coral;
       sprite.dizzy.setVisible(enemy.stopTime > 0);
@@ -2050,7 +1761,7 @@ export class GameScene extends Phaser.Scene {
     switch (event.type) {
       case 'spawned':
         this.addEnemySprite(event.enemy);
-        if (ENEMIES[event.enemy.kind].boss) this.showBossEntrance(event.enemy);
+        if (ENEMIES[event.enemy.kind].boss) this.bosses.showEntrance(event.enemy);
         break;
       case 'summoned':
         this.showSummon(event.enemyId, event.minions);
@@ -2066,7 +1777,7 @@ export class GameScene extends Phaser.Scene {
         this.showScared(event.duckIds, event.fearlessIds);
         break;
       case 'bossPhase':
-        this.showBossPhase(event.enemy, event.position);
+        this.bosses.showPhase(event.enemy, event.position);
         break;
       case 'sprayed':
         playSound(this, 'noPeas');
@@ -2079,21 +1790,21 @@ export class GameScene extends Phaser.Scene {
         this.flyPea(event.position, killPeas(this.state, event.enemy));
         if (ENEMIES[event.enemy.kind].boss) {
           playSound(this, 'bossDefeated');
-          this.showBossGone(event.position, `${ENEMIES[event.enemy.kind].name} ran away!`);
+          this.bosses.showGone(event.position, `${ENEMIES[event.enemy.kind].name} ran away!`);
         }
         break;
       case 'reachedHouse':
         playSound(this, 'heartLost');
         this.removeEnemySprite(event.enemy.id, 'house');
         this.showHouseRaid();
-        this.maybeHint({ type: 'heartLost', enemy: event.enemy.kind });
-        if (ENEMIES[event.enemy.kind].boss) this.showBossGone(this.house, `${ENEMIES[event.enemy.kind].name} raided the snacks!`);
+        this.hints.maybe({ type: 'heartLost', enemy: event.enemy.kind });
+        if (ENEMIES[event.enemy.kind].boss) this.bosses.showGone(this.house, `${ENEMIES[event.enemy.kind].name} raided the snacks!`);
         break;
       case 'shooed':
         playSound(this, 'shoo');
         this.removeEnemySprite(event.enemy.id, 'shooed');
         popSpeechBubble(this, this.house.x, this.house.y - 150, 'Shoo!', DEPTH.floatText);
-        if (ENEMIES[event.enemy.kind].boss) this.showBossGone(this.house, `Craig shooed ${midSentence(ENEMIES[event.enemy.kind].name)}!`);
+        if (ENEMIES[event.enemy.kind].boss) this.bosses.showGone(this.house, `Craig shooed ${midSentence(ENEMIES[event.enemy.kind].name)}!`);
         break;
       case 'waveCleared':
         playSound(this, 'waveCleared');
@@ -2113,7 +1824,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** A placed duck and its picture, if it's still on the map. */
-  private duckSprite(duckId: number): { sprite: DuckSprite; duck: Duck } | undefined {
+  duckSprite(duckId: number): { sprite: DuckSprite; duck: Duck } | undefined {
     const duck = findDuck(this.state.battle, duckId);
     const sprite = this.duckSprites.get(duckId);
     return duck && sprite ? { sprite, duck } : undefined;
@@ -2167,7 +1878,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private ring(x: number, y: number, radius: number, color: number, duration: number): void {
+  ring(x: number, y: number, radius: number, color: number, duration: number): void {
     const ring = this.add.circle(x, y, 6).setStrokeStyle(4, color).setDepth(DEPTH.effects);
     this.tweens.add({ targets: ring, radius, alpha: 0, duration, onComplete: () => ring.destroy() });
   }
@@ -2234,7 +1945,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** A pea pops out of a chased-off predator and flies to the pea counter. */
-  private flyPea(from: Point, amount: number): void {
+  flyPea(from: Point, amount: number): void {
     this.floatText({ x: from.x, y: from.y - 40 }, `+${amount}`, COLORS.peaCss);
     const pea = this.add.image(from.x, from.y - 20, 'icon-pea').setDisplaySize(22, 22).setDepth(DEPTH.hud + 1);
     this.tweens.add({
@@ -2251,14 +1962,14 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private floatText(at: Point, message: string, color: string): void {
+  floatText(at: Point, message: string, color: string): void {
     const text = this.add.text(at.x, at.y, message, textStyle(26, { color, weight: '700' })).setOrigin(0.5);
     text.setDepth(DEPTH.floatText);
     this.tweens.add({ targets: text, y: at.y - 40, alpha: 0, duration: 900, ease: 'Cubic.Out', onComplete: () => text.destroy() });
   }
 
   /** Shows a big banner in the middle of the screen. If one is already up, this one waits its turn. */
-  private showBanner(message: string, bonus = 0): void {
+  showBanner(message: string, bonus = 0): void {
     this.bannerQueue.push({ message, bonus });
     if (!this.bannerShowing) this.showNextBanner();
   }
@@ -2307,52 +2018,6 @@ export class GameScene extends Phaser.Scene {
 
   // --- Bosses (the Night Bandit, and the Endless Pond's others) -------------------
 
-  private showBossEntrance(enemy: Enemy): void {
-    const stats = ENEMIES[enemy.kind];
-    playSound(this, 'bossArrives');
-    this.cameras.main.shake(450, 0.004);
-    this.showBanner(`${stats.name} is here!`);
-    const pos = enemyPosition(enemy);
-    const say = stats.quips?.arrive;
-    if (say) this.time.delayedCall(700, () => popSpeechBubble(this, pos.x, pos.y - 110, say, DEPTH.floatText));
-    // More than one at once (late in the Endless Pond): the big bar stays on the first one.
-    if (this.bossBar) return;
-
-    // Big health bar along the bottom of the screen.
-    const panel = this.add
-      .graphics()
-      .fillStyle(COLORS.panel, 0.8)
-      .fillRoundedRect(-240, -23, 480, 46, 23)
-      .lineStyle(3, 0xffffff, 0.3)
-      .strokeRoundedRect(-240, -23, 480, 46, 23);
-    const face = this.enemyIcon(enemy.kind, -208, -1, 52, 40);
-    const name = this.add.text(-174, -10, stats.name, textStyle(16)).setOrigin(0, 0.5);
-    const back = this.add.rectangle(-174, 10, BOSS_BAR_WIDTH, 12, 0x000000, 0.5).setOrigin(0, 0.5);
-    const fill = this.add.rectangle(-174, 10, BOSS_BAR_WIDTH, 12, COLORS.coral).setOrigin(0, 0.5);
-    // Sits along the very bottom edge, below where paths run.
-    const container = this.add
-      .container(WORLD.width / 2, WORLD.height - 20, [panel, face, name, back, fill])
-      .setDepth(DEPTH.hud)
-      .setAlpha(0);
-    this.tweens.add({ targets: container, alpha: 1, y: container.y - 6, duration: 400 });
-    this.bossBar = { container, fill, face, name, enemyId: enemy.id };
-  }
-
-  /** A boss gets its second wind: it shouts, the screen shakes, and its big bar turns angry. */
-  private showBossPhase(enemy: Enemy, at: Point): void {
-    const { phase, name } = ENEMIES[enemy.kind];
-    playSound(this, 'bossArrives');
-    this.cameras.main.shake(400, 0.005);
-    if (phase) popSpeechBubble(this, at.x, at.y - 110, phase.quip, DEPTH.floatText);
-    this.showBanner(`${name} is getting angry!`);
-    const sprite = this.enemySprites.get(enemy.id);
-    if (sprite) {
-      this.fx.stars.explode(16, at.x, at.y - 40);
-      this.tweens.add({ targets: sprite.art, scale: sprite.art.scale * 1.25, duration: 160, yoyo: true, repeat: 2 });
-    }
-    if (this.bossBar?.enemyId === enemy.id) this.bossBar.fill.fillColor = 0xff9a2e;
-  }
-
   private showSummon(bossId: number, minions: Enemy[]): void {
     const boss = this.enemySprites.get(bossId);
     playSound(this, 'whistle');
@@ -2364,26 +2029,6 @@ export class GameScene extends Phaser.Scene {
       const pos = enemyPosition(minion);
       this.fx.puff.explode(8, pos.x, pos.y - 20);
     }
-  }
-
-  private showBossGone(at: Point, message: string): void {
-    this.fx.puff.explode(30, at.x, at.y - 40);
-    this.fx.stars.explode(20, at.x, at.y - 40);
-    this.showBanner(message);
-    const bar = this.bossBar;
-    // The big bar only changes when the boss it's following is the one that left.
-    if (bar && this.state.battle.enemies.some((e) => e.id === bar.enemyId)) return;
-    // Another boss still out? The big bar moves to it.
-    const next = this.state.battle.enemies.find((e) => ENEMIES[e.kind].boss && e.id !== bar?.enemyId);
-    if (bar && next) {
-      bar.enemyId = next.id;
-      bar.name.setText(ENEMIES[next.kind].name);
-      bar.face.setTexture(next.kind);
-      bar.face.setScale(Math.min(52 / bar.face.width, 40 / bar.face.height));
-      return;
-    }
-    this.bossBar = undefined;
-    if (bar) this.tweens.add({ targets: bar.container, alpha: 0, duration: 400, onComplete: () => bar.container.destroy() });
   }
 
   // --- Buttons ---------------------------------------------------------------
@@ -2444,281 +2089,6 @@ export class GameScene extends Phaser.Scene {
       draw();
     });
     return { container, draw };
-  }
-
-  /** Endless Pond: "Pick a Pond Perk!" with three big cards. The game waits until you pick. */
-  private showPerkChoice(offer: PerkId[]): void {
-    this.cancelMove();
-    this.closePopup();
-    const dim = this.add
-      .rectangle(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height, 0x000000, 0.45)
-      .setInteractive(); // blocks taps on the map underneath
-    // After a boss wave the offer is boss rewards: big perks that change a rule.
-    const reward = offer.some((id) => PERKS[id].boss);
-    const title = this.add
-      .text(WORLD.width / 2, 200, reward ? 'Boss reward! Pick one!' : 'Pick a Pond Perk!', textStyle(52, { weight: '700', strokeThickness: 10, color: reward ? COLORS.goldCss : '#ffffff' }))
-      .setOrigin(0.5);
-    const parts: Phaser.GameObjects.GameObject[] = [dim, title];
-    const W = 250;
-    const H = 250;
-    offer.forEach((id, i) => {
-      const perk = PERKS[id];
-      const have = this.state.perks[id] ?? 0;
-      const icon = this.add.image(0, -60, perk.icon);
-      icon.setScale(Math.min(70 / icon.width, 70 / icon.height));
-      if (perk.tint !== undefined) icon.setTint(perk.tint);
-      const cardParts: Phaser.GameObjects.GameObject[] = [
-        drawCard(this.add.graphics(), W, H, { radius: 22, border: reward ? COLORS.pink : COLORS.gold, borderWidth: reward ? 7 : 5 }),
-        icon,
-        this.add.text(0, 6, perk.name, textStyle(26, { ...INK, weight: '700' })).setOrigin(0.5),
-        this.add.text(0, 60, perk.description, { ...textStyle(18, INK), align: 'center', wordWrap: { width: W - 30 } }).setOrigin(0.5),
-      ];
-      if (have > 0) {
-        // Already picked before: this one makes it stronger.
-        cardParts.push(this.add.text(W / 2 - 16, -H / 2 + 22, `×${have + 1}`, textStyle(22, { weight: '700', color: COLORS.goldCss })).setOrigin(1, 0.5));
-      }
-      const hit = this.add.zone(0, 0, W, H).setInteractive({ useHandCursor: true });
-      cardParts.push(hit);
-      const card = this.add.container(WORLD.width / 2 + (i - (offer.length - 1) / 2) * (W + 24), 400, cardParts);
-      card.setScale(0);
-      this.tweens.add({ targets: card, scale: 1, delay: 120 + i * 90, duration: 280, ease: 'Back.Out' });
-      hit.on('pointerover', () => card.setScale(1.04));
-      hit.on('pointerout', () => card.setScale(1));
-      hit.on('pointerdown', () => this.pickPerk(id));
-      parts.push(card);
-    });
-    this.perkCard = this.add.container(0, 0, parts).setDepth(DEPTH.hud + 6);
-    playSound(this, 'waveCleared');
-  }
-
-  private pickPerk(id: PerkId): void {
-    if (!choosePerk(this.state, id)) return;
-    this.perkCard?.destroy();
-    this.perkCard = undefined;
-    playSound(this, 'upgrade');
-    // Reach may have changed: redraw every duck's range circle.
-    for (const duck of this.state.battle.ducks) this.duckSprites.get(duck.id)?.range.setRadius(duckStats(this.state.battle, duck).range);
-    if (PERKS[id].effect.hearts) this.tweens.add({ targets: this.heartsPill, scale: 1.25, duration: 120, yoyo: true });
-    // New Nests: the extra nests pop up, ready for ducks.
-    if (PERKS[id].effect.nests) {
-      for (const slot of this.bonusNests) {
-        this.drawNest(slot);
-        this.fx.puff.explode(10, slot.x, slot.y);
-        this.fx.stars.explode(8, slot.x, slot.y - 10);
-      }
-    }
-    this.showBanner(`${PERKS[id].name}!`);
-    this.refreshHud();
-  }
-
-  /** Endless Pond: under the peas, how many Pond Perks you've picked. Tap it to see them. */
-  private drawPerksButton(): { container: Phaser.GameObjects.Container; count: Phaser.GameObjects.Text } {
-    const area = ENDLESS_PERKS_AREA;
-    const count = this.add.text(4, 0, '0', textStyle(22, { weight: '700' })).setOrigin(0, 0.5);
-    const hit = this.add.zone(0, 0, area.width, area.height + 8).setInteractive({ useHandCursor: true });
-    const container = this.add
-      .container(area.x + area.width / 2, area.y + area.height / 2, [
-        drawPill(this, 0, 0, area.width, 40),
-        this.add.image(-22, 0, 'star').setDisplaySize(26, 26).setTint(0x8fe07a),
-        count,
-        hit,
-      ])
-      .setDepth(DEPTH.hud);
-    hit.on('pointerdown', () => this.showPerksTaken());
-    return { container, count };
-  }
-
-  /** A card listing the Pond Perks picked so far. */
-  private showPerksTaken(): void {
-    const taken = (Object.keys(this.state.perks) as PerkId[]).filter((id) => (this.state.perks[id] ?? 0) > 0);
-    this.cancelMove();
-    this.closePopup();
-    playSound(this, 'tap');
-    const W = 340;
-    const rowH = Math.min(34, 520 / Math.max(1, taken.length)); // squeeze up when there are lots, to stay on screen
-    const H = 70 + Math.max(1, taken.length) * rowH;
-    const parts: Phaser.GameObjects.GameObject[] = [
-      drawCard(this.add.graphics(), W, H, { radius: 18 }),
-      this.add.text(0, -H / 2 + 28, 'Pond Perks', textStyle(24, { ...INK, weight: '700' })).setOrigin(0.5),
-    ];
-    if (taken.length === 0) {
-      parts.push(this.add.text(0, -H / 2 + 70, `Pick one every ${ENDLESS.perkEvery} waves!`, textStyle(17, INK)).setOrigin(0.5));
-    }
-    taken.forEach((id, i) => {
-      const y = -H / 2 + 70 + i * rowH;
-      const icon = this.add.image(-W / 2 + 30, y, PERKS[id].icon);
-      icon.setScale(Math.min(24 / icon.width, 24 / icon.height));
-      if (PERKS[id].tint !== undefined) icon.setTint(PERKS[id].tint);
-      const times = this.state.perks[id] ?? 0;
-      parts.push(
-        icon,
-        this.add.text(-W / 2 + 52, y, `${PERKS[id].name}${times > 1 ? ` ×${times}` : ''}`, textStyle(18, { ...INK, weight: '700' })).setOrigin(0, 0.5),
-      );
-    });
-    const area = ENDLESS_PERKS_AREA;
-    const popup = this.add.container(area.x + W / 2, area.y + area.height + 16 + H / 2, parts).setDepth(DEPTH.hud + 5);
-    this.showPopup(popup, 5000);
-  }
-
-  /** Endless Pond: under the hearts, spend peas to fix the duck house (one heart back). */
-  private drawRepairButton(): { container: Phaser.GameObjects.Container; cost: Phaser.GameObjects.Text; pea: Phaser.GameObjects.Image } {
-    const { x, y, width, height } = REPAIR_BUTTON;
-    const cost = this.add.text(22, 0, '', textStyle(20, { weight: '700', color: COLORS.peaCss })).setOrigin(0, 0.5);
-    const pea = this.add.image(8, 0, 'icon-pea').setDisplaySize(20, 20);
-    const hit = this.add.zone(0, 0, width, height + 8).setInteractive({ useHandCursor: true });
-    const container = this.add
-      .container(x, y, [
-        drawPill(this, 0, 0, width, height),
-        this.add.text(-46, 0, '+', textStyle(24, { weight: '700' })).setOrigin(0.5),
-        this.add.image(-26, 0, 'icon-heart').setDisplaySize(24, 24),
-        pea,
-        cost,
-        hit,
-      ])
-      .setDepth(DEPTH.hud);
-    hit.on('pointerdown', () => {
-      if (!repairHouse(this.state)) {
-        playSound(this, 'noPeas');
-        this.tweens.add({ targets: container, x: x + 6, duration: 50, yoyo: true, repeat: 3 });
-        return;
-      }
-      playSound(this, 'upgrade');
-      this.fx.sparkles.explode(16, this.house.x, this.house.y - 60);
-      this.tweens.add({ targets: this.heartsPill, scale: 1.25, duration: 120, yoyo: true });
-      popSpeechBubble(this, this.house.x, this.house.y - 150, 'Good as new!', DEPTH.floatText);
-      this.refreshHud();
-    });
-    return { container, cost, pea };
-  }
-
-  /**
-   * Once every predator in a wave is out, this button sends the next wave now. You get this
-   * wave's bonus right away plus peas for every predator still out there (shown on the pill).
-   */
-  private drawCallEarlyButton(): { container: Phaser.GameObjects.Container; label: Phaser.GameObjects.Text } {
-    const arrows = this.add.graphics().fillStyle(0xffffff).lineStyle(3, COLORS.ink);
-    for (const x of [-14, 2]) arrows.fillTriangle(x, -13, x, 13, x + 16, 0).strokeTriangle(x, -13, x, 13, x + 16, 0);
-    const { container: button, hit } = drawRoundButton(this, 0, 0, 32, COLORS.orange, COLORS.orangeDark, [arrows]);
-    const label = this.add.text(-84, 0, '', textStyle(20, { weight: '700', color: COLORS.peaCss })).setOrigin(0, 0.5);
-    const pill = this.add.container(0, 0, [
-      drawPill(this, -72, 0, 84, 36),
-      this.add.image(-98, 0, 'icon-pea').setDisplaySize(20, 20),
-      label,
-    ]);
-    const container = this.add.container(CALL_EARLY.x, CALL_EARLY.y, [pill, button]).setDepth(DEPTH.hud).setVisible(false);
-    this.tweens.add({ targets: arrows, x: 3, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
-    // First tap shows what's coming; the card's button sends it. Tapping again closes the card.
-    hit.on('pointerdown', () => {
-      if (this.callEarlyCard && this.popup === this.callEarlyCard.popup) {
-        playSound(this, 'tap');
-        this.closePopup();
-        return;
-      }
-      this.showCallEarlyCard();
-    });
-    return { container, label };
-  }
-
-  /** The next wave's predators, the peas for calling it now, and a "Send now" button. */
-  private showCallEarlyCard(): void {
-    const game = this.state;
-    if (!canCallEarly(game)) return;
-    this.cancelMove();
-    this.closePopup();
-    playSound(this, 'tap');
-    const nextIndex = game.waveIndex + 1;
-    const night = game.waves[nextIndex]!.time === 'night';
-    const W = 320;
-    const H = 250;
-
-    // Taps anywhere outside the card close it.
-    const scrim = this.tapCatcher(DEPTH.hud + 4, () => this.closePopup());
-
-    const parts: Phaser.GameObjects.GameObject[] = [
-      drawCard(this.add.graphics(), W, H, { radius: 18 }),
-      this.add.zone(0, 0, W, H).setInteractive(), // taps on the card itself don't close it
-      this.add.image(-W / 2 + 34, -H / 2 + 30, night ? 'icon-moon' : 'icon-sun').setDisplaySize(30, 30),
-      this.add.text(-W / 2 + 56, -H / 2 + 30, `Wave ${nextIndex + 1} is next`, textStyle(24, { ...INK, weight: '700' })).setOrigin(0, 0.5),
-    ];
-    const entries = wavePreview(game.waves, nextIndex);
-    const chip = Math.min(PREVIEW.chip, (W - 30 + PREVIEW.gap) / entries.length - PREVIEW.gap);
-    entries.forEach((entry, i) => {
-      const x = (i - (entries.length - 1) / 2) * (chip + PREVIEW.gap);
-      parts.push(this.drawPreviewChip(entry, x, -22, chip / PREVIEW.chip));
-    });
-    const bonus = this.add.text(-2, 32, '', textStyle(22, { ...INK, color: COLORS.textGreen, weight: '700' })).setOrigin(0, 0.5);
-    parts.push(this.add.image(-20, 32, 'icon-pea').setDisplaySize(24, 24), bonus);
-    parts.push(
-      drawBigButton(this, 0, 82, 'Send now!', COLORS.orange, COLORS.orangeDark, () => this.callEarly(), { width: 260, height: 54, fontSize: 26 }),
-    );
-
-    // Just below the button, kept on screen.
-    const x = Math.min(WORLD.width - W / 2 - 10, CALL_EARLY.x - 20);
-    const panel = this.add.container(x, CALL_EARLY.y + 50 + H / 2, parts).setDepth(DEPTH.hud + 5);
-    this.popIn(panel);
-    const popup = this.add.container(0, 0, [scrim, panel]).setDepth(DEPTH.hud + 4);
-    this.popup = popup;
-    this.callEarlyCard = { popup, bonus };
-    this.refreshHud();
-  }
-
-  /** Sends the next wave now (from the call-early card). */
-  private callEarly(): void {
-    this.closePopup();
-    const earned = callNextWave(this.state);
-    if (earned === undefined) return;
-    playSound(this, 'waveStart');
-    this.flyPea({ x: CALL_EARLY.x, y: CALL_EARLY.y + 30 }, earned);
-    this.showBanner(`Wave ${this.state.waveIndex + 1} is coming early!`);
-    this.refreshHud();
-  }
-
-  /** Craig gives a tip if one fits what just happened (not too often, and each one only once). */
-  private maybeHint(moment: HintMoment): void {
-    if (isOver(this.state) || this.state.challenge?.noCraig) return; // she's napping in No Take-Backs
-    if (performance.now() - this.lastHintAt < HINT_GAP * 1000) return;
-    const emptyNests = this.nests.filter((n) => n.duckId === undefined).length;
-    const hint = pickHint(this.state, this.difficulty, moment, emptyNests, shownHints);
-    if (!hint) return;
-    shownHints.add(hint);
-    this.lastHintAt = performance.now();
-    this.showHint(HINTS[hint]);
-  }
-
-  /** A speech bubble from Craig, beside her button. Tap it to close it. */
-  private showHint(message: string): void {
-    this.hintBubble?.destroy();
-    const W = 340;
-    const text = this.add
-      .text(-W / 2 + 18, 0, message, { ...textStyle(19, { color: COLORS.inkCss, strokeThickness: 0 }), wordWrap: { width: W - 36 } })
-      .setOrigin(0, 0.5);
-    const H = Math.max(64, text.height + 26);
-    const bubble = this.add
-      .graphics()
-      .fillStyle(0x000000, 0.2)
-      .fillRoundedRect(-W / 2, -H / 2 + 4, W, H, 18)
-      .fillStyle(0xffffff)
-      .fillRoundedRect(-W / 2, -H / 2, W, H, 18)
-      .fillTriangle(-W / 2 + 2, -8, -W / 2 + 2, 12, -W / 2 - 16, 8)
-      .lineStyle(4, COLORS.gold)
-      .strokeRoundedRect(-W / 2, -H / 2, W, H, 18);
-    const hit = this.add.zone(0, 0, W, H).setInteractive({ useHandCursor: true });
-    const container = this.add
-      .container(CRAIG_BUTTON.x + 70 + W / 2, CRAIG_BUTTON.y - 10, [bubble, text, hit])
-      .setDepth(DEPTH.hud + 3)
-      .setScale(0);
-    this.hintBubble = container;
-    const close = () => {
-      if (!container.active || this.hintBubble !== container) return;
-      this.hintBubble = undefined;
-      this.tweens.add({ targets: container, alpha: 0, scale: 0.8, duration: 200, onComplete: () => container.destroy() });
-    };
-    hit.on('pointerdown', close);
-    this.tweens.add({ targets: container, scale: 1, duration: 260, ease: 'Back.Out' });
-    // Craig perks up to say it.
-    this.tweens.add({ targets: this.craigButton, y: CRAIG_BUTTON.y - 12, duration: 140, yoyo: true, repeat: 1, ease: 'Quad.Out' });
-    playSound(this, 'hint');
-    window.setTimeout(close, HINT_SHOW_MS);
   }
 
   /** A small round pause button (Esc works too). It opens the pause menu: play, again, or levels. */
