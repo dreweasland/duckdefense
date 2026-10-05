@@ -265,7 +265,11 @@ When adding a feature, prefer a design where the tunable part lives in a data fi
 ## Conventions
 
 - TypeScript strict mode. No `any`.
-- One Phaser scene per file in `src/scenes/`.
+- One Phaser scene per file in `src/scenes/`. The game screen is big, so its parts live in
+  `src/scenes/game/` (the boss bar, Big Move buttons, duck panel, predator sprites, info
+  cards, wave preview, Endless extras, Craig's hints, banners...), each a class that gets the
+  scene as a `GameHost` (`host.ts`: the scene plus the few shared things a part may use).
+  A new piece of the game screen goes in a new part there, not in `GameScene.ts`.
 - Entity stats and wave definitions live in `src/data/`, not hard-coded in scenes.
 - Commit at the end of each working step with a clear message.
 - No copyrighted or trademarked characters or assets. Everything is original or CC0.

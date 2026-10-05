@@ -56,6 +56,7 @@ import { EndlessPanel } from './game/EndlessPanel';
 import { Hints } from './game/Hints';
 import { DuckPanel } from './game/DuckPanel';
 import { createEffects } from './game/effects';
+import { Feedback } from './game/Feedback';
 import { InfoCards, type TileKind } from './game/InfoCards';
 import { WavePreview } from './game/WavePreview';
 import { EnemySprites } from './game/EnemySprites';
@@ -86,9 +87,6 @@ const QUIET_EVENTS: ReadonlySet<GameEvent['type']> = new Set(['attack', 'alarmQu
 function midSentence(name: string): string {
   return name.replace(/^The /, 'the ');
 }
-
-// Said by the raccoon when it gets into the duck house. Losing a heart should be funny.
-const RACCOON_QUIPS = ['Nom nom!', 'Yoink!', 'Snack time!', 'Crunch!', 'Mine now!'];
 
 export interface GameSceneData {
   difficulty: Difficulty;
@@ -178,8 +176,7 @@ export class GameScene extends Phaser.Scene implements GameHost {
   private shownNight = false;
   /** When a predator in brambles can next yell "Ouch!" (so it isn't constant). */
   /** Banners waiting to be shown, so two never land on top of each other. */
-  private bannerQueue: { message: string; bonus: number }[] = [];
-  private bannerShowing = false;
+  private feedback!: Feedback;
   preview!: WavePreview;
   private cards!: InfoCards;
   /** Which wave the preview is showing, so it's only rebuilt when that changes. */
@@ -242,9 +239,7 @@ export class GameScene extends Phaser.Scene implements GameHost {
     this.focusedDuckId = undefined;
     this.moving = undefined;
     this.nightLights = [];
-    this.bannerQueue = [];
     this.blessingReady = true;
-    this.bannerShowing = false;
 
     this.drawWorld();
     this.fx = createEffects(this, this.state.battle.fountain?.position ?? { x: -100, y: -100 }, this.house);
@@ -262,6 +257,7 @@ export class GameScene extends Phaser.Scene implements GameHost {
     this.duckPanel = new DuckPanel(this);
     this.enemies = new EnemySprites(this, this.bosses);
     this.drawHud();
+    this.feedback = new Feedback(this, this.peasText);
     this.cards = new InfoCards(this, this.level);
     this.preview = new WavePreview(this, this.cards);
     this.endlessPanel = this.endless ? new EndlessPanel(this) : undefined;
@@ -776,6 +772,23 @@ export class GameScene extends Phaser.Scene implements GameHost {
     this.duckSprites.get(duckId)?.range.setStrokeStyle(4, 0xffffff, 0.8);
   }
 
+  // Shared feedback, for the parts (see Feedback).
+  ring(x: number, y: number, radius: number, color: number, duration: number): void {
+    this.feedback.ring(x, y, radius, color, duration);
+  }
+
+  floatText(at: Point, message: string, color: string): void {
+    this.feedback.floatText(at, message, color);
+  }
+
+  flyPea(from: Point, amount: number): void {
+    this.feedback.flyPea(from, amount);
+  }
+
+  showBanner(message: string, bonus = 0): void {
+    this.feedback.showBanner(message, bonus);
+  }
+
   closePopup(): void {
     this.popupTimer?.remove();
     this.popupTimer = undefined;
@@ -1030,7 +1043,7 @@ export class GameScene extends Phaser.Scene implements GameHost {
       case 'reachedHouse':
         playSound(this, 'heartLost');
         this.enemies.remove(event.enemy.id, 'house');
-        this.showHouseRaid();
+        this.feedback.showHouseRaid();
         this.hints.maybe({ type: 'heartLost', enemy: event.enemy.kind });
         if (ENEMIES[event.enemy.kind].boss) this.bosses.showGone(this.house, `${ENEMIES[event.enemy.kind].name} raided the snacks!`);
         break;
@@ -1111,11 +1124,6 @@ export class GameScene extends Phaser.Scene implements GameHost {
     }
   }
 
-  ring(x: number, y: number, radius: number, color: number, duration: number): void {
-    const ring = this.add.circle(x, y, 6).setStrokeStyle(4, color).setDepth(DEPTH.effects);
-    this.tweens.add({ targets: ring, radius, alpha: 0, duration, onComplete: () => ring.destroy() });
-  }
-
   private showAlarmQuack(duckId: number): void {
     const found = this.duckSprite(duckId);
     if (!found) return;
@@ -1161,92 +1169,6 @@ export class GameScene extends Phaser.Scene implements GameHost {
       }
       if (sprite.hat) placeHat(sprite.hat, sprite.art);
     }
-  }
-
-  private showHouseRaid(): void {
-    this.tweens.add({
-      targets: this.house,
-      angle: { from: -5, to: 5 },
-      duration: 70,
-      yoyo: true,
-      repeat: 3,
-      onComplete: () => this.house.setAngle(0),
-    });
-    const quip = RACCOON_QUIPS[Math.floor(Math.random() * RACCOON_QUIPS.length)]!;
-    popSpeechBubble(this, this.house.x, this.house.y - 150, quip, DEPTH.floatText);
-    this.tweens.add({ targets: this.heartsPill, scale: 1.25, duration: 110, yoyo: true });
-  }
-
-  /** A pea pops out of a chased-off predator and flies to the pea counter. */
-  flyPea(from: Point, amount: number): void {
-    this.floatText({ x: from.x, y: from.y - 40 }, `+${amount}`, COLORS.peaCss);
-    const pea = this.add.image(from.x, from.y - 20, 'icon-pea').setDisplaySize(22, 22).setDepth(DEPTH.hud + 1);
-    this.tweens.add({
-      targets: pea,
-      x: PEA_ICON.x,
-      y: PEA_ICON.y,
-      duration: 650,
-      ease: 'Cubic.In',
-      onComplete: () => {
-        pea.destroy();
-        playSound(this, 'pea');
-        this.tweens.add({ targets: this.peasText, scale: 1.2, duration: 80, yoyo: true });
-      },
-    });
-  }
-
-  floatText(at: Point, message: string, color: string): void {
-    const text = this.add.text(at.x, at.y, message, textStyle(26, { color, weight: '700' })).setOrigin(0.5);
-    text.setDepth(DEPTH.floatText);
-    this.tweens.add({ targets: text, y: at.y - 40, alpha: 0, duration: 900, ease: 'Cubic.Out', onComplete: () => text.destroy() });
-  }
-
-  /** Shows a big banner in the middle of the screen. If one is already up, this one waits its turn. */
-  showBanner(message: string, bonus = 0): void {
-    this.bannerQueue.push({ message, bonus });
-    if (!this.bannerShowing) this.showNextBanner();
-  }
-
-  private showNextBanner(): void {
-    const next = this.bannerQueue.shift();
-    this.bannerShowing = !!next;
-    if (!next) return;
-    const { message, bonus } = next;
-    const text = this.add.text(0, 0, message, textStyle(44, { weight: '700' })).setOrigin(0.5);
-    const parts: Phaser.GameObjects.GameObject[] = [];
-    let width = text.width + 70;
-    if (bonus > 0) {
-      const chip = this.add.container(text.width / 2 + 60, 0, [
-        this.add.image(-22, 0, 'icon-pea').setDisplaySize(30, 30),
-        this.add.text(-4, 0, `+${bonus}`, textStyle(32, { weight: '700', color: COLORS.peaCss })).setOrigin(0, 0.5),
-      ]);
-      text.x -= 50;
-      chip.x -= 50;
-      parts.push(chip);
-      width += 100;
-    }
-    const ribbon = this.add
-      .graphics()
-      .fillStyle(0x000000, 0.25)
-      .fillRoundedRect(-width / 2, -34, width, 76, 38)
-      .fillStyle(COLORS.gold)
-      .fillRoundedRect(-width / 2, -40, width, 76, 38)
-      .lineStyle(5, COLORS.ink)
-      .strokeRoundedRect(-width / 2, -40, width, 76, 38);
-    const banner = this.add
-      .container(WORLD.width / 2, WORLD.height / 2, [ribbon, text, ...parts])
-      .setDepth(DEPTH.banner)
-      .setScale(0);
-    this.tweens.chain({
-      targets: banner,
-      tweens: [
-        { scale: 1, duration: 320, ease: 'Back.Out' },
-        { alpha: 0, y: banner.y - 30, delay: 1300, duration: 400 },
-      ],
-      onComplete: () => banner.destroy(),
-    });
-    // The next banner (if any) pops in as this one starts to fade away.
-    this.time.delayedCall(1620, () => this.showNextBanner());
   }
 
   // --- Buttons ---------------------------------------------------------------
