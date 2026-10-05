@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { Difficulty } from '../data/difficulty';
-import { BACKDROP, COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
+import { BACKDROP, COLORS, WORLD, setupCamera, textStyle, INK } from '../ui/theme';
 import { drawBigButton, drawCard, drawSoundButton } from '../ui/widgets';
 import type { GameSceneData } from './GameScene';
 import type { LevelSelectSceneData } from './LevelSelectScene';
@@ -65,10 +65,9 @@ export class PauseScene extends Phaser.Scene {
 
   /** "Are you sure?" before giving up the game being played, so a stray tap can't lose it. */
   private confirm(question: string, scene: string, data: object): void {
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     this.showCard([
       this.add.text(0, -130, question, textStyle(44, { weight: '700', color: COLORS.goldCss, strokeThickness: 9 })).setOrigin(0.5),
-      this.add.text(0, -74, "You'll lose your ducks and peas.", textStyle(24, ink)).setOrigin(0.5),
+      this.add.text(0, -74, "You'll lose your ducks and peas.", textStyle(24, INK)).setOrigin(0.5),
       // "No" is the big green one: going back to the game is the safe choice.
       drawBigButton(this, 0, 10, 'No, keep playing', COLORS.green, COLORS.greenDark, () => this.showMenu(), { width: 400, fontSize: 36 }),
       drawBigButton(this, 0, 122, 'Yes', COLORS.orange, COLORS.orangeDark, () => this.leave(scene, data), { width: 200, height: 76, fontSize: 30 }),

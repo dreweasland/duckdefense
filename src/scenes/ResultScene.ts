@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
 import { drawGrass, drawOutskirts, drawPond, scatterDecor } from '../art/terrain';
-import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { HATS, type HatKind } from '../data/hats';
 import { hatFor } from '../logic/hats';
@@ -10,33 +9,19 @@ import { LEVELS } from '../data/levels';
 import { findTrial } from '../data/trials';
 import { postScore } from '../api';
 import { topDuck, type KindReport } from '../logic/battle';
+import type { RunOutcome } from '../logic/run';
 import { shortNumber } from '../logic/display';
 import { playSound } from '../audio/sfx';
 import { askForName } from '../ui/nameForm';
-import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
+import { COLORS, WORLD, setupCamera, textStyle, INK, INK_GREY } from '../ui/theme';
 import { drawBigButton, drawCard, fadeToScene } from '../ui/widgets';
 import type { GameSceneData } from './GameScene';
 import type { LeaderboardSceneData } from './LeaderboardScene';
 import type { LevelSelectSceneData } from './LevelSelectScene';
 
-export interface ResultSceneData {
-  won: boolean;
-  difficulty: Difficulty;
-  level: number;
-  stars?: number; // only for a win
-  score?: number;
-  newBest?: boolean;
-  hearts?: number; // hearts left and peas that count (see scorePeas), for posting to the leaderboard
-  peas?: number;
-  daily?: string; // the Daily Challenge date, if that's what was played
-  trial?: string; // the Level Trial's id, if that's what was played
-  sandbox?: boolean; // the Sandbox: nothing was saved
-  newRibbon?: boolean; // a trial won for the first time on this difficulty
-  streak?: number; // Daily Challenges won on days in a row, counting this one
-  report?: Partial<Record<DuckKind, KindReport>>; // what each kind of duck did (the damage report)
-  newHats?: HatKind[]; // hats this win unlocked
-  endlessWaves?: number; // for an Endless Pond run: waves survived
-  endlessBest?: number; // and the most ever survived on this difficulty
+/** What the result screen shows: the finished game's outcome (see logic/run.ts) plus the ducks' damage report. */
+export interface ResultSceneData extends RunOutcome {
+  report?: Partial<Record<DuckKind, KindReport>>; // what each kind of duck did
 }
 
 // The ducks' damage reports sit 190 apart; each one's text is kept this narrow so neighbours never touch.
@@ -115,7 +100,7 @@ export class ResultScene extends Phaser.Scene {
     if (endless) {
       const waves = this.result.endlessWaves ?? 0;
       const big = this.add
-        .text(cx, 250, String(waves), textStyle(76, { color: '#3d8fe0', stroke: COLORS.inkCss, strokeThickness: 10, weight: '700' }))
+        .text(cx, 250, String(waves), textStyle(76, { color: COLORS.blueCss, stroke: COLORS.inkCss, strokeThickness: 10, weight: '700' }))
         .setOrigin(0.5)
         .setDepth(51);
       this.add
@@ -126,7 +111,7 @@ export class ResultScene extends Phaser.Scene {
       this.tweens.add({ targets: big, scale: 1, delay: 300, duration: 350, ease: 'Back.Out' });
       if (this.result.newBest) {
         this.add
-          .text(cx + big.width / 2 + 20, 230, 'New best!', textStyle(28, { color: '#e0447a', stroke: '#ffffff', strokeThickness: 6, weight: '700' }))
+          .text(cx + big.width / 2 + 20, 230, 'New best!', textStyle(28, { color: COLORS.pinkTextCss, stroke: '#ffffff', strokeThickness: 6, weight: '700' }))
           .setOrigin(0, 0.5)
           .setDepth(51)
           .setAngle(-8);
@@ -142,7 +127,7 @@ export class ResultScene extends Phaser.Scene {
       this.tweens.add({ targets: ribbon, scale: full, delay: 300, duration: 400, ease: 'Back.Out' });
       if (this.result.newRibbon) {
         this.add
-          .text(cx + 56, 206, 'New ribbon!', textStyle(26, { color: '#e0447a', stroke: '#ffffff', strokeThickness: 6, weight: '700' }))
+          .text(cx + 56, 206, 'New ribbon!', textStyle(26, { color: COLORS.pinkTextCss, stroke: '#ffffff', strokeThickness: 6, weight: '700' }))
           .setOrigin(0, 0.5)
           .setDepth(51)
           .setAngle(-8);
@@ -162,9 +147,9 @@ export class ResultScene extends Phaser.Scene {
         const star = this.add
           .image(cx + (s - 1) * 80, 236, 'star')
           .setDisplaySize(66, 66)
-          .setTint(earned ? 0xffd23f : 0xd8d2cc)
+          .setTint(earned ? COLORS.gold : COLORS.disabled)
           .setDepth(52);
-        // Pop in one after another; stars you didn't earn are smaller and grey.
+        // Pop in one after another; stars you didn't earn are smaller and INK_GREY.
         const full = star.scaleX;
         star.setScale(0);
         this.tweens.add({ targets: star, scale: earned ? full : full * 0.8, delay: 300 + s * 250, duration: 300, ease: 'Back.Out' });
@@ -176,7 +161,7 @@ export class ResultScene extends Phaser.Scene {
       this.drawPostButton(cx + 300, 296);
       if (this.result.newBest) {
         this.add
-          .text(score.x + score.width / 2 + 12, 296, 'New best!', textStyle(22, { color: '#e0447a', stroke: '#ffffff', strokeThickness: 5 }))
+          .text(score.x + score.width / 2 + 12, 296, 'New best!', textStyle(22, { color: COLORS.pinkTextCss, stroke: '#ffffff', strokeThickness: 5 }))
           .setOrigin(0, 0.5)
           .setDepth(51)
           .setAngle(-6);
@@ -221,7 +206,7 @@ export class ResultScene extends Phaser.Scene {
           lifespan: 5000,
           frequency: 60,
           scale: { min: 0.4, max: 0.8 },
-          tint: [0xffd23f, 0xff7aa2, 0x3fbf5f, 0x3d8fe0, 0xffffff],
+          tint: [COLORS.gold, 0xff7aa2, 0x3fbf5f, 0x3d8fe0, 0xffffff],
         })
         .setDepth(60);
     }
@@ -251,16 +236,15 @@ export class ResultScene extends Phaser.Scene {
 
   /** A duck's damage report under its picture. Ducks that weren't placed "stayed home". */
   private drawDuckReport(x: number, y: number, kind: DuckKind, stats: KindReport | undefined, top: boolean): void {
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     if (!stats?.placed) {
-      this.add.text(x, y + 8, 'Stayed home', textStyle(16, { ...ink, color: COLORS.textGrey })).setOrigin(0.5).setDepth(51);
+      this.add.text(x, y + 8, 'Stayed home', textStyle(16, INK_GREY)).setOrigin(0.5).setDepth(51);
       return;
     }
     const name = stats.placed > 1 ? `${DUCKS[kind].name} ×${stats.placed}` : DUCKS[kind].name;
     const lines = [
-      this.add.text(x, y, name, textStyle(17, { ...ink, color: COLORS.textGrey })),
-      this.add.text(x, y + 21, `Chased off ${shortNumber(stats.chasedOff)}`, textStyle(18, { ...ink, weight: '700' })),
-      this.add.text(x, y + 43, `${shortNumber(stats.damage)} damage · ${DUCKS[kind].power.stat} ${shortNumber(stats.special)}`, textStyle(16, ink)),
+      this.add.text(x, y, name, textStyle(17, INK_GREY)),
+      this.add.text(x, y + 21, `Chased off ${shortNumber(stats.chasedOff)}`, textStyle(18, { ...INK, weight: '700' })),
+      this.add.text(x, y + 43, `${shortNumber(stats.damage)} damage · ${DUCKS[kind].power.stat} ${shortNumber(stats.special)}`, textStyle(16, INK)),
     ];
     lines.forEach((line) => {
       line.setOrigin(0.5, 0).setDepth(51);
@@ -279,13 +263,12 @@ export class ResultScene extends Phaser.Scene {
 
   /** "New hat!" card beside the panel, for hats this win unlocked. */
   private showNewHats(hats: HatKind[]): void {
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const W = 200;
     const H = 190;
     const shown = hats.slice(0, 3);
     const parts: Phaser.GameObjects.GameObject[] = [
       drawCard(this.add.graphics(), W, H, { radius: 20, border: COLORS.pink, borderWidth: 5 }),
-      this.add.text(0, -H / 2 + 26, shown.length > 1 ? 'New hats!' : 'New hat!', textStyle(26, { ...ink, color: '#e0447a', weight: '700' })).setOrigin(0.5),
+      this.add.text(0, -H / 2 + 26, shown.length > 1 ? 'New hats!' : 'New hat!', textStyle(26, { ...INK, color: COLORS.pinkTextCss, weight: '700' })).setOrigin(0.5),
     ];
     shown.forEach((hat, i) => {
       const x = (i - (shown.length - 1) / 2) * 60;
@@ -293,9 +276,9 @@ export class ResultScene extends Phaser.Scene {
     });
     parts.push(
       this.add
-        .text(0, 40, shown.length === 1 ? HATS[shown[0]!].name : `${hats.length} new hats`, textStyle(18, { ...ink, weight: '700' }))
+        .text(0, 40, shown.length === 1 ? HATS[shown[0]!].name : `${hats.length} new hats`, textStyle(18, { ...INK, weight: '700' }))
         .setOrigin(0.5),
-      this.add.text(0, 67, 'Try it on in the Wardrobe!', textStyle(16, { ...ink, color: COLORS.textGrey })).setOrigin(0.5),
+      this.add.text(0, 67, 'Try it on in the Wardrobe!', textStyle(16, INK_GREY)).setOrigin(0.5),
     );
     const card = this.add.container(WORLD.width - 110, 300, parts).setDepth(80).setScale(0).setAngle(4);
     this.tweens.add({ targets: card, scale: 1, duration: 350, ease: 'Back.Out' });
@@ -327,7 +310,7 @@ export class ResultScene extends Phaser.Scene {
       y,
       'Post',
       COLORS.gold,
-      0xc99a1a,
+      COLORS.goldDark,
       async () => {
         let posted: { id: number } | undefined;
         const ok = await askForName(async (name) => {

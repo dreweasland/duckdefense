@@ -12,7 +12,7 @@ export function drawPill(scene: Phaser.Scene, x: number, y: number, width: numbe
     .strokeRoundedRect(x - width / 2, y - height / 2, width, height, height / 2);
 }
 
-/** A cream card with an ink outline, like the duck picker cards and result panel. */
+/** A cream card with an INK outline, like the duck picker cards and result panel. */
 export function drawCard(
   graphics: Phaser.GameObjects.Graphics,
   width: number,
@@ -93,7 +93,7 @@ export function drawSoundButton(scene: Phaser.Scene, x: number, y: number, depth
     icon.fillTriangle(-5, -5, 5, -13, 5, 13).fillTriangle(-5, -5, 5, 13, -5, 5);
     icon.strokeTriangle(-5, -5, 5, -13, 5, 13);
     if (isMuted()) {
-      icon.lineStyle(4, 0xff6b5a).lineBetween(9, -7, 19, 7).lineBetween(19, -7, 9, 7);
+      icon.lineStyle(4, COLORS.coral).lineBetween(9, -7, 19, 7).lineBetween(19, -7, 9, 7);
     } else {
       icon.lineStyle(3, 0xffffff);
       icon.beginPath().arc(6, 0, 8, -0.9, 0.9).strokePath();

@@ -101,6 +101,11 @@ export function dailyStreak(progress: Progress, today: string): number {
   return streak && (gap === 0 || gap === 1) ? streak.count : 0;
 }
 
+/** The best result on a level at a difficulty, if it's been won. */
+export function levelRecord(progress: Progress, difficulty: Difficulty, level: number): LevelRecord | undefined {
+  return progress.levels[difficulty][level];
+}
+
 /** The best result for a day's Daily Challenge on a difficulty, if it's been won. */
 export function dailyRecord(progress: Progress, date: string, difficulty: Difficulty): LevelRecord | undefined {
   return progress.daily?.date === date ? progress.daily.results[difficulty] : undefined;

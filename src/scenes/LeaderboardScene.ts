@@ -6,7 +6,7 @@ import { DIFFICULTIES, DIFFICULTY_ORDER, type Difficulty } from '../data/difficu
 import { LEVELS } from '../data/levels';
 import { TRIALS, findTrial } from '../data/trials';
 import { dailyDate, dailyFor } from '../logic/daily';
-import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
+import { COLORS, WORLD, setupCamera, textStyle, INK } from '../ui/theme';
 import { drawBackButton, drawCard, fadeToScene } from '../ui/widgets';
 
 export interface LeaderboardSceneData {
@@ -27,7 +27,7 @@ export interface LeaderboardSceneData {
 const LIST = { x: WORLD.width / 2, y: 462, width: 640, height: 380, rowHeight: 34 };
 // Under a level's tab: pills for the level itself and each of its trials.
 const SUB_TABS = { y: 242, width: 190, spacing: 200 };
-const MEDALS = [0xffd23f, 0xc9d1d9, 0xe0955a];
+const MEDALS = [COLORS.gold, 0xc9d1d9, 0xe0955a];
 
 export class LeaderboardScene extends Phaser.Scene {
   private level = 0;
@@ -211,24 +211,23 @@ export class LeaderboardScene extends Phaser.Scene {
 
   private drawRow(row: ScoreRow, index: number): Phaser.GameObjects.GameObject[] {
     const y = -LIST.height / 2 + 34 + index * LIST.rowHeight;
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const parts: Phaser.GameObjects.GameObject[] = [];
     if (row.id === this.highlightId) {
       parts.push(this.add.rectangle(0, y, LIST.width - 30, LIST.rowHeight - 4, 0xffe9a0).setStrokeStyle(2, COLORS.gold));
     }
     const medal = MEDALS[index];
     if (medal !== undefined) parts.push(this.add.circle(-LIST.width / 2 + 46, y, 15, medal).setStrokeStyle(3, COLORS.ink));
-    parts.push(this.add.text(-LIST.width / 2 + 46, y, String(index + 1), textStyle(18, { ...ink, weight: '700' })).setOrigin(0.5));
+    parts.push(this.add.text(-LIST.width / 2 + 46, y, String(index + 1), textStyle(18, { ...INK, weight: '700' })).setOrigin(0.5));
     // Names are shown as plain text (never as HTML), so nothing typed can do anything sneaky.
-    parts.push(this.add.text(-LIST.width / 2 + 84, y, row.name, textStyle(24, { ...ink, weight: '700' })).setOrigin(0, 0.5));
+    parts.push(this.add.text(-LIST.width / 2 + 84, y, row.name, textStyle(24, { ...INK, weight: '700' })).setOrigin(0, 0.5));
     if (this.board === 'endless') {
       // Endless Pond scores are waves survived.
-      parts.push(this.add.text(LIST.width / 2 - 36, y, `${row.score} ${row.score === 1 ? 'wave' : 'waves'}`, textStyle(24, { ...ink, weight: '700' })).setOrigin(1, 0.5));
+      parts.push(this.add.text(LIST.width / 2 - 36, y, `${row.score} ${row.score === 1 ? 'wave' : 'waves'}`, textStyle(24, { ...INK, weight: '700' })).setOrigin(1, 0.5));
       return parts;
     }
     parts.push(this.add.image(LIST.width / 2 - 170, y, 'icon-heart').setDisplaySize(20, 20));
-    parts.push(this.add.text(LIST.width / 2 - 155, y, String(row.hearts), textStyle(20, ink)).setOrigin(0, 0.5));
-    parts.push(this.add.text(LIST.width / 2 - 36, y, String(row.score), textStyle(24, { ...ink, weight: '700' })).setOrigin(1, 0.5));
+    parts.push(this.add.text(LIST.width / 2 - 155, y, String(row.hearts), textStyle(20, INK)).setOrigin(0, 0.5));
+    parts.push(this.add.text(LIST.width / 2 - 36, y, String(row.score), textStyle(24, { ...INK, weight: '700' })).setOrigin(1, 0.5));
     return parts;
   }
 }

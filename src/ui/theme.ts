@@ -54,12 +54,27 @@ export const COLORS = {
   pink: 0xff7aa2,
   red: 0xe0524c,
   redDark: 0xa33a35,
+  goldDark: 0xc99a1a, // the 3D edge under a gold round button
+  pinkDark: 0xc2507a, // and under a pink one
+  goldLight: 0xffe066, // glows and dizzy stars
+  coral: 0xff6b5a, // warnings: low health, low battery, a boss's bar
+  disabled: 0xd8d2cc, // unearned stars, things switched off
+  creamSelected: 0xfff0b3, // a picked card
+  blueCss: '#3d8fe0',
+  pinkCss: '#ff7aa2',
+  pinkTextCss: '#e0447a', // "New best!" and other pink words
+  peaCss: '#c8f59a', // peas gained
   // Text on cream cards. All at least 4.5:1 against cream, so they read on a phone in the sun.
   textGrey: '#6b6168', // second-rank text: labels, "Level 3", hints under a heading
   textGold: '#8a5a10', // Big Move names, "Final upgrade"
   textGreen: '#1f6b34', // good news: "Best duck", a bonus
   blueDarkCss: '#2a66a8', // a duck's power name
 };
+
+/** Dark text on a cream card (textStyle's default is white with an ink outline). */
+export const INK = { color: COLORS.inkCss, strokeThickness: 0 };
+/** Second-rank text on a cream card: labels, "Level 3", a hint under a heading. */
+export const INK_GREY = { ...INK, color: COLORS.textGrey };
 
 /** Each difficulty's colour: the title screen's buttons and the chips on the other screens. */
 export const DIFFICULTY_COLORS = {

@@ -64,7 +64,7 @@ export class TitleScene extends Phaser.Scene {
 
     // Top scores.
     const trophy = this.add.image(0, 0, 'icon-trophy').setDisplaySize(44, 44);
-    const scores = drawRoundButton(this, WORLD.width - 70, 70, 42, COLORS.gold, 0xc99a1a, [trophy]);
+    const scores = drawRoundButton(this, WORLD.width - 70, 70, 42, COLORS.gold, COLORS.goldDark, [trophy]);
     scores.container.setDepth(100);
     scores.hit.on('pointerdown', () => {
       playSound(this, 'tap');
@@ -73,7 +73,7 @@ export class TitleScene extends Phaser.Scene {
     });
     // The Wardrobe: dress up the ducks.
     const hat = this.add.image(0, 2, 'hat-party').setDisplaySize(52, 47);
-    const wardrobe = drawRoundButton(this, 70, 70, 42, COLORS.pink, 0xc2507a, [hat]);
+    const wardrobe = drawRoundButton(this, 70, 70, 42, COLORS.pink, COLORS.pinkDark, [hat]);
     wardrobe.container.setDepth(100);
     wardrobe.hit.on('pointerdown', () => {
       playSound(this, 'tap');

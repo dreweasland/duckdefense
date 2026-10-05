@@ -7,9 +7,9 @@ import { TRIALS } from '../data/trials';
 import { parseLevel, type Level } from '../logic/level';
 import { ENDLESS } from '../data/endless';
 import { dailyDate, dailyFor } from '../logic/daily';
-import { dailyRecord, dailyStreak, endlessBest, hasWonTrial, isUnlocked, trialsUnlocked, trialsWon, type LevelRecord, type Progress } from '../logic/progress';
+import { dailyRecord, dailyStreak, endlessBest, hasWonTrial, isUnlocked, levelRecord, trialsUnlocked, trialsWon, type Progress } from '../logic/progress';
 import { loadProgress } from '../save';
-import { COLORS, DIFFICULTY_COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
+import { COLORS, DIFFICULTY_COLORS, WORLD, setupCamera, textStyle, INK, INK_GREY } from '../ui/theme';
 import { drawBackButton, drawBigButton, drawCard, drawRoundButton, drawSoundButton, fadeToScene } from '../ui/widgets';
 import type { GameSceneData } from './GameScene';
 
@@ -78,19 +78,18 @@ export class LevelSelectScene extends Phaser.Scene {
 
   private drawLevelCard(x: number, y: number, index: number, level: Level, unlocked: boolean): void {
     const name = LEVELS[index]!.name;
-    const stars = this.progress.levels[this.difficulty][index]?.stars ?? 0;
+    const stars = levelRecord(this.progress, this.difficulty, index)?.stars ?? 0;
     const card = drawCard(this.add.graphics(), CARD.width, CARD.height, { radius: 22, borderWidth: 4 });
     const parts: Phaser.GameObjects.GameObject[] = [card, this.drawMiniMap(level, -64, -24, MAP)];
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const right = 72; // the stars and ribbons sit in a column to the right of the map
-    parts.push(this.add.text(right, -56, `Level ${index + 1}`, textStyle(18, { ...ink, color: COLORS.textGrey })).setOrigin(0.5));
-    parts.push(this.add.text(0, 50, name, textStyle(name.length > 12 ? 22 : 26, { ...ink, weight: '700' })).setOrigin(0.5));
+    parts.push(this.add.text(right, -56, `Level ${index + 1}`, textStyle(18, INK_GREY)).setOrigin(0.5));
+    parts.push(this.add.text(0, 50, name, textStyle(name.length > 12 ? 22 : 26, { ...INK, weight: '700' })).setOrigin(0.5));
     for (let s = 0; s < 3; s++) {
       parts.push(
         this.add
           .image(right + (s - 1) * 34, -24, 'star')
           .setDisplaySize(32, 32)
-          .setTint(s < stars ? 0xffd23f : 0xd8d2cc),
+          .setTint(s < stars ? COLORS.gold : COLORS.disabled),
       );
     }
     // A ribbon for each of the level's trials: pink once it's won.
@@ -101,7 +100,7 @@ export class LevelSelectScene extends Phaser.Scene {
         this.add
           .image(right + (t - (trials.length - 1) / 2) * 30, 8, 'ribbon')
           .setDisplaySize(26, 26)
-          .setTint(won ? COLORS.pink : 0xd8d2cc)
+          .setTint(won ? COLORS.pink : COLORS.disabled)
           .setAlpha(won ? 1 : 0.7),
       );
     });
@@ -111,16 +110,16 @@ export class LevelSelectScene extends Phaser.Scene {
       parts.push(
         this.add
           .graphics()
-          .fillStyle(0x2b2233, 0.45)
+          .fillStyle(COLORS.ink, 0.45)
           .fillRoundedRect(-CARD.width / 2, -CARD.height / 2, CARD.width, CARD.height, 22),
       );
       const lock = this.add
         .graphics()
-        .lineStyle(10, 0xd8d2cc)
+        .lineStyle(10, COLORS.disabled)
         .beginPath()
         .arc(0, -14, 22, Math.PI, 0)
         .strokePath()
-        .fillStyle(0xffd23f)
+        .fillStyle(COLORS.gold)
         .fillRoundedRect(-34, -14, 68, 54, 10)
         .lineStyle(4, COLORS.ink)
         .strokeRoundedRect(-34, -14, 68, 54, 10)
@@ -155,17 +154,15 @@ export class LevelSelectScene extends Phaser.Scene {
   private openSheet(index: number, level: Level): void {
     if (this.sheet) return;
     const info = LEVELS[index]!;
-    const record: LevelRecord | undefined = this.progress.levels[this.difficulty][index];
+    const record = levelRecord(this.progress, this.difficulty, index);
     const trials = TRIALS[index] ?? [];
     const open = trialsUnlocked(this.progress, this.difficulty, index);
     const W = SHEET.width;
     const H = SHEET.baseHeight + trials.length * SHEET.trialRow;
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
-    const grey = { ...ink, color: COLORS.textGrey };
     const play = (data: GameSceneData) => fadeToScene(this, 'GameScene', data);
 
     // A dark sheet over the level cards; tapping it closes the sheet.
-    const backdrop = this.add.rectangle(WORLD.width / 2, WORLD.height / 2, WORLD.width, WORLD.height, 0x2b2233, 0.55).setInteractive();
+    const backdrop = this.add.rectangle(WORLD.width / 2, WORLD.height / 2, WORLD.width, WORLD.height, COLORS.ink, 0.55).setInteractive();
     backdrop.on('pointerdown', () => this.closeSheet());
 
     const top = -H / 2;
@@ -180,21 +177,21 @@ export class LevelSelectScene extends Phaser.Scene {
         this.add
           .image(mapX + (s - 1) * 52, top + 262, 'star')
           .setDisplaySize(46, 46)
-          .setTint(s < stars ? 0xffd23f : 0xd8d2cc),
+          .setTint(s < stars ? COLORS.gold : COLORS.disabled),
       );
     }
     parts.push(
       this.add
-        .text(mapX, top + 300, record ? `Best score  ${record.bestScore}` : 'Not beaten yet', textStyle(20, record ? { ...ink, weight: '700' } : grey))
+        .text(mapX, top + 300, record ? `Best score  ${record.bestScore}` : 'Not beaten yet', textStyle(20, record ? { ...INK, weight: '700' } : INK_GREY))
         .setOrigin(0.5),
     );
 
     // Right: the level's name and a big Play button.
     const rightX = mapX + SHEET.map.width / 2 + 40;
-    parts.push(this.add.text(rightX, top + 52, `Level ${index + 1}`, textStyle(22, grey)).setOrigin(0, 0.5));
-    parts.push(this.add.text(rightX, top + 96, info.name, textStyle(40, { ...ink, weight: '700' })).setOrigin(0, 0.5));
+    parts.push(this.add.text(rightX, top + 52, `Level ${index + 1}`, textStyle(22, INK_GREY)).setOrigin(0, 0.5));
+    parts.push(this.add.text(rightX, top + 96, info.name, textStyle(40, { ...INK, weight: '700' })).setOrigin(0, 0.5));
     const chipColor = DIFFICULTY_COLORS[this.difficulty].css;
-    parts.push(this.add.text(rightX, top + 136, DIFFICULTIES[this.difficulty].label, textStyle(20, { ...ink, color: chipColor, weight: '700' })).setOrigin(0, 0.5));
+    parts.push(this.add.text(rightX, top + 136, DIFFICULTIES[this.difficulty].label, textStyle(20, { ...INK, color: chipColor, weight: '700' })).setOrigin(0, 0.5));
     parts.push(
       drawBigButton(this, rightX + 140, top + 214, 'Play  ▶', COLORS.green, COLORS.greenDark, () => play({ difficulty: this.difficulty, level: index }), {
         width: 280,
@@ -213,22 +210,22 @@ export class LevelSelectScene extends Phaser.Scene {
     // Below: the trials.
     const listTop = top + 336;
     const won = trialsWon(this.progress, this.difficulty, index);
-    parts.push(this.add.text(-W / 2 + 40, listTop, 'Trials', textStyle(26, { ...ink, weight: '700' })).setOrigin(0, 0.5));
+    parts.push(this.add.text(-W / 2 + 40, listTop, 'Trials', textStyle(26, { ...INK, weight: '700' })).setOrigin(0, 0.5));
     parts.push(this.add.image(-W / 2 + 140, listTop, 'ribbon').setDisplaySize(30, 30).setTint(COLORS.pink));
-    parts.push(this.add.text(-W / 2 + 160, listTop, `${won}/${trials.length}`, textStyle(22, { ...ink, weight: '700' })).setOrigin(0, 0.5));
+    parts.push(this.add.text(-W / 2 + 160, listTop, `${won}/${trials.length}`, textStyle(22, { ...INK, weight: '700' })).setOrigin(0, 0.5));
     if (!open) {
-      parts.push(this.add.text(-W / 2 + 230, listTop, 'Beat the level to open its trials!', textStyle(20, grey)).setOrigin(0, 0.5));
+      parts.push(this.add.text(-W / 2 + 230, listTop, 'Beat the level to open its trials!', textStyle(20, INK_GREY)).setOrigin(0, 0.5));
     }
     parts.push(this.add.graphics().lineStyle(3, 0xe6ddd0).lineBetween(-W / 2 + 40, listTop + 22, W / 2 - 40, listTop + 22));
     trials.forEach((trial, t) => {
       const y = listTop + 46 + t * SHEET.trialRow + SHEET.trialRow / 2 - 8;
       const done = hasWonTrial(this.progress, this.difficulty, trial.id);
-      const textColor = open ? ink : grey;
+      const textColor = open ? INK : INK_GREY;
       parts.push(
         this.add
           .image(-W / 2 + 70, y, 'ribbon')
           .setDisplaySize(44, 44)
-          .setTint(done ? COLORS.pink : 0xd8d2cc)
+          .setTint(done ? COLORS.pink : COLORS.disabled)
           .setAlpha(open ? 1 : 0.6),
       );
       parts.push(this.add.text(-W / 2 + 106, y - 15, trial.name, textStyle(22, { ...textColor, weight: '700' })).setOrigin(0, 0.5));
@@ -251,7 +248,7 @@ export class LevelSelectScene extends Phaser.Scene {
 
     // Close button in the corner.
     const cross = this.add.graphics().lineStyle(6, 0xffffff).lineBetween(-10, -10, 10, 10).lineBetween(-10, 10, 10, -10);
-    const close = drawRoundButton(this, W / 2 - 14, top + 14, 26, COLORS.pink, 0xc2507a, [cross]);
+    const close = drawRoundButton(this, W / 2 - 14, top + 14, 26, COLORS.pink, COLORS.pinkDark, [cross]);
     close.hit.on('pointerdown', () => {
       playSound(this, 'tap');
       this.closeSheet();
@@ -290,7 +287,7 @@ export class LevelSelectScene extends Phaser.Scene {
       icon: this.add.image(0, 0, 'star').setDisplaySize(46, 46).setTint(COLORS.gold),
       title: 'Daily Challenge',
       subtitle: `${daily.challenge.name}  ·  ${LEVELS[daily.level]?.name ?? ''}`,
-      fill: 0xfff0b3,
+      fill: COLORS.creamSelected,
       border: COLORS.gold,
       // Already won today: show the stars (you can still play again for a better score).
       stars: record?.stars,
@@ -303,7 +300,7 @@ export class LevelSelectScene extends Phaser.Scene {
     const best = Math.max(...LEVELS.map((_, map) => endlessBest(progress, this.difficulty, map)));
     const bestMap = LEVELS.findIndex((_, map) => endlessBest(progress, this.difficulty, map) === best);
     this.drawModeButton(x, y, {
-      icon: this.add.text(0, -2, '∞', textStyle(46, { weight: '700', color: '#3d8fe0', stroke: COLORS.inkCss, strokeThickness: 6 })).setOrigin(0.5),
+      icon: this.add.text(0, -2, '∞', textStyle(46, { weight: '700', color: COLORS.blueCss, stroke: COLORS.inkCss, strokeThickness: 6 })).setOrigin(0.5),
       title: ENDLESS.name,
       subtitle: best > 0 ? `Your best: ${best} ${best === 1 ? 'wave' : 'waves'} on ${LEVELS[bestMap]!.name}` : 'How long can you last? Pick a pond!',
       fill: 0xdff1ff,
@@ -319,28 +316,26 @@ export class LevelSelectScene extends Phaser.Scene {
     const W = 760;
     const H = 110 + LEVELS.length * ROW;
     const top = -H / 2;
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
-    const grey = { ...ink, color: COLORS.textGrey };
 
-    const backdrop = this.add.rectangle(WORLD.width / 2, WORLD.height / 2, WORLD.width, WORLD.height, 0x2b2233, 0.55).setInteractive();
+    const backdrop = this.add.rectangle(WORLD.width / 2, WORLD.height / 2, WORLD.width, WORLD.height, COLORS.ink, 0.55).setInteractive();
     backdrop.on('pointerdown', () => this.closeSheet());
     const parts: Phaser.GameObjects.GameObject[] = [drawCard(this.add.graphics(), W, H, { radius: 28, borderWidth: 5, border: COLORS.blue })];
-    parts.push(this.add.text(-W / 2 + 40, top + 44, '∞', textStyle(44, { weight: '700', color: '#3d8fe0', stroke: COLORS.inkCss, strokeThickness: 6 })).setOrigin(0, 0.5));
-    parts.push(this.add.text(-W / 2 + 90, top + 44, ENDLESS.name, textStyle(34, { ...ink, weight: '700' })).setOrigin(0, 0.5));
-    parts.push(this.add.text(-W / 2 + 40, top + 84, 'Waves keep coming until the hearts run out. Pick a pond:', textStyle(18, grey)).setOrigin(0, 0.5));
+    parts.push(this.add.text(-W / 2 + 40, top + 44, '∞', textStyle(44, { weight: '700', color: COLORS.blueCss, stroke: COLORS.inkCss, strokeThickness: 6 })).setOrigin(0, 0.5));
+    parts.push(this.add.text(-W / 2 + 90, top + 44, ENDLESS.name, textStyle(34, { ...INK, weight: '700' })).setOrigin(0, 0.5));
+    parts.push(this.add.text(-W / 2 + 40, top + 84, 'Waves keep coming until the hearts run out. Pick a pond:', textStyle(18, INK_GREY)).setOrigin(0, 0.5));
 
     LEVELS.forEach((info, map) => {
       const y = top + 110 + map * ROW + ROW / 2;
       const open = isUnlocked(this.progress, this.difficulty, map);
       const best = endlessBest(this.progress, this.difficulty, map);
-      const textColor = open ? ink : grey;
+      const textColor = open ? INK : INK_GREY;
       const mini = this.drawMiniMap(parseLevel(info.map), -W / 2 + 84, y, { width: 88, height: 50 });
       if (!open) mini.setAlpha(0.5);
       parts.push(mini);
       parts.push(this.add.text(-W / 2 + 144, y - 13, info.name, textStyle(22, { ...textColor, weight: '700' })).setOrigin(0, 0.5));
       parts.push(
         this.add
-          .text(-W / 2 + 144, y + 13, !open ? `Beat level ${map} to open it` : best > 0 ? `Your best: ${best} ${best === 1 ? 'wave' : 'waves'}` : 'Not played yet', textStyle(16, grey))
+          .text(-W / 2 + 144, y + 13, !open ? `Beat level ${map} to open it` : best > 0 ? `Your best: ${best} ${best === 1 ? 'wave' : 'waves'}` : 'Not played yet', textStyle(16, INK_GREY))
           .setOrigin(0, 0.5),
       );
       if (open) {
@@ -350,7 +345,7 @@ export class LevelSelectScene extends Phaser.Scene {
     });
 
     const cross = this.add.graphics().lineStyle(6, 0xffffff).lineBetween(-10, -10, 10, 10).lineBetween(-10, 10, 10, -10);
-    const close = drawRoundButton(this, W / 2 - 14, top + 14, 26, COLORS.pink, 0xc2507a, [cross]);
+    const close = drawRoundButton(this, W / 2 - 14, top + 14, 26, COLORS.pink, COLORS.pinkDark, [cross]);
     close.hit.on('pointerdown', () => {
       playSound(this, 'tap');
       this.closeSheet();
@@ -385,17 +380,16 @@ export class LevelSelectScene extends Phaser.Scene {
   ): void {
     const W = MODE_BUTTON.width;
     const H = MODE_BUTTON.height;
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     options.icon.x = -W / 2 + 40;
     const parts: Phaser.GameObjects.GameObject[] = [
       drawCard(this.add.graphics(), W, H, { radius: 22, fill: options.fill, border: options.border, borderWidth: 5 }),
       options.icon,
-      this.add.text(-W / 2 + 72, -16, options.title, textStyle(24, { ...ink, weight: '700' })).setOrigin(0, 0.5),
-      this.add.text(-W / 2 + 72, 15, options.subtitle, textStyle(16, { ...ink, color: '#6a5a4a' })).setOrigin(0, 0.5),
+      this.add.text(-W / 2 + 72, -16, options.title, textStyle(24, { ...INK, weight: '700' })).setOrigin(0, 0.5),
+      this.add.text(-W / 2 + 72, 15, options.subtitle, textStyle(16, { ...INK, color: '#6a5a4a' })).setOrigin(0, 0.5),
     ];
     if (options.stars !== undefined) {
       for (let s = 0; s < 3; s++) {
-        parts.push(this.add.image(W / 2 - 92 + s * 28, 0, 'star').setDisplaySize(28, 28).setTint(s < options.stars ? 0xffd23f : 0xd8d2cc));
+        parts.push(this.add.image(W / 2 - 92 + s * 28, 0, 'star').setDisplaySize(28, 28).setTint(s < options.stars ? COLORS.gold : COLORS.disabled));
       }
     } else {
       const play = this.add.graphics().fillStyle(COLORS.green).fillCircle(0, 0, 24).lineStyle(4, COLORS.ink).strokeCircle(0, 0, 24);

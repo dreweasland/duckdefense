@@ -5,7 +5,7 @@ import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { HAT_ORDER, HATS, type HatKind } from '../data/hats';
 import { hatFor, isHatUnlocked, totalEarned, wearHat } from '../logic/hats';
 import { loadProgress, saveProgress } from '../save';
-import { COLORS, WORLD, setupCamera, textStyle } from '../ui/theme';
+import { COLORS, WORLD, setupCamera, textStyle, INK } from '../ui/theme';
 import { duckWithHat } from '../ui/hats';
 import { drawBackButton, drawCard, drawPill, drawSoundButton, fadeToScene, popSpeechBubble } from '../ui/widgets';
 
@@ -58,7 +58,6 @@ export class WardrobeScene extends Phaser.Scene {
     this.duckCards.forEach(({ container }) => container.destroy());
     this.duckCards = [];
     const progress = loadProgress();
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     DUCK_ORDER.forEach((kind, i) => {
       const x = WORLD.width / 2 + (i - (DUCK_ORDER.length - 1) / 2) * DUCK_CARD.spacing;
       const on = kind === this.selected;
@@ -66,10 +65,10 @@ export class WardrobeScene extends Phaser.Scene {
         radius: 20,
         border: on ? COLORS.gold : COLORS.ink,
         borderWidth: on ? 7 : 3,
-        fill: on ? 0xfff0b3 : COLORS.cream,
+        fill: on ? COLORS.creamSelected : COLORS.cream,
       });
       const duck = duckWithHat(this, kind, 0, 4, 120, hatFor(progress, kind));
-      const name = this.add.text(0, DUCK_CARD.height / 2 - 22, DUCKS[kind].name, textStyle(22, { ...ink, weight: '700' })).setOrigin(0.5);
+      const name = this.add.text(0, DUCK_CARD.height / 2 - 22, DUCKS[kind].name, textStyle(22, { ...INK, weight: '700' })).setOrigin(0.5);
       const hit = this.add.zone(0, 0, DUCK_CARD.width, DUCK_CARD.height).setInteractive({ useHandCursor: true });
       const container = this.add.container(x, DUCK_CARD.y - (on ? 6 : 0), [card, duck, name, hit]);
       if (on) this.tweens.add({ targets: duck, y: -2, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
@@ -90,7 +89,6 @@ export class WardrobeScene extends Phaser.Scene {
     this.hatCards = [];
     const wearing = hatFor(loadProgress(), this.selected);
     const choices: (HatKind | undefined)[] = [undefined, ...HAT_ORDER];
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     choices.forEach((hat, i) => {
       const row = Math.floor(i / PER_ROW);
       const inRow = Math.min(PER_ROW, choices.length - row * PER_ROW);
@@ -103,7 +101,7 @@ export class WardrobeScene extends Phaser.Scene {
           radius: 16,
           border: on ? COLORS.gold : COLORS.ink,
           borderWidth: on ? 6 : 3,
-          fill: on ? 0xfff0b3 : COLORS.cream,
+          fill: on ? COLORS.creamSelected : COLORS.cream,
         }),
       ];
       if (hat) {
@@ -114,7 +112,7 @@ export class WardrobeScene extends Phaser.Scene {
       }
       parts.push(
         this.add
-          .text(0, HAT_CARD.height / 2 - 20, hat ? HATS[hat].name : 'No hat', textStyle(16, { ...ink, weight: '700' }))
+          .text(0, HAT_CARD.height / 2 - 20, hat ? HATS[hat].name : 'No hat', textStyle(16, { ...INK, weight: '700' }))
           .setOrigin(0.5)
           .setAlpha(unlocked ? 1 : 0.5),
       );

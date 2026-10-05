@@ -39,7 +39,6 @@ import {
   moveDuck,
   sellDuck,
   refundFor,
-  scorePeas,
   canUseBlessing,
   createGame,
   isNight,
@@ -57,19 +56,20 @@ import { shortNumber } from '../logic/display';
 import { closestPointOnPolyline, distance, type Ellipse, type Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
 import { isFinalChoice, nameAt, nextUpgrade, statsAt, upgradeOptions } from '../logic/upgrades';
-import { challengeSettings, dailyFor } from '../logic/daily';
-import { dailyRecord, dailyStreak, endlessBest, recordDailyWin, recordEndless, recordTrialWin, recordWin, scoreFor, starsFor } from '../logic/progress';
+import { dailyFor } from '../logic/daily';
+import { recordEndless } from '../logic/progress';
+import { endlessWavesSurvived, finishRun, type RunMode } from '../logic/run';
 import { ENDLESS } from '../data/endless';
 import { bonusNestsFor, endlessWaves } from '../logic/endless';
 import { loadProgress, saveProgress } from '../save';
 import type { HatKind } from '../data/hats';
 import { HINT_GAP, HINTS, type HintId } from '../data/hints';
 import { pickHint, type HintMoment } from '../logic/hints';
-import { hatFor, newlyUnlocked, totalEarned } from '../logic/hats';
+import { hatFor } from '../logic/hats';
 import { duckWithHat, hatImage, placeHat } from '../ui/hats';
 import type { PauseSceneData } from './PauseScene';
 import type { ResultSceneData } from './ResultScene';
-import { BACKDROP, COLORS, DEPTH, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
+import { BACKDROP, COLORS, DEPTH, WORLD, entityDepth, setupCamera, textStyle, INK, INK_GREY } from '../ui/theme';
 import { drawBigButton, drawCard, drawPill, drawRoundButton, drawSoundButton, killTweensDeep, popSpeechBubble } from '../ui/widgets';
 import { playSound } from '../audio/sfx';
 
@@ -326,6 +326,11 @@ export class GameScene extends Phaser.Scene {
     this.sandbox = !daily && !this.endless && !found && !!data.sandbox;
   }
 
+  /** How this game was set up, for saving its result and for playing it again. */
+  private mode(): RunMode {
+    return { difficulty: this.difficulty, level: this.levelIndex, daily: this.daily?.date, trial: this.trial?.id, endless: this.endless, sandbox: this.sandbox };
+  }
+
   /** The twist on the rules this game is played with: a Daily Challenge's or a Level Trial's. */
   private get challenge(): Challenge | undefined {
     return this.daily?.challenge ?? this.trial;
@@ -449,7 +454,7 @@ export class GameScene extends Phaser.Scene {
     // These change smoothly, so update them every frame.
     const charge = this.state.battery / BATTERY.capacity;
     this.batteryFill.width = BATTERY_BAR_WIDTH * charge;
-    this.batteryFill.fillColor = charge < 0.25 ? 0xff6b5a : COLORS.gold;
+    this.batteryFill.fillColor = charge < 0.25 ? COLORS.coral : COLORS.gold;
     this.fx.fountainSpray.emitting = !!this.state.battle.fountain?.on && this.state.phase === 'wave';
     const shielded = this.state.shieldTime > 0;
     this.shield.setVisible(shielded);
@@ -537,7 +542,7 @@ export class GameScene extends Phaser.Scene {
           gravityY: 420,
           lifespan: 420,
           scale: { start: 0.55, end: 0 },
-          tint: [0x9fd8ff, 0xffffff, 0x5bb3e8],
+          tint: [COLORS.water, 0xffffff, 0x5bb3e8],
         },
         DEPTH.effects,
       ),
@@ -567,7 +572,7 @@ export class GameScene extends Phaser.Scene {
       ),
       stars: burst(
         'star',
-        { speed: { min: 50, max: 140 }, lifespan: 500, scale: { start: 0.5, end: 0 }, tint: 0xffe066 },
+        { speed: { min: 50, max: 140 }, lifespan: 500, scale: { start: 0.5, end: 0 }, tint: COLORS.goldLight },
         DEPTH.effects,
       ),
       sparkles: this.add
@@ -577,7 +582,7 @@ export class GameScene extends Phaser.Scene {
           lifespan: 800,
           frequency: 90,
           scale: { start: 0.35, end: 0 },
-          tint: [0xffe066, 0xffffff],
+          tint: [COLORS.goldLight, 0xffffff],
           blendMode: Phaser.BlendModes.ADD,
         })
         .setDepth(DEPTH.shield + 1),
@@ -591,7 +596,7 @@ export class GameScene extends Phaser.Scene {
           frequency: 40,
           scale: { start: 0.4, end: 0.1 },
           alpha: { start: 0.9, end: 0 },
-          tint: [0xcfefff, 0x9fd8ff],
+          tint: [0xcfefff, COLORS.water],
         })
         .setDepth(DEPTH.pond + 0.5),
       fireflies: this.add
@@ -809,9 +814,8 @@ export class GameScene extends Phaser.Scene {
   /** The Daily Challenge's (or Level Trial's) twist, shown when the level starts. */
   private showChallengeInfo(challenge: Challenge): void {
     if (this.popup) return;
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     // Two twists at once have a longer name and twice the words, so the card grows to fit.
-    const words = this.add.text(-186, -6, challenge.description, { ...textStyle(19, ink), wordWrap: { width: 372 } }).setOrigin(0, 0);
+    const words = this.add.text(-186, -6, challenge.description, { ...textStyle(19, INK), wordWrap: { width: 372 } }).setOrigin(0, 0);
     const height = Math.max(150, words.height + 82);
     const card = drawCard(this.add.graphics(), 420, height, { radius: 18, border: COLORS.gold, borderWidth: 5 });
     const top = -height / 2;
@@ -822,7 +826,7 @@ export class GameScene extends Phaser.Scene {
         this.trial
           ? this.add.image(-172, top + 37, 'ribbon').setDisplaySize(44, 44).setTint(COLORS.pink)
           : this.add.image(-172, top + 37, 'star').setDisplaySize(40, 40).setTint(COLORS.gold),
-        this.add.text(-142, top + 37, challenge.name, textStyle(challenge.name.length > 18 ? 22 : 28, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-142, top + 37, challenge.name, textStyle(challenge.name.length > 18 ? 22 : 28, { ...INK, weight: '700' })).setOrigin(0, 0.5),
         words,
       ])
       .setDepth(DEPTH.hud + 5);
@@ -838,7 +842,6 @@ export class GameScene extends Phaser.Scene {
     const twist = variant && VARIANTS[variant];
     const name = enemyName({ kind, variant });
     const best = DUCKS[stats.beatenBy];
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     // A variant's words go under the predator's own, so the card grows a little.
     const extra = twist ? 70 : 0;
     const card = drawCard(this.add.graphics(), 330, 204 + extra, { radius: 18 });
@@ -847,18 +850,18 @@ export class GameScene extends Phaser.Scene {
         card,
         this.enemyIcon(kind, -118, -56 - extra / 2, 70, 56, variant),
         // Long names ("Regrowing Snapping Turtle") shrink to stay on the card.
-        this.fitWidth(this.add.text(-74, -62 - extra / 2, name, textStyle(name.length > 12 ? 22 : 26, { ...ink, weight: '700' })).setOrigin(0, 0.5), 222),
+        this.fitWidth(this.add.text(-74, -62 - extra / 2, name, textStyle(name.length > 12 ? 22 : 26, { ...INK, weight: '700' })).setOrigin(0, 0.5), 222),
         this.add.image(-66, -32 - extra / 2, 'icon-heart').setDisplaySize(18, 18),
-        this.add.text(-52, -32 - extra / 2, `${stats.hearts}`, textStyle(16, { ...ink, color: '#c0392b', weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-52, -32 - extra / 2, `${stats.hearts}`, textStyle(16, { ...INK, color: '#c0392b', weight: '700' })).setOrigin(0, 0.5),
         this.add
           .text(-148, -12 - extra / 2, twist ? `${stats.description}\n${twist.name}: ${twist.description}` : stats.description, {
-            ...textStyle(18, ink),
+            ...textStyle(18, INK),
             wordWrap: { width: 296 },
           })
           .setOrigin(0, 0),
-        this.add.text(-148, 74 + extra / 2, 'Best duck:', textStyle(18, { ...ink, color: COLORS.textGreen, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-148, 74 + extra / 2, 'Best duck:', textStyle(18, { ...INK, color: COLORS.textGreen, weight: '700' })).setOrigin(0, 0.5),
         this.add.image(-40, 70 + extra / 2, `duck-${stats.beatenBy}`).setDisplaySize(40, 40),
-        this.add.text(-16, 74 + extra / 2, best.name, textStyle(20, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-16, 74 + extra / 2, best.name, textStyle(20, { ...INK, weight: '700' })).setOrigin(0, 0.5),
       ])
       .setDepth(DEPTH.hud + 5);
     this.showPopup(popup, 6000);
@@ -891,7 +894,7 @@ export class GameScene extends Phaser.Scene {
             .lineStyle(9, COLORS.ink)
             .strokeCircle(0, -4, 30)
             .lineBetween(-21, 17, 21, -25)
-            .lineStyle(5, 0xff6b5a)
+            .lineStyle(5, COLORS.coral)
             .strokeCircle(0, -4, 30)
             .lineBetween(-21, 17, 21, -25),
         );
@@ -961,7 +964,7 @@ export class GameScene extends Phaser.Scene {
         this.add.circle(0, 0, 11, 0xffffff).setStrokeStyle(2.5, COLORS.ink),
         this.add.image(0, 0, `power-${DUCKS[kind].power.icon}`).setDisplaySize(15, 15),
       ]);
-      const button = drawRoundButton(this, x, y, r, COLORS.gold, 0xc99a1a, [face, shade, seconds, badge]);
+      const button = drawRoundButton(this, x, y, r, COLORS.gold, COLORS.goldDark, [face, shade, seconds, badge]);
       button.container.addAt(glow, 0).setDepth(DEPTH.hud);
       this.tweens.add({ targets: glow, scale: 1.15, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
       button.hit.on('pointerdown', () => this.onPowerTap(kind));
@@ -1013,8 +1016,7 @@ export class GameScene extends Phaser.Scene {
   private showPowerInfo(kind: DuckKind, note: string): void {
     this.closePopup();
     const power = POWERS[kind];
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
-    const words = this.add.text(-150, 0, power.description, { ...textStyle(19, ink), wordWrap: { width: 300 } }).setOrigin(0, 0);
+    const words = this.add.text(-150, 0, power.description, { ...textStyle(19, INK), wordWrap: { width: 300 } }).setOrigin(0, 0);
     const H = 108 + words.height;
     const top = -H / 2;
     words.setY(top + 62);
@@ -1025,10 +1027,10 @@ export class GameScene extends Phaser.Scene {
       .container(POWER_BUTTON.x - POWER_BUTTON.radius - 185, y, [
         card,
         this.add.image(-126, top + 32, `duck-${kind}`).setDisplaySize(40, 40),
-        this.add.text(-100, top + 20, `${DUCKS[kind].name}'s Big Move`, textStyle(17, { ...ink, color: COLORS.textGrey })).setOrigin(0, 0.5),
-        this.add.text(-100, top + 43, power.name, textStyle(24, { ...ink, color: COLORS.textGold, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-100, top + 20, `${DUCKS[kind].name}'s Big Move`, textStyle(17, INK_GREY)).setOrigin(0, 0.5),
+        this.add.text(-100, top + 43, power.name, textStyle(24, { ...INK, color: COLORS.textGold, weight: '700' })).setOrigin(0, 0.5),
         words,
-        this.add.text(-150, H / 2 - 24, note, textStyle(17, { ...ink, color: COLORS.blueDarkCss, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-150, H / 2 - 24, note, textStyle(17, { ...INK, color: COLORS.blueDarkCss, weight: '700' })).setOrigin(0, 0.5),
       ])
       .setDepth(DEPTH.hud + 5);
     this.showPopup(popup, 5000);
@@ -1097,7 +1099,7 @@ export class GameScene extends Phaser.Scene {
           playSound(this, 'upgrade');
           this.ring(duck.position.x, duck.position.y - 20, 900, COLORS.green, 900);
           this.fx.stars.explode(14, duck.position.x, duck.position.y - 40);
-          this.floatText({ x: duck.position.x, y: duck.position.y - 80 }, 'Hold the line!', '#c8f59a');
+          this.floatText({ x: duck.position.x, y: duck.position.y - 80 }, 'Hold the line!', COLORS.peaCss);
           break;
       }
     }
@@ -1146,8 +1148,8 @@ export class GameScene extends Phaser.Scene {
       badge.add(this.add.graphics().fillStyle(0x5f9e3c).fillTriangle(-8, 5, 0, -7, 8, 5).fillStyle(0xffffff).fillTriangle(-3, -2, 0, -7, 3, -2));
     } else {
       under.fillStyle(0x4aa3df, 0.55).fillEllipse(slot.x, slot.y + 16, 100, 38);
-      under.lineStyle(3, 0x9fd8ff, 0.8).strokeEllipse(slot.x, slot.y + 16, 100, 38);
-      under.lineStyle(2, 0x9fd8ff, 0.5).strokeEllipse(slot.x, slot.y + 16, 124, 48);
+      under.lineStyle(3, COLORS.water, 0.8).strokeEllipse(slot.x, slot.y + 16, 100, 38);
+      under.lineStyle(2, COLORS.water, 0.5).strokeEllipse(slot.x, slot.y + 16, 124, 48);
       this.add.image(slot.x - 40, slot.y + 20, 'lily').setDisplaySize(26, 26).setDepth(entityDepth(slot.y - 20.5));
       badge.add(this.add.image(0, 0, 'power-splash').setDisplaySize(18, 18));
     }
@@ -1241,7 +1243,7 @@ export class GameScene extends Phaser.Scene {
   /** A duck landing on a special nest says what it's good for. */
   private announceNest(at: Point): void {
     const kind = nestAt(this.state.battle, at);
-    if (kind) this.floatText({ x: at.x, y: at.y - 90 }, `${TILES.nests[kind].name}: ${TILES.nests[kind].description}!`, '#c8f59a');
+    if (kind) this.floatText({ x: at.x, y: at.y - 90 }, `${TILES.nests[kind].name}: ${TILES.nests[kind].description}!`, COLORS.peaCss);
   }
 
   /** Ducks face the nearest bit of any trail. */
@@ -1267,14 +1269,13 @@ export class GameScene extends Phaser.Scene {
   /** Lines about a duck's power, hawks, and the Pecking Loop, for info cards. */
   private duckInfoLines(kind: DuckKind, partner?: DuckKind, level = 0, path = 0): Phaser.GameObjects.GameObject[] {
     const stats = { ...statsAt(kind, level, path), name: nameAt(kind, level, path) };
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const lines: Phaser.GameObjects.GameObject[] = [
       duckWithHat(this, kind, -118, -58, 64, this.hats[kind]),
-      this.fitWidth(this.add.text(-80, -74, stats.name, textStyle(28, { ...ink, weight: '700' })).setOrigin(0, 0.5), 222),
+      this.fitWidth(this.add.text(-80, -74, stats.name, textStyle(28, { ...INK, weight: '700' })).setOrigin(0, 0.5), 222),
       this.add.image(-68, -44, `power-${stats.power.icon}`).setDisplaySize(24, 24),
-      this.add.text(-50, -44, stats.power.name, textStyle(20, { ...ink, color: COLORS.blueDarkCss, weight: '700' })).setOrigin(0, 0.5),
+      this.add.text(-50, -44, stats.power.name, textStyle(20, { ...INK, color: COLORS.blueDarkCss, weight: '700' })).setOrigin(0, 0.5),
       this.add
-        .text(-138, -12, stats.power.description, { ...textStyle(17, ink), wordWrap: { width: 276 } })
+        .text(-138, -12, stats.power.description, { ...textStyle(17, INK), wordWrap: { width: 276 } })
         .setOrigin(0, 0),
     ];
     // Hawks. Chester can't peck them, but his Alarm Quack still freezes them.
@@ -1284,7 +1285,7 @@ export class GameScene extends Phaser.Scene {
     lines.push(this.add.image(-126, 44, 'hawk').setDisplaySize(22, 22).setAlpha(helpsWithHawks ? 1 : 0.4));
     lines.push(
       this.add
-        .text(-108, 44, hawkText, textStyle(16, { ...ink, color: helpsWithHawks ? COLORS.textGreen : COLORS.textGrey }))
+        .text(-108, 44, hawkText, textStyle(16, { ...INK, color: helpsWithHawks ? COLORS.textGreen : COLORS.textGrey }))
         .setOrigin(0, 0.5),
     );
     // Pecking Loop.
@@ -1297,8 +1298,8 @@ export class GameScene extends Phaser.Scene {
         : chasedBy
           ? `Makes ${DUCKS[chasedBy].name} faster`
           : 'Ignores everyone';
-    lines.push(this.add.text(-126, 70, '♥', textStyle(18, { color: '#ff7aa2', stroke: '#ffffff', strokeThickness: 3 })).setOrigin(0.5));
-    lines.push(this.add.text(-108, 70, loopText, textStyle(16, { ...ink, color: partner ? '#e0447a' : '#8a5a70' })).setOrigin(0, 0.5));
+    lines.push(this.add.text(-126, 70, '♥', textStyle(18, { color: COLORS.pinkCss, stroke: '#ffffff', strokeThickness: 3 })).setOrigin(0.5));
+    lines.push(this.add.text(-108, 70, loopText, textStyle(16, { ...INK, color: partner ? COLORS.pinkTextCss : '#8a5a70' })).setOrigin(0, 0.5));
     return lines;
   }
 
@@ -1340,7 +1341,7 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: this.peasText, x: '+=6', duration: 50, yoyo: true, repeat: 3 });
   }
 
-  /** A button showing a price in peas: green if you can afford it, grey if not. */
+  /** A button showing a price in peas: green if you can afford it, INK_GREY if not. */
   private priceButton(
     x: number,
     y: number,
@@ -1370,15 +1371,14 @@ export class GameScene extends Phaser.Scene {
   /** A card under the picker explaining the duck you just picked. Fades on its own. */
   private showPickerInfo(kind: DuckKind): void {
     this.closePopup();
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     // The duck's card, plus its Big Move (the tap-to-use one, on the buttons down the right).
     const card = drawCard(this.add.graphics(), 310, 232, { radius: 18 });
     const lines = this.add.container(0, -22, this.duckInfoLines(kind)); // the usual card's lines, shifted up to make room
     const bigMove = [
       this.add.image(-126, 86, 'glow').setDisplaySize(30, 30).setTint(COLORS.gold),
       this.add.image(-126, 86, `duck-${kind}`).setDisplaySize(22, 22),
-      this.add.text(-108, 84, `Big Move: ${POWERS[kind].name}`, textStyle(18, { ...ink, color: COLORS.textGold, weight: '700' })).setOrigin(0, 0.5),
-      this.add.text(-108, 105, 'tap the gold button on the right', textStyle(16, { ...ink, color: COLORS.textGrey })).setOrigin(0, 0.5),
+      this.add.text(-108, 84, `Big Move: ${POWERS[kind].name}`, textStyle(18, { ...INK, color: COLORS.textGold, weight: '700' })).setOrigin(0, 0.5),
+      this.add.text(-108, 105, 'tap the gold button on the right', textStyle(16, INK_GREY)).setOrigin(0, 0.5),
     ];
     const popup = this.add.container(196, 232, [card, lines, ...bigMove]).setDepth(DEPTH.hud + 5);
     this.showPopup(popup, 4000);
@@ -1431,15 +1431,14 @@ export class GameScene extends Phaser.Scene {
     this.cancelMove();
     this.closePopup();
     playSound(this, 'tap');
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const { name, text } = this.tileWords(kind);
     const card = drawCard(this.add.graphics(), 320, 130, { radius: 18 });
     const popup = this.add
       .container(Math.max(170, Math.min(WORLD.width - 170, at.x)), at.y + (at.y < 300 ? 120 : -120), [
         card,
         this.tileIcon(kind, -126, -34),
-        this.add.text(-100, -34, name, textStyle(24, { ...ink, weight: '700' })).setOrigin(0, 0.5),
-        this.add.text(-142, -6, text, { ...textStyle(17, ink), wordWrap: { width: 284 } }).setOrigin(0, 0),
+        this.add.text(-100, -34, name, textStyle(24, { ...INK, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-142, -6, text, { ...textStyle(17, INK), wordWrap: { width: 284 } }).setOrigin(0, 0),
       ])
       .setDepth(DEPTH.hud + 5);
     this.showPopup(popup, 5000);
@@ -1449,21 +1448,20 @@ export class GameScene extends Phaser.Scene {
   private showMapKey(): void {
     if (this.popup || isOver(this.state)) return;
     const kinds = this.tilesOnMap();
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const W = 460;
     const rowH = 56;
     const H = 64 + kinds.length * rowH;
     const parts: Phaser.GameObjects.GameObject[] = [
       drawCard(this.add.graphics(), W, H, { radius: 20, border: COLORS.gold, borderWidth: 5 }),
-      this.add.text(0, -H / 2 + 30, 'On this map', textStyle(26, { ...ink, weight: '700' })).setOrigin(0.5),
+      this.add.text(0, -H / 2 + 30, 'On this map', textStyle(26, { ...INK, weight: '700' })).setOrigin(0.5),
     ];
     kinds.forEach((kind, i) => {
       const y = -H / 2 + 76 + i * rowH;
       const { name, text } = this.tileWords(kind);
       parts.push(
         this.tileIcon(kind, -W / 2 + 36, y),
-        this.add.text(-W / 2 + 64, y - 12, name, textStyle(20, { ...ink, weight: '700' })).setOrigin(0, 0.5),
-        this.fitWidth(this.add.text(-W / 2 + 64, y + 12, text, textStyle(17, ink)).setOrigin(0, 0.5), W - 84),
+        this.add.text(-W / 2 + 64, y - 12, name, textStyle(20, { ...INK, weight: '700' })).setOrigin(0, 0.5),
+        this.fitWidth(this.add.text(-W / 2 + 64, y + 12, text, textStyle(17, INK)).setOrigin(0, 0.5), W - 84),
       );
     });
     const popup = this.add.container(WORLD.width / 2, 250 + H / 2 - 60, parts).setDepth(DEPTH.hud + 5);
@@ -1477,19 +1475,18 @@ export class GameScene extends Phaser.Scene {
     this.cancelMove();
     this.closePopup();
     playSound(this, 'tap');
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const boost = Math.round(FOUNTAIN.damageBoost * 100);
     const card = drawCard(this.add.graphics(), 320, 170, { radius: 18 });
     const popup = this.add
       .container(Math.max(170, Math.min(WORLD.width - 170, at.x)), at.y + (at.y < 300 ? 150 : -150), [
         card,
         this.add.image(-118, -46, 'fountain').setDisplaySize(52, 52),
-        this.add.text(-84, -58, 'Solar Fountain', textStyle(26, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-84, -58, 'Solar Fountain', textStyle(26, { ...INK, weight: '700' })).setOrigin(0, 0.5),
         this.add.image(-76, -30, 'icon-bolt').setDisplaySize(20, 20),
-        this.add.text(-62, -30, 'Runs on the battery', textStyle(17, { ...ink, color: COLORS.blueDarkCss, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-62, -30, 'Runs on the battery', textStyle(17, { ...INK, color: COLORS.blueDarkCss, weight: '700' })).setOrigin(0, 0.5),
         this.add
           .text(-142, 4, `Ducks in its spray hit ${boost}% harder while the battery has charge. The sun charges it by day; it runs down at night.`, {
-            ...textStyle(16, ink),
+            ...textStyle(16, INK),
             wordWrap: { width: 284 },
           })
           .setOrigin(0, 0),
@@ -1526,20 +1523,19 @@ export class GameScene extends Phaser.Scene {
     const parts: Phaser.GameObjects.GameObject[] = [card, block, info, stats, aim, divider];
 
     // Upgrade section.
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const next = nextUpgrade(duck.kind, duck.level);
     if (final) {
       // The final upgrade: pick one of two paths (and keep it).
-      parts.push(this.add.text(0, 64 - lift, 'Final upgrade: pick one!', textStyle(20, { ...ink, color: COLORS.textGold, weight: '700' })).setOrigin(0.5));
+      parts.push(this.add.text(0, 64 - lift, 'Final upgrade: pick one!', textStyle(20, { ...INK, color: COLORS.textGold, weight: '700' })).setOrigin(0.5));
       upgradeOptions(duck.kind, duck.level).forEach((option, path) => {
         const x = path === 0 ? -71 : 71;
         const affordable = canUpgrade(this.state, duckId, path);
         parts.push(
-          drawCard(this.add.graphics(), 140, 170, { radius: 12, fill: 0xfff0b3, border: COLORS.gold, borderWidth: 3 }).setPosition(x, 165 - lift),
-          this.add.text(x, 86 - lift, option.name, { ...textStyle(18, { ...ink, weight: '700' }), align: 'center', wordWrap: { width: 132 } }).setOrigin(0.5, 0),
+          drawCard(this.add.graphics(), 140, 170, { radius: 12, fill: COLORS.creamSelected, border: COLORS.gold, borderWidth: 3 }).setPosition(x, 165 - lift),
+          this.add.text(x, 86 - lift, option.name, { ...textStyle(18, { ...INK, weight: '700' }), align: 'center', wordWrap: { width: 132 } }).setOrigin(0.5, 0),
           // Names can take two lines, so the words hang below the name's longest case.
           this.add
-            .text(x, 134 - lift, option.description, { ...textStyle(15, ink), align: 'center', wordWrap: { width: 130 } })
+            .text(x, 134 - lift, option.description, { ...textStyle(15, INK), align: 'center', wordWrap: { width: 130 } })
             .setOrigin(0.5, 0),
           this.priceButton(x, 222 - lift, option.cost, affordable, () => this.upgrade(duckId, path), { width: 124, height: 38, fontSize: 20 }),
         );
@@ -1547,8 +1543,8 @@ export class GameScene extends Phaser.Scene {
     } else if (next) {
       const affordable = canUpgrade(this.state, duckId);
       parts.push(
-        this.add.text(-138, 68, `Upgrade: ${next.name}`, textStyle(20, { ...ink, weight: '700' })).setOrigin(0, 0.5),
-        this.add.text(-138, 94, next.description, { ...textStyle(16, ink), wordWrap: { width: 276 } }).setOrigin(0, 0.5),
+        this.add.text(-138, 68, `Upgrade: ${next.name}`, textStyle(20, { ...INK, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-138, 94, next.description, { ...textStyle(16, INK), wordWrap: { width: 276 } }).setOrigin(0, 0.5),
         this.priceButton(0, 146, next.cost, affordable, () => this.upgrade(duckId)),
       );
     } else if (trainingCost(this.state, duckId) !== undefined) {
@@ -1557,8 +1553,8 @@ export class GameScene extends Phaser.Scene {
       const affordable = this.state.peas >= cost;
       const boost = Math.round(ENDLESS.training.damage * 100);
       parts.push(
-        this.add.text(-138, 68, `Train: level ${duck.training + 1}`, textStyle(20, { ...ink, weight: '700' })).setOrigin(0, 0.5),
-        this.add.text(-138, 94, `Hits ${boost}% harder every time you train.`, { ...textStyle(16, ink), wordWrap: { width: 276 } }).setOrigin(0, 0.5),
+        this.add.text(-138, 68, `Train: level ${duck.training + 1}`, textStyle(20, { ...INK, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-138, 94, `Hits ${boost}% harder every time you train.`, { ...textStyle(16, INK), wordWrap: { width: 276 } }).setOrigin(0, 0.5),
         this.priceButton(0, 146, cost, affordable, () => this.train(duckId)),
       );
     } else {
@@ -1605,13 +1601,12 @@ export class GameScene extends Phaser.Scene {
 
   /** Three numbers for a placed duck: predators chased off, its power's count, and damage. Kept up to date while open. */
   private drawDuckReport(duckId: number, kind: DuckKind, x: number, y: number): Phaser.GameObjects.Container {
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const labels = ['Chased off', DUCKS[kind].power.stat, 'Damage'];
     const values = labels.map((label, i) => {
       const cx = (i - 1) * 96;
       return {
-        value: this.add.text(cx, -9, '0', textStyle(21, { ...ink, weight: '700' })).setOrigin(0.5),
-        label: this.add.text(cx, 12, label, textStyle(16, { ...ink, color: COLORS.textGrey })).setOrigin(0.5),
+        value: this.add.text(cx, -9, '0', textStyle(21, { ...INK, weight: '700' })).setOrigin(0.5),
+        label: this.add.text(cx, 12, label, textStyle(16, INK_GREY)).setOrigin(0.5),
       };
     });
     const back = this.add.graphics().fillStyle(COLORS.ink, 0.06).fillRoundedRect(-140, -24, 280, 48, 12);
@@ -1636,7 +1631,7 @@ export class GameScene extends Phaser.Scene {
       const duck = findDuck(this.state.battle, duckId);
       for (const { targeting, card } of cards) {
         const on = duck?.targeting === targeting;
-        drawCard(card, W, H, { radius: 12, fill: on ? 0xfff0b3 : COLORS.cream, border: on ? COLORS.gold : COLORS.ink, borderWidth: on ? 5 : 2 });
+        drawCard(card, W, H, { radius: 12, fill: on ? COLORS.creamSelected : COLORS.cream, border: on ? COLORS.gold : COLORS.ink, borderWidth: on ? 5 : 2 });
       }
     };
     TARGETING_ORDER.forEach((targeting, i) => {
@@ -1765,13 +1760,12 @@ export class GameScene extends Phaser.Scene {
     const duck = findDuck(this.state.battle, duckId);
     this.closePopup();
     if (!duck) return;
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const scrim = this.tapCatcher(DEPTH.hud + 4, () => this.closePopup());
     const card = this.add.container(WORLD.width / 2, WORLD.height / 2, [
       drawCard(this.add.graphics(), 460, 300, { radius: 24, borderWidth: 5 }),
       this.add.zone(0, 0, 460, 300).setInteractive(),
       this.add.text(0, -104, `Sell ${DUCKS[duck.kind].name}?`, textStyle(40, { weight: '700', color: COLORS.goldCss, strokeThickness: 8 })).setOrigin(0.5),
-      this.add.text(0, -54, `You'll get ${shortNumber(refundFor(duck))} peas back.`, textStyle(24, ink)).setOrigin(0.5),
+      this.add.text(0, -54, `You'll get ${shortNumber(refundFor(duck))} peas back.`, textStyle(24, INK)).setOrigin(0.5),
       // "No" is the big green one: keeping the duck is the safe choice.
       drawBigButton(this, 0, 20, 'No, keep it', COLORS.green, COLORS.greenDark, () => this.closePopup(), { width: 360, height: 80, fontSize: 34 }),
       drawBigButton(this, 0, 110, 'Sell', COLORS.orange, COLORS.orangeDark, () => this.sellNow(duckId), { width: 200, height: 64, fontSize: 28 }),
@@ -1904,7 +1898,7 @@ export class GameScene extends Phaser.Scene {
       const b = partner.position;
       lines.lineStyle(5, COLORS.pink, 0.75).lineBetween(a.x, a.y, b.x, b.y);
       const heart = this.add
-        .text((a.x + b.x) / 2, (a.y + b.y) / 2, '♥', textStyle(28, { color: '#ff7aa2', stroke: '#ffffff', strokeThickness: 5 }))
+        .text((a.x + b.x) / 2, (a.y + b.y) / 2, '♥', textStyle(28, { color: COLORS.pinkCss, stroke: '#ffffff', strokeThickness: 5 }))
         .setOrigin(0.5);
       this.peckingLoop.add(heart);
       this.tweens.add({ targets: heart, scale: 1.3, duration: 500, yoyo: true, repeat: -1 });
@@ -1953,8 +1947,8 @@ export class GameScene extends Phaser.Scene {
     const hpBar = this.add.container(0, top - 8, [hpBack, hpFill]).setVisible(false);
     const dizzy = this.add
       .container(0, boss ? top - 4 : top + 6, [
-        this.add.image(-12, 0, 'star').setDisplaySize(16, 16).setTint(0xffe066),
-        this.add.image(12, 0, 'star').setDisplaySize(16, 16).setTint(0xffe066),
+        this.add.image(-12, 0, 'star').setDisplaySize(16, 16).setTint(COLORS.goldLight),
+        this.add.image(12, 0, 'star').setDisplaySize(16, 16).setTint(COLORS.goldLight),
       ])
       .setVisible(false);
     this.tweens.add({ targets: dizzy, angle: 360, duration: 900, repeat: -1 });
@@ -1982,7 +1976,7 @@ export class GameScene extends Phaser.Scene {
       sprite.hpBar.setVisible(health < 1 && !boss);
       if (boss) this.bossBar!.fill.width = BOSS_BAR_WIDTH * health;
       sprite.hpFill.width = HP_BAR_WIDTH * health;
-      sprite.hpFill.fillColor = health > 0.5 ? 0x6ee06e : health > 0.25 ? 0xffd23f : 0xff6b5a;
+      sprite.hpFill.fillColor = health > 0.5 ? 0x6ee06e : health > 0.25 ? COLORS.gold : COLORS.coral;
       sprite.dizzy.setVisible(enemy.stopTime > 0);
 
       // A dusty ring at its feet while Curtis slows it.
@@ -2108,55 +2102,10 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'won':
       case 'lost': {
-        const result: ResultSceneData = {
-          won: event.type === 'won',
-          difficulty: this.difficulty,
-          level: this.levelIndex,
-          daily: this.daily?.date,
-          trial: this.trial?.id,
-          sandbox: this.sandbox,
-          report: this.state.battle.report,
-        };
-        if (this.sandbox) {
-          // Nothing to save: the Sandbox is for trying things out.
-        } else if (this.endless) {
-          // The score is waves survived (the one that got you doesn't count). Keep the best.
-          const progress = loadProgress();
-          result.endlessWaves = this.state.phase === 'won' ? this.state.waves.length : this.state.waveIndex;
-          const previousBest = endlessBest(progress, this.difficulty, this.levelIndex);
-          result.newBest = previousBest > 0 && result.endlessWaves > previousBest;
-          result.endlessBest = Math.max(previousBest, result.endlessWaves);
-          saveProgress(recordEndless(progress, this.difficulty, this.levelIndex, result.endlessWaves));
-        } else if (result.won && this.trial) {
-          // A trial win earns its ribbon (and ribbons can unlock hats). Its score goes on the trial's own board.
-          result.hearts = this.state.hearts;
-          result.peas = scorePeas(this.state);
-          result.score = scoreFor(this.state.hearts, result.peas, this.difficulty);
-          const progress = loadProgress();
-          result.newRibbon = !progress.trials?.[this.difficulty]?.includes(this.trial.id);
-          const saved = recordTrialWin(progress, this.difficulty, this.trial.id);
-          saveProgress(saved);
-          result.newHats = newlyUnlocked(totalEarned(progress), totalEarned(saved));
-        } else if (result.won) {
-          // Save progress: this unlocks the next level and keeps the best stars and score.
-          // (A Daily Challenge win is saved on its own and doesn't unlock anything.)
-          result.hearts = this.state.hearts;
-          result.peas = scorePeas(this.state);
-          result.stars = starsFor(this.state.hearts, challengeSettings(this.difficulty, this.daily?.challenge).hearts);
-          result.score = scoreFor(this.state.hearts, result.peas, this.difficulty);
-          const progress = loadProgress();
-          const previousBest = this.daily
-            ? (dailyRecord(progress, this.daily.date, this.difficulty)?.bestScore ?? 0)
-            : (progress.levels[this.difficulty][this.levelIndex]?.bestScore ?? 0);
-          result.newBest = previousBest > 0 && result.score > previousBest;
-          const saved = this.daily
-            ? recordDailyWin(progress, this.daily.date, this.difficulty, result.stars, result.score)
-            : recordWin(progress, this.difficulty, this.levelIndex, result.stars, result.score);
-          saveProgress(saved);
-          if (this.daily) result.streak = dailyStreak(saved, this.daily.date);
-          // New stars can unlock hats.
-          result.newHats = newlyUnlocked(totalEarned(progress), totalEarned(saved));
-        }
+        // The rules for what a finished game means (score, stars, new best, ribbons, hats) live in logic/run.ts.
+        const { outcome, progress } = finishRun(this.state, this.mode(), loadProgress());
+        if (!this.sandbox) saveProgress(progress);
+        const result: ResultSceneData = { ...outcome, report: this.state.battle.report };
         this.time.delayedCall(1000, () => this.scene.start('ResultScene', result));
         break;
       }
@@ -2286,7 +2235,7 @@ export class GameScene extends Phaser.Scene {
 
   /** A pea pops out of a chased-off predator and flies to the pea counter. */
   private flyPea(from: Point, amount: number): void {
-    this.floatText({ x: from.x, y: from.y - 40 }, `+${amount}`, '#c8f59a');
+    this.floatText({ x: from.x, y: from.y - 40 }, `+${amount}`, COLORS.peaCss);
     const pea = this.add.image(from.x, from.y - 20, 'icon-pea').setDisplaySize(22, 22).setDepth(DEPTH.hud + 1);
     this.tweens.add({
       targets: pea,
@@ -2325,7 +2274,7 @@ export class GameScene extends Phaser.Scene {
     if (bonus > 0) {
       const chip = this.add.container(text.width / 2 + 60, 0, [
         this.add.image(-22, 0, 'icon-pea').setDisplaySize(30, 30),
-        this.add.text(-4, 0, `+${bonus}`, textStyle(32, { weight: '700', color: '#c8f59a' })).setOrigin(0, 0.5),
+        this.add.text(-4, 0, `+${bonus}`, textStyle(32, { weight: '700', color: COLORS.peaCss })).setOrigin(0, 0.5),
       ]);
       text.x -= 50;
       chip.x -= 50;
@@ -2379,7 +2328,7 @@ export class GameScene extends Phaser.Scene {
     const face = this.enemyIcon(enemy.kind, -208, -1, 52, 40);
     const name = this.add.text(-174, -10, stats.name, textStyle(16)).setOrigin(0, 0.5);
     const back = this.add.rectangle(-174, 10, BOSS_BAR_WIDTH, 12, 0x000000, 0.5).setOrigin(0, 0.5);
-    const fill = this.add.rectangle(-174, 10, BOSS_BAR_WIDTH, 12, 0xff6b5a).setOrigin(0, 0.5);
+    const fill = this.add.rectangle(-174, 10, BOSS_BAR_WIDTH, 12, COLORS.coral).setOrigin(0, 0.5);
     // Sits along the very bottom edge, below where paths run.
     const container = this.add
       .container(WORLD.width / 2, WORLD.height - 20, [panel, face, name, back, fill])
@@ -2501,7 +2450,6 @@ export class GameScene extends Phaser.Scene {
   private showPerkChoice(offer: PerkId[]): void {
     this.cancelMove();
     this.closePopup();
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const dim = this.add
       .rectangle(BACKDROP.x + BACKDROP.width / 2, BACKDROP.y + BACKDROP.height / 2, BACKDROP.width, BACKDROP.height, 0x000000, 0.45)
       .setInteractive(); // blocks taps on the map underneath
@@ -2522,8 +2470,8 @@ export class GameScene extends Phaser.Scene {
       const cardParts: Phaser.GameObjects.GameObject[] = [
         drawCard(this.add.graphics(), W, H, { radius: 22, border: reward ? COLORS.pink : COLORS.gold, borderWidth: reward ? 7 : 5 }),
         icon,
-        this.add.text(0, 6, perk.name, textStyle(26, { ...ink, weight: '700' })).setOrigin(0.5),
-        this.add.text(0, 60, perk.description, { ...textStyle(18, ink), align: 'center', wordWrap: { width: W - 30 } }).setOrigin(0.5),
+        this.add.text(0, 6, perk.name, textStyle(26, { ...INK, weight: '700' })).setOrigin(0.5),
+        this.add.text(0, 60, perk.description, { ...textStyle(18, INK), align: 'center', wordWrap: { width: W - 30 } }).setOrigin(0.5),
       ];
       if (have > 0) {
         // Already picked before: this one makes it stronger.
@@ -2586,16 +2534,15 @@ export class GameScene extends Phaser.Scene {
     this.cancelMove();
     this.closePopup();
     playSound(this, 'tap');
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
     const W = 340;
     const rowH = Math.min(34, 520 / Math.max(1, taken.length)); // squeeze up when there are lots, to stay on screen
     const H = 70 + Math.max(1, taken.length) * rowH;
     const parts: Phaser.GameObjects.GameObject[] = [
       drawCard(this.add.graphics(), W, H, { radius: 18 }),
-      this.add.text(0, -H / 2 + 28, 'Pond Perks', textStyle(24, { ...ink, weight: '700' })).setOrigin(0.5),
+      this.add.text(0, -H / 2 + 28, 'Pond Perks', textStyle(24, { ...INK, weight: '700' })).setOrigin(0.5),
     ];
     if (taken.length === 0) {
-      parts.push(this.add.text(0, -H / 2 + 70, `Pick one every ${ENDLESS.perkEvery} waves!`, textStyle(17, ink)).setOrigin(0.5));
+      parts.push(this.add.text(0, -H / 2 + 70, `Pick one every ${ENDLESS.perkEvery} waves!`, textStyle(17, INK)).setOrigin(0.5));
     }
     taken.forEach((id, i) => {
       const y = -H / 2 + 70 + i * rowH;
@@ -2605,7 +2552,7 @@ export class GameScene extends Phaser.Scene {
       const times = this.state.perks[id] ?? 0;
       parts.push(
         icon,
-        this.add.text(-W / 2 + 52, y, `${PERKS[id].name}${times > 1 ? ` ×${times}` : ''}`, textStyle(18, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+        this.add.text(-W / 2 + 52, y, `${PERKS[id].name}${times > 1 ? ` ×${times}` : ''}`, textStyle(18, { ...INK, weight: '700' })).setOrigin(0, 0.5),
       );
     });
     const area = ENDLESS_PERKS_AREA;
@@ -2616,7 +2563,7 @@ export class GameScene extends Phaser.Scene {
   /** Endless Pond: under the hearts, spend peas to fix the duck house (one heart back). */
   private drawRepairButton(): { container: Phaser.GameObjects.Container; cost: Phaser.GameObjects.Text; pea: Phaser.GameObjects.Image } {
     const { x, y, width, height } = REPAIR_BUTTON;
-    const cost = this.add.text(22, 0, '', textStyle(20, { weight: '700', color: '#c8f59a' })).setOrigin(0, 0.5);
+    const cost = this.add.text(22, 0, '', textStyle(20, { weight: '700', color: COLORS.peaCss })).setOrigin(0, 0.5);
     const pea = this.add.image(8, 0, 'icon-pea').setDisplaySize(20, 20);
     const hit = this.add.zone(0, 0, width, height + 8).setInteractive({ useHandCursor: true });
     const container = this.add
@@ -2652,7 +2599,7 @@ export class GameScene extends Phaser.Scene {
     const arrows = this.add.graphics().fillStyle(0xffffff).lineStyle(3, COLORS.ink);
     for (const x of [-14, 2]) arrows.fillTriangle(x, -13, x, 13, x + 16, 0).strokeTriangle(x, -13, x, 13, x + 16, 0);
     const { container: button, hit } = drawRoundButton(this, 0, 0, 32, COLORS.orange, COLORS.orangeDark, [arrows]);
-    const label = this.add.text(-84, 0, '', textStyle(20, { weight: '700', color: '#c8f59a' })).setOrigin(0, 0.5);
+    const label = this.add.text(-84, 0, '', textStyle(20, { weight: '700', color: COLORS.peaCss })).setOrigin(0, 0.5);
     const pill = this.add.container(0, 0, [
       drawPill(this, -72, 0, 84, 36),
       this.add.image(-98, 0, 'icon-pea').setDisplaySize(20, 20),
@@ -2683,7 +2630,6 @@ export class GameScene extends Phaser.Scene {
     const night = game.waves[nextIndex]!.time === 'night';
     const W = 320;
     const H = 250;
-    const ink = { color: COLORS.inkCss, strokeThickness: 0 };
 
     // Taps anywhere outside the card close it.
     const scrim = this.tapCatcher(DEPTH.hud + 4, () => this.closePopup());
@@ -2692,7 +2638,7 @@ export class GameScene extends Phaser.Scene {
       drawCard(this.add.graphics(), W, H, { radius: 18 }),
       this.add.zone(0, 0, W, H).setInteractive(), // taps on the card itself don't close it
       this.add.image(-W / 2 + 34, -H / 2 + 30, night ? 'icon-moon' : 'icon-sun').setDisplaySize(30, 30),
-      this.add.text(-W / 2 + 56, -H / 2 + 30, `Wave ${nextIndex + 1} is next`, textStyle(24, { ...ink, weight: '700' })).setOrigin(0, 0.5),
+      this.add.text(-W / 2 + 56, -H / 2 + 30, `Wave ${nextIndex + 1} is next`, textStyle(24, { ...INK, weight: '700' })).setOrigin(0, 0.5),
     ];
     const entries = wavePreview(game.waves, nextIndex);
     const chip = Math.min(PREVIEW.chip, (W - 30 + PREVIEW.gap) / entries.length - PREVIEW.gap);
@@ -2700,7 +2646,7 @@ export class GameScene extends Phaser.Scene {
       const x = (i - (entries.length - 1) / 2) * (chip + PREVIEW.gap);
       parts.push(this.drawPreviewChip(entry, x, -22, chip / PREVIEW.chip));
     });
-    const bonus = this.add.text(-2, 32, '', textStyle(22, { ...ink, color: COLORS.textGreen, weight: '700' })).setOrigin(0, 0.5);
+    const bonus = this.add.text(-2, 32, '', textStyle(22, { ...INK, color: COLORS.textGreen, weight: '700' })).setOrigin(0, 0.5);
     parts.push(this.add.image(-20, 32, 'icon-pea').setDisplaySize(24, 24), bonus);
     parts.push(
       drawBigButton(this, 0, 82, 'Send now!', COLORS.orange, COLORS.orangeDark, () => this.callEarly(), { width: 260, height: 54, fontSize: 26 }),
@@ -2793,11 +2739,11 @@ export class GameScene extends Phaser.Scene {
     if (isOver(this.state) || this.scene.isPaused()) return;
     playSound(this, 'tap');
     const data: PauseSceneData = {
-      again: { difficulty: this.difficulty, level: this.levelIndex, daily: this.daily?.date, endless: this.endless, trial: this.trial?.id, sandbox: this.sandbox },
+      again: this.mode(),
       difficulty: this.difficulty,
       // Leaving an Endless Pond run part-way still counts the waves survived so far.
       onLeave: () => {
-        if (this.endless) saveProgress(recordEndless(loadProgress(), this.difficulty, this.levelIndex, this.state.waveIndex));
+        if (this.endless) saveProgress(recordEndless(loadProgress(), this.difficulty, this.levelIndex, endlessWavesSurvived(this.state)));
       },
     };
     this.scene.launch('PauseScene', data);
@@ -2806,7 +2752,7 @@ export class GameScene extends Phaser.Scene {
 
   /** Craig's Guardian Blessing: tap her once per level to shield the duck house. */
   private drawCraigButton(): Phaser.GameObjects.Container {
-    this.craigGlow = this.add.image(0, 0, 'glow').setDisplaySize(170, 170).setTint(0xffe066).setAlpha(0.6);
+    this.craigGlow = this.add.image(0, 0, 'glow').setDisplaySize(170, 170).setTint(COLORS.goldLight).setAlpha(0.6);
     this.tweens.add({ targets: this.craigGlow, alpha: 0.25, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
     const frame = this.add.circle(0, 0, 54, COLORS.cream).setStrokeStyle(6, COLORS.gold);
     const outline = this.add.circle(0, 0, 58).setStrokeStyle(3, COLORS.ink);
