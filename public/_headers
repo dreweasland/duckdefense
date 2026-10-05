@@ -1,4 +1,5 @@
 # Extra response headers for the game's static files (Cloudflare reads this file).
+# The API's responses are set in worker/index.ts instead.
 
 # Built files have a fingerprint in their name, so browsers can keep them for good.
 /assets/*
@@ -7,3 +8,11 @@
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
+  # Nobody needs the camera, microphone, or location to play.
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  # What the page may load and where it may be shown. Scripts and the leaderboard API come
+  # from this site; the font comes from Google; sprites are SVGs that Phaser fetches as blob: URLs and
+  # Phaser's built-in placeholder pictures are data: URLs; the page's own styles are inline.
+  # The game can't be put in a frame on another site. (Vite's dev server doesn't read this
+  # file, so the dev tools aren't affected.)
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' blob: data:; connect-src 'self' blob:; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'

@@ -177,7 +177,7 @@ export function parseProgress(text: string | null): Progress {
     const hats: Partial<Record<DuckKind, HatKind>> = {};
     for (const kind of DUCK_ORDER) {
       const hat = data.hats?.[kind];
-      if (typeof hat === 'string' && hat in HATS) hats[kind] = hat as HatKind;
+      if (typeof hat === 'string' && Object.hasOwn(HATS, hat)) hats[kind] = hat as HatKind;
     }
     if (Object.keys(hats).length > 0) progress.hats = hats;
     for (const difficulty of DIFFICULTY_ORDER) {

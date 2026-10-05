@@ -1,18 +1,72 @@
 import { englishDataset, englishRecommendedTransformers, RegExpMatcher } from 'obscenity';
+import type { Challenge } from '../data/challenges';
 import { isDifficulty, type Difficulty } from '../data/difficulty';
+import { ENEMIES, type EnemyKind } from '../data/enemies';
 import { LEVEL_COUNT } from '../data/levelCount';
+import { VARIANTS, type VariantKind } from '../data/variants';
+import { EARLY_CALL, LEVEL_WAVES } from '../data/waves';
 import { ENDLESS, endlessLevel } from '../data/endless';
 import { findTrial } from '../data/trials';
-import { challengeSettings, dailyFor, isPostableDate } from './daily';
+import { challengeSettings, challengeWaves, dailyFor, isPostableDate } from './daily';
 import { scoreFor } from './progress';
 
 // Rules for the public leaderboard, shared by the game and the server so both agree.
 
 export const NAME_MAX_LENGTH = 12;
-/** More peas than this (leftover plus spent on ducks) isn't possible in a real game. */
-export const MAX_PEAS = 20_000;
+
+/**
+ * How long a boss is allowed to stay alive calling in minions when working out the most
+ * peas a level can pay. Minions pay peas too, and a boss keeps whistling until it's beaten
+ * or gets in, so there's no hard limit; five minutes is far longer than any real fight.
+ */
+export const BOSS_TIME_ALLOWANCE = 300;
+
+/**
+ * The most peas a level can possibly pay out (so the most that can count toward a score):
+ * the starting peas, every predator's reward (with its variant's bonus), every wave bonus,
+ * the early-call bonus for every predator, and the minions a boss could call in
+ * BOSS_TIME_ALLOWANCE seconds. A posted score with more peas than this was made up.
+ */
+export function maxPeasFor(level: number, difficulty: Difficulty, twist?: Challenge): number {
+  const waves = challengeWaves(LEVEL_WAVES[level] ?? [], twist);
+  const reward = (kind: EnemyKind, variant?: VariantKind) =>
+    Math.round(ENEMIES[kind].peas * (variant ? VARIANTS[variant].peas : 1)) + EARLY_CALL.peasPerPredator;
+  let peas = challengeSettings(difficulty, twist).startingPeas;
+  for (const wave of waves) {
+    peas += wave.bonusPeas;
+    for (const group of wave.groups) {
+      peas += group.count * reward(group.enemy, group.variant);
+      const stats = ENEMIES[group.enemy];
+      const summons = [stats.summons, stats.phase?.summons].filter((s) => s !== undefined);
+      if (summons.length) {
+        // The faster of the boss's two whistling rates, for the whole allowance.
+        const perSecond = Math.max(...summons.map((s) => s.count / s.every));
+        const minion = summons[0]!.enemy;
+        peas += group.count * Math.ceil(perSecond * BOSS_TIME_ALLOWANCE) * reward(minion);
+      }
+    }
+  }
+  return peas;
+}
 
 const profanity = new RegExpMatcher({ ...englishDataset.build(), ...englishRecommendedTransformers });
+
+/**
+ * What the server's rate limit counts posts by. An IPv4 address is one player; an IPv6
+ * player gets a whole /64 block of addresses to pick from, so only its first half counts.
+ */
+export function rateLimitKey(ip: string): string {
+  if (!ip.includes(':')) return ip;
+  // Expand "::" so there are always 8 groups, then keep the first 4.
+  const [head = '', tail = ''] = ip.split('::');
+  const front = head ? head.split(':') : [];
+  const back = tail ? tail.split(':') : [];
+  const groups = [...front, ...Array<string>(Math.max(0, 8 - front.length - back.length)).fill('0'), ...back];
+  return groups
+    .slice(0, 4)
+    .map((g) => g.toLowerCase().replace(/^0+(?=\w)/, ''))
+    .join(':');
+}
 
 export type NameCheck = { ok: true; name: string } | { ok: false; reason: string };
 
@@ -84,7 +138,7 @@ export function checkSubmission(body: unknown, now: Date = new Date()): Submissi
   if (!Number.isInteger(hearts) || (hearts as number) < 1 || (hearts as number) > maxHearts) {
     return { ok: false, reason: 'That score is not possible.' };
   }
-  if (!Number.isInteger(peas) || (peas as number) < 0 || (peas as number) > MAX_PEAS) {
+  if (!Number.isInteger(peas) || (peas as number) < 0 || (peas as number) > maxPeasFor(level as number, difficulty, twist)) {
     return { ok: false, reason: 'That score is not possible.' };
   }
   const entry: ScoreSubmission = {

@@ -248,7 +248,10 @@ When adding a feature, prefer a design where the tunable part lives in a data fi
   instead of the kids' drawings.)
 - **M5: Polish.** Title screen, level select, save progress in localStorage, mobile touch
   support, and a public leaderboard on Workers + D1 (typed names, profanity-filtered,
-  scores computed by the server, rate limited).
+  rate limited). The server applies the score formula itself and rejects more peas than the
+  level can pay out (`maxPeasFor` in `src/logic/leaderboard.ts`), but the hearts and peas
+  still come from the client, so a determined cheat can post a "perfect run"; the admin
+  DELETE is the backstop.
 
 ## Commands
 

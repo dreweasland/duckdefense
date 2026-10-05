@@ -71,6 +71,9 @@ describe('progress', () => {
   it('ignores corrupt or tampered saves', () => {
     expect(parseProgress('not json')).toEqual(emptyProgress());
     expect(parseProgress(JSON.stringify({ levels: { easy: { 0: { stars: 99 } } } }))).toEqual(emptyProgress());
+    // A hat that isn't one (an object's built-in property names would otherwise slip through "in").
+    const save = { ...emptyProgress(), hats: { sunny: 'constructor', potato: 'party' } };
+    expect(parseProgress(JSON.stringify(save)).hats).toEqual({ potato: 'party' });
   });
 });
 

@@ -488,3 +488,6 @@ export const LEVEL7_WAVES: Wave[] = [
     bonusPeas: 0,
   },
 ];
+
+/** Every level's waves, in level order (the maps are in levels.ts; this list is all the server needs). */
+export const LEVEL_WAVES: readonly Wave[][] = [LEVEL1_WAVES, LEVEL2_WAVES, LEVEL3_WAVES, LEVEL4_WAVES, LEVEL5_WAVES, LEVEL6_WAVES, LEVEL7_WAVES];

@@ -8,7 +8,7 @@
 //                                                       or an Endless Pond run { name, difficulty, endless: true, level, waves }
 //   DELETE /api/scores/:id                       remove an entry (needs the ADMIN_TOKEN secret)
 
-import { checkSubmission } from '../src/logic/leaderboard';
+import { checkSubmission, rateLimitKey } from '../src/logic/leaderboard';
 import { LEVEL_COUNT } from '../src/data/levelCount';
 import { endlessLevel, endlessMap } from '../src/data/endless';
 import { dailyFor } from '../src/logic/daily';
@@ -25,6 +25,8 @@ interface Env {
 const TOP_SCORES = 10;
 // Each player (by IP) can post at most this many scores per this many seconds.
 const RATE_LIMIT = { max: 3, seconds: 60 };
+// The hashed address is only needed for the rate limit, so it's wiped from rows older than this.
+const KEEP_IP_HASH = '-1 day';
 const MAX_BODY_BYTES = 1000;
 // The rows on one board: a level's scores, one day's Daily Challenge scores, or a Level Trial's.
 const BOARD_FILTER = { level: 'level = ? AND daily IS NULL AND trial IS NULL', daily: 'daily = ?', trial: 'trial = ?' } as const;
@@ -90,6 +92,14 @@ async function listScores(url: URL, env: Env): Promise<Response> {
 }
 
 async function postScore(request: Request, env: Env): Promise<Response> {
+  // Only the game posts here. A browser on another site can still send a request (it can't
+  // read the answer, but it would spend the player's rate limit), so turn those away: the
+  // browser says where a request came from, and the game always sends JSON.
+  const site = request.headers.get('Sec-Fetch-Site');
+  if (site !== null && site !== 'same-origin' && site !== 'none') return json({ error: 'Not allowed.' }, 403);
+  if (!(request.headers.get('Content-Type') ?? '').toLowerCase().startsWith('application/json')) {
+    return json({ error: 'Send JSON.' }, 415);
+  }
   const text = await readBody(request, MAX_BODY_BYTES);
   if (text === undefined) return json({ error: 'Too big.' }, 413);
   let body: unknown;
@@ -102,7 +112,7 @@ async function postScore(request: Request, env: Env): Promise<Response> {
   if (!check.ok) return json({ error: check.reason }, 400);
   const { entry } = check;
 
-  const ipHash = await hash(`duckdefense:${request.headers.get('CF-Connecting-IP') ?? 'unknown'}`);
+  const ipHash = await hash(`duckdefense:${rateLimitKey(request.headers.get('CF-Connecting-IP') ?? 'unknown')}`);
   const recent = await env.DB.prepare(
     `SELECT COUNT(*) AS count FROM scores WHERE ip_hash = ? AND created_at > datetime('now', ?)`,
   )
@@ -111,6 +121,9 @@ async function postScore(request: Request, env: Env): Promise<Response> {
   if ((recent?.count ?? 0) >= RATE_LIMIT.max) {
     return json({ error: 'Slow down! Try again in a minute.' }, 429);
   }
+
+  // Old rows don't need their address hash any more; drop it while we're here.
+  await env.DB.prepare(`UPDATE scores SET ip_hash = '' WHERE ip_hash != '' AND created_at < datetime('now', ?)`).bind(KEEP_IP_HASH).run();
 
   const daily = entry.daily ?? null;
   const trial = entry.trial ?? null;
