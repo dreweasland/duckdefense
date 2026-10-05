@@ -147,7 +147,7 @@ export class PowerButtons {
     const host = this.host;
     host.showBanner(`${POWERS[kind].name}!`);
     for (const id of result.hitIds) {
-      const sprite = host.enemySprites.get(id);
+      const sprite = host.enemies.get(id);
       if (sprite) sprite.flashUntil = host.time.now + 200;
     }
     for (const duckId of result.duckIds) {
@@ -162,7 +162,7 @@ export class PowerButtons {
           host.ring(duck.position.x, duck.position.y - 20, range, COLORS.blue, 600);
           host.fx.splash.explode(40, duck.position.x, duck.position.y - 30);
           for (const id of result.hitIds) {
-            const enemy = host.enemySprites.get(id);
+            const enemy = host.enemies.get(id);
             if (enemy) host.fx.splash.explode(14, enemy.root.x, enemy.root.y - 20);
           }
           break;

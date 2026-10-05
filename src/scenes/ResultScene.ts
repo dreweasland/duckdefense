@@ -149,7 +149,7 @@ export class ResultScene extends Phaser.Scene {
           .setDisplaySize(66, 66)
           .setTint(earned ? COLORS.gold : COLORS.disabled)
           .setDepth(52);
-        // Pop in one after another; stars you didn't earn are smaller and INK_GREY.
+        // Pop in one after another; stars you didn’t earn are smaller and grey.
         const full = star.scaleX;
         star.setScale(0);
         this.tweens.add({ targets: star, scale: earned ? full : full * 0.8, delay: 300 + s * 250, duration: 300, ease: 'Back.Out' });

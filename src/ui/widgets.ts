@@ -12,7 +12,7 @@ export function drawPill(scene: Phaser.Scene, x: number, y: number, width: numbe
     .strokeRoundedRect(x - width / 2, y - height / 2, width, height, height / 2);
 }
 
-/** A cream card with an INK outline, like the duck picker cards and result panel. */
+/** A cream card with an ink outline, like the duck picker cards and result panel. */
 export function drawCard(
   graphics: Phaser.GameObjects.Graphics,
   width: number,
@@ -195,4 +195,10 @@ export function popSpeechBubble(scene: Phaser.Scene, x: number, y: number, messa
     ],
     onComplete: () => bubble.destroy(),
   });
+}
+
+/** Shrinks a line of text to fit a width (long names like "Grand Old Chester" or "Regrowing Snapping Turtle"). */
+export function fitWidth(text: Phaser.GameObjects.Text, width: number): Phaser.GameObjects.Text {
+  if (text.width > width) text.setScale(width / text.width);
+  return text;
 }

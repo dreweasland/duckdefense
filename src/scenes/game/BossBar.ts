@@ -74,7 +74,7 @@ export class BossBar {
     host.cameras.main.shake(400, 0.005);
     if (phase) popSpeechBubble(host, at.x, at.y - 110, phase.quip, DEPTH.floatText);
     host.showBanner(`${name} is getting angry!`);
-    const sprite = host.enemySprites.get(enemy.id);
+    const sprite = host.enemies.get(enemy.id);
     if (sprite) {
       host.fx.stars.explode(16, at.x, at.y - 40);
       host.tweens.add({ targets: sprite.art, scale: sprite.art.scale * 1.25, duration: 160, yoyo: true, repeat: 2 });

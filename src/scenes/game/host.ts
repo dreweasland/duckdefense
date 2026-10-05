@@ -1,8 +1,11 @@
 import type Phaser from 'phaser';
 import type { Difficulty } from '../../data/difficulty';
+import type { DuckKind } from '../../data/ducks';
+import type { HatKind } from '../../data/hats';
 import type { EnemyKind } from '../../data/enemies';
 import type { VariantKind } from '../../data/variants';
-import type { Duck, Enemy } from '../../logic/battle';
+import type { Duck } from '../../logic/battle';
+import type { EnemySprites } from './EnemySprites';
 import type { Game, PreviewEntry } from '../../logic/game';
 import type { Point } from '../../logic/geometry';
 
@@ -65,10 +68,10 @@ export interface GameHost extends Phaser.Scene {
   readonly house: Phaser.GameObjects.Image;
   /** The pill showing the hearts (it bounces when they change). */
   readonly heartsPill: Phaser.GameObjects.Container;
-  readonly enemySprites: ReadonlyMap<number, EnemySprite>;
+  /** The predators' pictures. */
+  readonly enemies: EnemySprites;
   /** A placed duck and its picture, if it's still on the map. */
   duckSprite(duckId: number): { sprite: DuckSprite; duck: Duck } | undefined;
-  addEnemySprite(enemy: Enemy): void;
 
   // Popups: one at a time. Opening one closes the last.
   /** The open card or panel, if any. Parts that open one set it, so the scene can close it. */
@@ -81,6 +84,19 @@ export interface GameHost extends Phaser.Scene {
   tapCatcher(depth: number, onTap: () => void): Phaser.GameObjects.Zone;
   /** Stops moving a duck, if one was being moved. */
   cancelMove(): void;
+  /** Marks a duck as the one whose panel is open (its reach ring brightens until the popup closes). */
+  focusDuck(duckId: number): void;
+
+  // Things you can do to a placed duck (the rules, the show, and the HUD refresh).
+  upgrade(duckId: number, path?: number): void;
+  /** Endless Pond: train a fully upgraded duck to hit harder. */
+  train(duckId: number): void;
+  /** Sells a duck right away (the panel asks first when that loses peas). */
+  sellNow(duckId: number): void;
+  /** Move mode: empty nests light up; tap one to hop the duck there. */
+  startMove(duckId: number): void;
+  /** Hats the ducks are wearing (for their cards). */
+  readonly hats: Partial<Record<DuckKind, HatKind>>;
 
   // Feedback the whole screen shares.
   refreshHud(): void;
