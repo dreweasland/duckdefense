@@ -2,11 +2,10 @@ import type Phaser from 'phaser';
 import type { Difficulty } from '../../data/difficulty';
 import type { DuckKind } from '../../data/ducks';
 import type { HatKind } from '../../data/hats';
-import type { EnemyKind } from '../../data/enemies';
-import type { VariantKind } from '../../data/variants';
 import type { Duck } from '../../logic/battle';
 import type { EnemySprites } from './EnemySprites';
-import type { Game, PreviewEntry } from '../../logic/game';
+import type { WavePreview } from './WavePreview';
+import type { Game } from '../../logic/game';
 import type { Point } from '../../logic/geometry';
 
 // The game screen is built from parts (src/scenes/game/*.ts): the boss bar, Craig's hints,
@@ -105,10 +104,8 @@ export interface GameHost extends Phaser.Scene {
   floatText(at: Point, message: string, color: string): void;
   /** An expanding ring, for splashes, quacks, and Big Moves. */
   ring(x: number, y: number, radius: number, color: number, duration: number): void;
-  /** A predator's picture, fit inside a box. */
-  enemyIcon(kind: EnemyKind, x: number, y: number, maxWidth: number, maxHeight: number, variant?: VariantKind): Phaser.GameObjects.Image;
-  /** A "coming next" chip: the predator, how many, and NEW if it's the first time. */
-  drawPreviewChip(entry: PreviewEntry, x: number, y: number, scale?: number): Phaser.GameObjects.Container;
+  /** The "coming next" chips (the call-early card borrows them). */
+  readonly preview: WavePreview;
   /** Draws a nest at a slot (the Endless Pond's New Nests perk adds some mid-game). */
   drawNest(slot: Point): void;
   /** The extra nests the New Nests perk would add on this map. */

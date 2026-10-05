@@ -1,18 +1,16 @@
 import Phaser from 'phaser';
 import { bakeScenery, drawBrambles, drawGrass, drawMud, drawOutskirts, drawPath, drawPathEntrance, drawPond, scatterDecor } from '../art/terrain';
-import { TILES, type NestKind } from '../data/tiles';
+import { TILES } from '../data/tiles';
 import { BATTERY, FOUNTAIN } from '../data/dayNight';
 import type { Challenge } from '../data/challenges';
 import { findTrial, type Trial } from '../data/trials';
 import type { Difficulty } from '../data/difficulty';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
-import { ENEMIES, type EnemyKind } from '../data/enemies';
-import { VARIANTS, type VariantKind } from '../data/variants';
-import { POWERS } from '../data/powers';
+import { ENEMIES } from '../data/enemies';
 import { GAME_SPEEDS, SPEED_TAP_GUARD } from '../data/gameSpeed';
 import { HUD_AREAS } from '../data/layout';
 import { LEVELS } from '../data/levels';
-import { chasePartner, duckStats, enemyName, findDuck, isRefreshed, nestAt, type Duck } from '../logic/battle';
+import { chasePartner, duckStats, findDuck, isRefreshed, nestAt, type Duck } from '../logic/battle';
 import {
   buyDuck,
   canBuy,
@@ -29,13 +27,11 @@ import {
   isNight,
   isOver,
   mapFromLevel,
-  wavePreview,
   startWave,
   update,
   useBlessing,
   type Game,
   type GameEvent,
-  type PreviewEntry,
 } from '../logic/game';
 import { closestPointOnPolyline, distance, type Ellipse, type Point } from '../logic/geometry';
 import { parseLevel, type Level } from '../logic/level';
@@ -51,18 +47,20 @@ import { hatFor } from '../logic/hats';
 import { duckWithHat, hatImage, placeHat } from '../ui/hats';
 import type { PauseSceneData } from './PauseScene';
 import type { ResultSceneData } from './ResultScene';
-import { BACKDROP, COLORS, DEPTH, WORLD, entityDepth, setupCamera, textStyle, INK, INK_GREY } from '../ui/theme';
-import { drawCard, drawPill, drawRoundButton, drawSoundButton, fitWidth, killTweensDeep, popSpeechBubble } from '../ui/widgets';
+import { BACKDROP, COLORS, DEPTH, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
+import { drawCard, drawPill, drawRoundButton, drawSoundButton, killTweensDeep, popSpeechBubble } from '../ui/widgets';
 import { playSound } from '../audio/sfx';
 import { BossBar } from './game/BossBar';
 import { CallEarly } from './game/CallEarly';
 import { EndlessPanel } from './game/EndlessPanel';
 import { Hints } from './game/Hints';
 import { DuckPanel } from './game/DuckPanel';
-import { duckInfoLines } from './game/duckCard';
+import { createEffects } from './game/effects';
+import { InfoCards, type TileKind } from './game/InfoCards';
+import { WavePreview } from './game/WavePreview';
 import { EnemySprites } from './game/EnemySprites';
 import type { DuckSprite, Effects, GameHost } from './game/host';
-import { CARD, CRAIG_BUTTON, GO_BUTTON, PAUSE_BUTTON, PEA_ICON, PREVIEW, SOUND_BUTTON } from './game/layout';
+import { CARD, CRAIG_BUTTON, GO_BUTTON, PAUSE_BUTTON, PEA_ICON, SOUND_BUTTON } from './game/layout';
 import { PowerButtons } from './game/PowerButtons';
 
 const DUCK_SIZE = 84;
@@ -82,7 +80,6 @@ const shownMapKeys = new Set<string>();
 // Things that happen all the time in a battle and don't change the HUD.
 const QUIET_EVENTS: ReadonlySet<GameEvent['type']> = new Set(['attack', 'alarmQuack', 'scared']);
 
-type TileKind = 'mud' | 'brambles' | NestKind;
 
 
 /** A name that starts with "The" reads better mid-sentence as "the": "Craig shooed the Storm Hawk!" */
@@ -183,9 +180,9 @@ export class GameScene extends Phaser.Scene implements GameHost {
   /** Banners waiting to be shown, so two never land on top of each other. */
   private bannerQueue: { message: string; bonus: number }[] = [];
   private bannerShowing = false;
-  private preview!: Phaser.GameObjects.Container;
+  preview!: WavePreview;
+  private cards!: InfoCards;
   /** Which wave the preview is showing, so it's only rebuilt when that changes. */
-  private previewKey = '';
   private bosses!: BossBar;
 
   constructor() {
@@ -245,13 +242,12 @@ export class GameScene extends Phaser.Scene implements GameHost {
     this.focusedDuckId = undefined;
     this.moving = undefined;
     this.nightLights = [];
-    this.previewKey = '';
     this.bannerQueue = [];
     this.blessingReady = true;
     this.bannerShowing = false;
 
     this.drawWorld();
-    this.fx = this.createEffects();
+    this.fx = createEffects(this, this.state.battle.fountain?.position ?? { x: -100, y: -100 }, this.house);
     this.peckingLoop = this.add.container(0, 0).setDepth(DEPTH.entities - 0.5);
     this.level.slots.forEach((slot) => this.drawNest(slot));
     // Everything static from the lawn up to the nest mounds becomes one picture (see bakeScenery).
@@ -266,7 +262,8 @@ export class GameScene extends Phaser.Scene implements GameHost {
     this.duckPanel = new DuckPanel(this);
     this.enemies = new EnemySprites(this, this.bosses);
     this.drawHud();
-    this.preview = this.add.container(0, 0).setDepth(DEPTH.hud);
+    this.cards = new InfoCards(this, this.level);
+    this.preview = new WavePreview(this, this.cards);
     this.endlessPanel = this.endless ? new EndlessPanel(this) : undefined;
     this.goButton = this.drawGoButton();
     this.speedButton = this.drawSpeedButton();
@@ -285,11 +282,11 @@ export class GameScene extends Phaser.Scene implements GameHost {
     } else if (this.daily) {
       const { challenge } = this.daily;
       this.time.delayedCall(350, () => this.showBanner(`Daily Challenge: ${challenge.name}`));
-      this.time.delayedCall(2500, () => this.showChallengeInfo(challenge));
+      this.time.delayedCall(2500, () => this.cards.showChallenge(challenge, false));
     } else if (this.trial) {
       const trial = this.trial;
       this.time.delayedCall(350, () => this.showBanner(`Trial: ${trial.name}`));
-      this.time.delayedCall(2500, () => this.showChallengeInfo(trial));
+      this.time.delayedCall(2500, () => this.cards.showChallenge(trial, true));
     } else if (this.sandbox) {
       this.time.delayedCall(350, () => this.showBanner(`Sandbox: ${info.name}`));
     } else {
@@ -298,10 +295,10 @@ export class GameScene extends Phaser.Scene implements GameHost {
     if (this.sandbox) this.drawWaveArrows();
     // A map with special tiles gets a key explaining them (once per map, per visit).
     const mapKey = this.endless ? 'endless' : String(this.levelIndex);
-    if (this.tilesOnMap().length > 0 && !shownMapKeys.has(mapKey)) {
+    if (this.cards.tilesOnMap().length > 0 && !shownMapKeys.has(mapKey)) {
       shownMapKeys.add(mapKey);
       // After the level banner (and after a Daily Challenge's or trial's twist card).
-      this.time.delayedCall(this.challenge ? 9000 : 2400, () => this.showMapKey());
+      this.time.delayedCall(this.challenge ? 9000 : 2400, () => this.cards.showMapKey());
     }
   }
 
@@ -363,7 +360,7 @@ export class GameScene extends Phaser.Scene implements GameHost {
           .zone(p.center.x, p.center.y, w, h)
           .setInteractive({ hitArea: new Phaser.Geom.Ellipse(w / 2, h / 2, w, h), hitAreaCallback: Phaser.Geom.Ellipse.Contains })
           .setDepth(DEPTH.path + 0.3)
-          .on('pointerdown', () => this.showTileInfo(kind, p.center));
+          .on('pointerdown', () => this.cards.showTile(kind, p.center));
       }
     }
 
@@ -379,7 +376,7 @@ export class GameScene extends Phaser.Scene implements GameHost {
         .setDisplaySize(58, 58)
         .setDepth(DEPTH.pond)
         .setInteractive({ useHandCursor: true })
-        .on('pointerdown', () => this.showFountainInfo());
+        .on('pointerdown', () => this.cards.showFountain());
     }
 
     const door = this.level.path[this.level.path.length - 1]!;
@@ -396,103 +393,6 @@ export class GameScene extends Phaser.Scene implements GameHost {
       { paths: this.level.paths, slots: [...this.level.slots, ...this.bonusNests], ponds: this.level.ponds, house: door, blocked: HUD_AREAS },
       seed + 2,
     );
-  }
-
-  private createEffects(): Effects {
-    const burst = (texture: string, config: Phaser.Types.GameObjects.Particles.ParticleEmitterConfig, depth: number) =>
-      this.add.particles(0, 0, texture, { emitting: false, ...config }).setDepth(depth);
-
-    const fountainAt = this.state.battle.fountain?.position ?? { x: -100, y: -100 };
-    return {
-      splash: burst(
-        'dot',
-        {
-          speed: { min: 60, max: 170 },
-          angle: { min: 200, max: 340 },
-          gravityY: 420,
-          lifespan: 420,
-          scale: { start: 0.55, end: 0 },
-          tint: [COLORS.water, 0xffffff, 0x5bb3e8],
-        },
-        DEPTH.effects,
-      ),
-      feathers: burst(
-        'feather',
-        {
-          speed: { min: 40, max: 130 },
-          rotate: { min: 0, max: 360 },
-          gravityY: 60,
-          lifespan: 900,
-          scale: { start: 0.6, end: 0.3 },
-          alpha: { start: 1, end: 0 },
-          tint: [0x30343b, 0x5b606a],
-        },
-        DEPTH.effects,
-      ),
-      puff: burst(
-        'glow',
-        {
-          speed: { min: 20, max: 70 },
-          lifespan: 550,
-          scale: { start: 0.12, end: 0.3 },
-          alpha: { start: 0.7, end: 0 },
-          tint: 0xe8e4dc,
-        },
-        DEPTH.effects,
-      ),
-      stars: burst(
-        'star',
-        { speed: { min: 50, max: 140 }, lifespan: 500, scale: { start: 0.5, end: 0 }, tint: COLORS.goldLight },
-        DEPTH.effects,
-      ),
-      sparkles: this.add
-        .particles(this.house.x, this.house.y - 50, 'star', {
-          emitting: false,
-          emitZone: { type: 'random', source: new Phaser.Geom.Circle(0, 0, 100) } as Phaser.Types.GameObjects.Particles.EmitZoneData,
-          lifespan: 800,
-          frequency: 90,
-          scale: { start: 0.35, end: 0 },
-          tint: [COLORS.goldLight, 0xffffff],
-          blendMode: Phaser.BlendModes.ADD,
-        })
-        .setDepth(DEPTH.shield + 1),
-      fountainSpray: this.add
-        .particles(fountainAt.x, fountainAt.y - 6, 'dot', {
-          emitting: false,
-          speed: { min: 50, max: 110 },
-          angle: { min: 250, max: 290 },
-          gravityY: 260,
-          lifespan: 650,
-          frequency: 40,
-          scale: { start: 0.4, end: 0.1 },
-          alpha: { start: 0.9, end: 0 },
-          tint: [0xcfefff, COLORS.water],
-        })
-        .setDepth(DEPTH.pond + 0.5),
-      fireflies: this.add
-        .particles(0, 0, 'glow', {
-          emitting: false,
-          emitZone: { type: 'random', source: new Phaser.Geom.Rectangle(0, 130, WORLD.width, WORLD.height - 130) } as Phaser.Types.GameObjects.Particles.EmitZoneData,
-          lifespan: 3200,
-          frequency: 260,
-          speed: { min: 4, max: 16 },
-          scale: { start: 0.05, end: 0.02 },
-          alpha: { values: [0, 1, 0.3, 1, 0] },
-          tint: 0xfff27a,
-          blendMode: Phaser.BlendModes.ADD,
-        })
-        .setDepth(DEPTH.lights),
-      mudSplash: burst(
-        'dot',
-        { speed: { min: 30, max: 90 }, angle: { min: 200, max: 340 }, gravityY: 320, lifespan: 380, scale: { start: 0.45, end: 0 }, tint: [0x4a3322, 0x6b4a33] },
-        DEPTH.effects,
-      ),
-      thorns: burst(
-        'dot',
-        { speed: { min: 30, max: 80 }, lifespan: 320, scale: { start: 0.35, end: 0 }, tint: [0x6f8f3a, 0xf2e6c8, 0x6a2a5a] },
-        DEPTH.effects,
-      ),
-    };
   }
 
   private drawNight(): void {
@@ -583,7 +483,7 @@ export class GameScene extends Phaser.Scene implements GameHost {
       picker.container.y = selected ? CARD.y - CARD.lift : CARD.y;
     }
     this.goButton.setVisible(game.phase === 'building');
-    this.refreshPreview();
+    this.preview.refresh();
     this.speedButton.container.setVisible(game.phase === 'wave');
     this.callEarly.refresh();
     this.endlessPanel?.refresh();
@@ -594,121 +494,6 @@ export class GameScene extends Phaser.Scene implements GameHost {
     this.craigButton.setVisible(!game.challenge?.noCraig);
     this.craigButton.setAlpha(blessing ? 1 : 0.35);
     this.craigGlow.setVisible(blessing);
-  }
-
-  /** Between waves, little chips beside the start button show what's coming next. Tap one to learn about it. */
-  private refreshPreview(): void {
-    const game = this.state;
-    const key = game.phase === 'building' ? `${game.waveIndex}` : '';
-    if (key === this.previewKey) return;
-    this.previewKey = key;
-    killTweensDeep(this, this.preview);
-    this.preview.removeAll(true);
-    if (!key) return;
-
-    const entries = wavePreview(game.waves, game.waveIndex);
-    const chip = Math.min(PREVIEW.chip, (PREVIEW.maxWidth + PREVIEW.gap) / entries.length - PREVIEW.gap);
-    const scale = chip / PREVIEW.chip;
-    entries.forEach((entry, i) => {
-      const x = PREVIEW.right - (entries.length - i) * (chip + PREVIEW.gap) + PREVIEW.gap + chip / 2;
-      const container = this.drawPreviewChip(entry, x, PREVIEW.y, scale);
-      const hit = this.add.zone(0, 0, PREVIEW.chip, 52).setInteractive({ useHandCursor: true });
-      hit.on('pointerdown', () => this.showEnemyInfo(entry.enemy, true, entry.variant));
-      container.add(hit);
-      container.setAlpha(0);
-      this.tweens.add({ targets: container, alpha: 1, duration: 250, delay: i * 70 });
-      this.preview.add(container);
-    });
-
-    // Meeting a predator for the first time (after the first wave): explain it right away.
-    const firstNew = entries.find((e) => e.isNew);
-    if (firstNew && game.waveIndex > 0) {
-      this.time.delayedCall(1900, () => {
-        if (!this.popup && this.state.phase === 'building' && this.previewKey === key) this.showEnemyInfo(firstNew.enemy, false);
-      });
-    }
-  }
-
-  /** One "coming next" chip: the predator, how many, and a NEW badge the first time it shows up. */
-  drawPreviewChip(entry: PreviewEntry, x: number, y: number, scale = 1): Phaser.GameObjects.Container {
-    const parts: Phaser.GameObjects.GameObject[] = [
-      drawPill(this, 0, 0, PREVIEW.chip, 48),
-      this.enemyIcon(entry.enemy, 0, -4, 40, 30, entry.variant),
-      this.add.text(PREVIEW.chip / 2 - 5, 13, `×${entry.count}`, textStyle(17, { weight: '700' })).setOrigin(1, 0.5),
-    ];
-    if (entry.isNew) {
-      const badge = this.add.container(PREVIEW.chip / 2 - 10, -26, [
-        this.add.graphics().fillStyle(COLORS.pink).fillRoundedRect(-19, -9, 38, 18, 9).lineStyle(2, COLORS.ink).strokeRoundedRect(-19, -9, 38, 18, 9),
-        this.add.text(0, 0, 'NEW', textStyle(12, { weight: '700', strokeThickness: 3 })).setOrigin(0.5),
-      ]);
-      this.tweens.add({ targets: badge, scale: 1.12, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
-      parts.push(badge);
-    }
-    return this.add.container(x, y, parts).setScale(scale);
-  }
-
-  /** A predator's picture, fit inside a box (hawks look down from above, so they get a square). */
-  enemyIcon(kind: EnemyKind, x: number, y: number, maxWidth: number, maxHeight: number, variant?: VariantKind): Phaser.GameObjects.Image {
-    const image = this.add.image(x, y, kind);
-    const fit = Math.min(maxWidth / image.width, maxHeight / image.height);
-    if (variant) image.setTint(VARIANTS[variant].tint);
-    return image.setScale(fit);
-  }
-
-  /** The Daily Challenge's (or Level Trial's) twist, shown when the level starts. */
-  private showChallengeInfo(challenge: Challenge): void {
-    if (this.popup) return;
-    // Two twists at once have a longer name and twice the words, so the card grows to fit.
-    const words = this.add.text(-186, -6, challenge.description, { ...textStyle(19, INK), wordWrap: { width: 372 } }).setOrigin(0, 0);
-    const height = Math.max(150, words.height + 82);
-    const card = drawCard(this.add.graphics(), 420, height, { radius: 18, border: COLORS.gold, borderWidth: 5 });
-    const top = -height / 2;
-    words.setY(top + 44);
-    const popup = this.add
-      .container(WORLD.width / 2, 250 + (height - 150) / 2, [
-        card,
-        this.trial
-          ? this.add.image(-172, top + 37, 'ribbon').setDisplaySize(44, 44).setTint(COLORS.pink)
-          : this.add.image(-172, top + 37, 'star').setDisplaySize(40, 40).setTint(COLORS.gold),
-        this.add.text(-142, top + 37, challenge.name, textStyle(challenge.name.length > 18 ? 22 : 28, { ...INK, weight: '700' })).setOrigin(0, 0.5),
-        words,
-      ])
-      .setDepth(DEPTH.hud + 5);
-    this.showPopup(popup, 6000);
-  }
-
-  /** What a predator does and which duck is best against it, shown when you tap it in the preview. */
-  private showEnemyInfo(kind: EnemyKind, tapped = true, variant?: VariantKind): void {
-    this.cancelMove();
-    this.closePopup();
-    if (tapped) playSound(this, 'tap');
-    const stats = ENEMIES[kind];
-    const twist = variant && VARIANTS[variant];
-    const name = enemyName({ kind, variant });
-    const best = DUCKS[stats.beatenBy];
-    // A variant's words go under the predator's own, so the card grows a little.
-    const extra = twist ? 70 : 0;
-    const card = drawCard(this.add.graphics(), 330, 204 + extra, { radius: 18 });
-    const popup = this.add
-      .container(WORLD.width - 190, 270 + extra / 2, [
-        card,
-        this.enemyIcon(kind, -118, -56 - extra / 2, 70, 56, variant),
-        // Long names ("Regrowing Snapping Turtle") shrink to stay on the card.
-        fitWidth(this.add.text(-74, -62 - extra / 2, name, textStyle(name.length > 12 ? 22 : 26, { ...INK, weight: '700' })).setOrigin(0, 0.5), 222),
-        this.add.image(-66, -32 - extra / 2, 'icon-heart').setDisplaySize(18, 18),
-        this.add.text(-52, -32 - extra / 2, `${stats.hearts}`, textStyle(16, { ...INK, color: '#c0392b', weight: '700' })).setOrigin(0, 0.5),
-        this.add
-          .text(-148, -12 - extra / 2, twist ? `${stats.description}\n${twist.name}: ${twist.description}` : stats.description, {
-            ...textStyle(18, INK),
-            wordWrap: { width: 296 },
-          })
-          .setOrigin(0, 0),
-        this.add.text(-148, 74 + extra / 2, 'Best duck:', textStyle(18, { ...INK, color: COLORS.textGreen, weight: '700' })).setOrigin(0, 0.5),
-        this.add.image(-40, 70 + extra / 2, `duck-${stats.beatenBy}`).setDisplaySize(40, 40),
-        this.add.text(-16, 74 + extra / 2, best.name, textStyle(20, { ...INK, weight: '700' })).setOrigin(0, 0.5),
-      ])
-      .setDepth(DEPTH.hud + 5);
-    this.showPopup(popup, 6000);
   }
 
   private drawPicker(): void {
@@ -756,7 +541,7 @@ export class GameScene extends Phaser.Scene implements GameHost {
         this.selected = kind;
         playSound(this, 'tap');
         this.tweens.add({ targets: duck, scale: 1.15, duration: 90, yoyo: true });
-        this.showPickerInfo(kind);
+        this.cards.showPicked(kind);
         this.refreshHud();
       });
       this.pickerCards.push({ kind, container, card });
@@ -783,7 +568,7 @@ export class GameScene extends Phaser.Scene implements GameHost {
           return;
         }
         playSound(this, 'tap');
-        this.previewKey = ''; // the coming-next chips show the new wave
+        this.preview.reset(); // the coming-next chips show the new wave
         this.refreshHud();
       });
     };
@@ -791,8 +576,6 @@ export class GameScene extends Phaser.Scene implements GameHost {
     draw(740, 1, false);
     this.add.text(700, 96, 'wave', textStyle(16, { strokeThickness: 3 })).setOrigin(0.5).setDepth(DEPTH.hud);
   }
-
-  // --- Flock powers --------------------------------------------------------
 
   // --- Ducks -------------------------------------------------------------
 
@@ -827,7 +610,7 @@ export class GameScene extends Phaser.Scene implements GameHost {
     const hit = this.add.circle(0, 0, 13, 0xffffff).setStrokeStyle(3, COLORS.ink);
     hit
       .setInteractive({ hitArea: new Phaser.Geom.Circle(13, 13, 22), hitAreaCallback: Phaser.Geom.Circle.Contains, useHandCursor: true })
-      .on('pointerdown', () => this.showTileInfo(kind, slot));
+      .on('pointerdown', () => this.cards.showTile(kind, slot));
     badge.add(hit);
     if (kind === 'hill') {
       under.fillStyle(0x000000, 0.15).fillEllipse(slot.x, slot.y + 22, 110, 34);
@@ -1003,133 +786,6 @@ export class GameScene extends Phaser.Scene implements GameHost {
       this.duckSprites.get(this.focusedDuckId)?.range.setStrokeStyle(2, 0xffffff, 0.22);
       this.focusedDuckId = undefined;
     }
-  }
-
-  /** A card under the picker explaining the duck you just picked. Fades on its own. */
-  private showPickerInfo(kind: DuckKind): void {
-    this.closePopup();
-    // The duck's card, plus its Big Move (the tap-to-use one, on the buttons down the right).
-    const card = drawCard(this.add.graphics(), 310, 232, { radius: 18 });
-    const lines = this.add.container(0, -22, duckInfoLines(this, this.hats, kind)); // the usual card's lines, shifted up to make room
-    const bigMove = [
-      this.add.image(-126, 86, 'glow').setDisplaySize(30, 30).setTint(COLORS.gold),
-      this.add.image(-126, 86, `duck-${kind}`).setDisplaySize(22, 22),
-      this.add.text(-108, 84, `Big Move: ${POWERS[kind].name}`, textStyle(18, { ...INK, color: COLORS.textGold, weight: '700' })).setOrigin(0, 0.5),
-      this.add.text(-108, 105, 'tap the gold button on the right', textStyle(16, INK_GREY)).setOrigin(0, 0.5),
-    ];
-    const popup = this.add.container(196, 232, [card, lines, ...bigMove]).setDepth(DEPTH.hud + 5);
-    this.showPopup(popup, 4000);
-  }
-
-  /** The kinds of special tiles on this map, in a fixed order. */
-  private tilesOnMap(): TileKind[] {
-    const kinds: TileKind[] = [];
-    if (this.level.mud.length) kinds.push('mud');
-    if (this.level.brambles.length) kinds.push('brambles');
-    for (const nest of ['hill', 'water'] as const) if (this.level.specialNests.some((n) => n.kind === nest)) kinds.push(nest);
-    return kinds;
-  }
-
-  /** A tile's name and what it does, in words a kid can read. */
-  private tileWords(kind: TileKind): { name: string; text: string } {
-    if (kind === 'mud' || kind === 'brambles') return { name: TILES[kind].name, text: TILES[kind].description };
-    return { name: TILES.nests[kind].name, text: `A duck in this nest ${TILES.nests[kind].description}.` };
-  }
-
-  /** A little picture of a tile, for the map key and info cards. */
-  private tileIcon(kind: TileKind, x: number, y: number): Phaser.GameObjects.GameObject {
-    const g = this.add.graphics().setPosition(x, y);
-    switch (kind) {
-      case 'mud':
-        g.fillStyle(0x4a3322).fillEllipse(0, 2, 34, 18).fillStyle(0x5e4230).fillEllipse(0, 0, 26, 12);
-        g.fillStyle(0xffffff, 0.3).fillEllipse(-5, -2, 10, 3);
-        return g;
-      case 'brambles':
-        g.fillStyle(0x4f7a2e).fillCircle(0, 0, 13).lineStyle(3, COLORS.ink).strokeCircle(0, 0, 13);
-        for (const a of [0, 1.2, 2.4, 3.6, 4.8]) {
-          const cx = Math.cos(a) * 13;
-          const cy = Math.sin(a) * 13;
-          g.fillStyle(0xf2e6c8).fillTriangle(cx - 3, cy, cx + 3, cy, cx + Math.cos(a) * 7, cy + Math.sin(a) * 7);
-        }
-        g.fillStyle(0x6a2a5a).fillCircle(4, -3, 3.5);
-        return g;
-      case 'hill':
-        g.fillStyle(0x5f9e3c).fillEllipse(0, 6, 34, 14).fillStyle(0x5f9e3c).fillTriangle(-11, 6, 0, -10, 11, 6);
-        g.fillStyle(0xffffff).fillTriangle(-4, -4, 0, -10, 4, -4);
-        return g;
-      case 'water':
-        g.destroy();
-        return this.add.image(x, y, 'power-splash').setDisplaySize(28, 28);
-    }
-  }
-
-  /** What a tile does, shown when you tap it. */
-  private showTileInfo(kind: TileKind, at: Point): void {
-    this.cancelMove();
-    this.closePopup();
-    playSound(this, 'tap');
-    const { name, text } = this.tileWords(kind);
-    const card = drawCard(this.add.graphics(), 320, 130, { radius: 18 });
-    const popup = this.add
-      .container(Math.max(170, Math.min(WORLD.width - 170, at.x)), at.y + (at.y < 300 ? 120 : -120), [
-        card,
-        this.tileIcon(kind, -126, -34),
-        this.add.text(-100, -34, name, textStyle(24, { ...INK, weight: '700' })).setOrigin(0, 0.5),
-        this.add.text(-142, -6, text, { ...textStyle(17, INK), wordWrap: { width: 284 } }).setOrigin(0, 0),
-      ])
-      .setDepth(DEPTH.hud + 5);
-    this.showPopup(popup, 5000);
-  }
-
-  /** "On this map": a key to the special tiles, shown when a level starts. Fades on its own. */
-  private showMapKey(): void {
-    if (this.popup || isOver(this.state)) return;
-    const kinds = this.tilesOnMap();
-    const W = 460;
-    const rowH = 56;
-    const H = 64 + kinds.length * rowH;
-    const parts: Phaser.GameObjects.GameObject[] = [
-      drawCard(this.add.graphics(), W, H, { radius: 20, border: COLORS.gold, borderWidth: 5 }),
-      this.add.text(0, -H / 2 + 30, 'On this map', textStyle(26, { ...INK, weight: '700' })).setOrigin(0.5),
-    ];
-    kinds.forEach((kind, i) => {
-      const y = -H / 2 + 76 + i * rowH;
-      const { name, text } = this.tileWords(kind);
-      parts.push(
-        this.tileIcon(kind, -W / 2 + 36, y),
-        this.add.text(-W / 2 + 64, y - 12, name, textStyle(20, { ...INK, weight: '700' })).setOrigin(0, 0.5),
-        fitWidth(this.add.text(-W / 2 + 64, y + 12, text, textStyle(17, INK)).setOrigin(0, 0.5), W - 84),
-      );
-    });
-    const popup = this.add.container(WORLD.width / 2, 250 + H / 2 - 60, parts).setDepth(DEPTH.hud + 5);
-    this.showPopup(popup, 9000);
-  }
-
-  /** What the solar fountain does, shown when you tap it. */
-  private showFountainInfo(): void {
-    const at = this.state.battle.fountain?.position;
-    if (!at) return;
-    this.cancelMove();
-    this.closePopup();
-    playSound(this, 'tap');
-    const boost = Math.round(FOUNTAIN.damageBoost * 100);
-    const card = drawCard(this.add.graphics(), 320, 170, { radius: 18 });
-    const popup = this.add
-      .container(Math.max(170, Math.min(WORLD.width - 170, at.x)), at.y + (at.y < 300 ? 150 : -150), [
-        card,
-        this.add.image(-118, -46, 'fountain').setDisplaySize(52, 52),
-        this.add.text(-84, -58, 'Solar Fountain', textStyle(26, { ...INK, weight: '700' })).setOrigin(0, 0.5),
-        this.add.image(-76, -30, 'icon-bolt').setDisplaySize(20, 20),
-        this.add.text(-62, -30, 'Runs on the battery', textStyle(17, { ...INK, color: COLORS.blueDarkCss, weight: '700' })).setOrigin(0, 0.5),
-        this.add
-          .text(-142, 4, `Ducks in its spray hit ${boost}% harder while the battery has charge. The sun charges it by day; it runs down at night.`, {
-            ...textStyle(16, INK),
-            wordWrap: { width: 284 },
-          })
-          .setOrigin(0, 0),
-      ])
-      .setDepth(DEPTH.hud + 5);
-    this.showPopup(popup, 5000);
   }
 
   upgrade(duckId: number, path = 0): void {
@@ -1332,8 +988,6 @@ export class GameScene extends Phaser.Scene implements GameHost {
       this.tweens.add({ targets: heart, scale: 1.3, duration: 500, yoyo: true, repeat: -1 });
     }
   }
-
-  // --- Predators -----------------------------------------------------------
 
   // --- Game events -----------------------------------------------------------
 
@@ -1594,8 +1248,6 @@ export class GameScene extends Phaser.Scene implements GameHost {
     // The next banner (if any) pops in as this one starts to fade away.
     this.time.delayedCall(1620, () => this.showNextBanner());
   }
-
-  // --- Bosses (the Night Bandit, and the Endless Pond's others) -------------------
 
   // --- Buttons ---------------------------------------------------------------
 

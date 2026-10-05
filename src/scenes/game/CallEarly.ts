@@ -79,7 +79,7 @@ export class CallEarly {
     const chip = Math.min(PREVIEW.chip, (W - 30 + PREVIEW.gap) / entries.length - PREVIEW.gap);
     entries.forEach((entry, i) => {
       const x = (i - (entries.length - 1) / 2) * (chip + PREVIEW.gap);
-      parts.push(host.drawPreviewChip(entry, x, -22, chip / PREVIEW.chip));
+      parts.push(host.preview.chip(entry, x, -22, chip / PREVIEW.chip));
     });
     const bonus = host.add.text(-2, 32, '', textStyle(22, { ...INK, color: COLORS.textGreen, weight: '700' })).setOrigin(0, 0.5);
     parts.push(host.add.image(-20, 32, 'icon-pea').setDisplaySize(24, 24), bonus);

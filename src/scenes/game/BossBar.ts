@@ -5,6 +5,7 @@ import { enemyPosition, type Enemy } from '../../logic/battle';
 import type { Point } from '../../logic/geometry';
 import { COLORS, DEPTH, WORLD, textStyle } from '../../ui/theme';
 import { popSpeechBubble } from '../../ui/widgets';
+import { enemyIcon } from './enemyIcon';
 import type { GameHost } from './host';
 import { BOSS_BAR_WIDTH } from './layout';
 
@@ -53,7 +54,7 @@ export class BossBar {
       .fillRoundedRect(-240, -23, 480, 46, 23)
       .lineStyle(3, 0xffffff, 0.3)
       .strokeRoundedRect(-240, -23, 480, 46, 23);
-    const face = host.enemyIcon(enemy.kind, -208, -1, 52, 40);
+    const face = enemyIcon(host, enemy.kind, -208, -1, 52, 40);
     const name = host.add.text(-174, -10, stats.name, textStyle(16)).setOrigin(0, 0.5);
     const back = host.add.rectangle(-174, 10, BOSS_BAR_WIDTH, 12, 0x000000, 0.5).setOrigin(0, 0.5);
     const fill = host.add.rectangle(-174, 10, BOSS_BAR_WIDTH, 12, COLORS.coral).setOrigin(0, 0.5);
