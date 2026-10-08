@@ -32,9 +32,17 @@ for (const [index, info] of LEVELS.entries()) {
       expect(play(info, 'normal', 'sunny', { upgrades: 'place-first' }).phase).toBe('won');
     });
 
-    it('Hard can be won by a sensible team, upgrading with spare peas and calling Craig for the last wave', () => {
-      const teams: DuckKind[][] = [['sunny'], ['potato'], ['sunny', 'curtis'], ['potato', 'curtis'], ['potato', 'sunny', 'curtis', 'chester'], ['sunny', 'potato']];
-      const won = teams.some((team) => play(info, 'hard', team, { upgrades: 'place-first', craig: true }).phase === 'won');
+    it('Hard can be won by a player who knows the game: a good team, upgrades in the best nests, Big Moves, and Craig', () => {
+      // Hard is tight on purpose: it only has to fall to one of these setups (with either final path).
+      const teams: DuckKind[][] = [
+        ['sunny'], ['potato'], ['sunny', 'curtis'], ['potato', 'curtis'], ['potato', 'sunny', 'curtis', 'chester'], ['sunny', 'potato'],
+        ['potato', 'potato', 'chester'], ['potato', 'chester'], ['sunny', 'sunny', 'curtis', 'chester'],
+      ];
+      const won = teams.some((team) =>
+        [0, 1].some((path) =>
+          [3, 5].some((core) => play(info, 'hard', team, { upgrades: 'smart', craig: true, powers: true, path, core, step: 1 / 20 }).phase === 'won'),
+        ),
+      );
       expect(won).toBe(true);
     });
   });

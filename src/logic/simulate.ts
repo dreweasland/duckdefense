@@ -34,6 +34,8 @@ import { nextUpgrade } from './upgrades';
 
 /** The simulated player calls Craig when a predator is this close to the duck house. */
 const CRAIG_CALL_DISTANCE = 200;
+/** The 'smart' strategy upgrades its first few ducks (in the best nests) before filling more. */
+const CORE_DUCKS = 3;
 
 /** Slots sorted so the ones that can see the most of every predator route come first. */
 export function bestSlots(info: LevelInfo, range: number): Point[] {
@@ -56,15 +58,20 @@ export function bestSlots(info: LevelInfo, range: number): Point[] {
 }
 
 export interface Strategy {
-  /** Call Craig during the last wave, once a predator is nearly at the duck house. */
+  /**
+   * Call Craig once a predator is nearly at the duck house: during the last wave, or on any
+   * wave when the hearts are nearly gone.
+   */
   craig?: boolean;
   /**
    * How to spend spare peas on upgrades between waves:
    * - 'none': never upgrade
    * - 'place-first': fill every nest first, then upgrade (cheapest upgrade first)
    * - 'upgrade-first': max out the ducks you have before buying another
+   * - 'smart': like a player who knows the game: a few ducks in the best nests, upgraded
+   *   (best nest first) before weaker nests get a duck
    */
-  upgrades?: 'none' | 'place-first' | 'upgrade-first';
+  upgrades?: 'none' | 'place-first' | 'upgrade-first' | 'smart';
   /** Play with a Daily Challenge twist. */
   challenge?: Challenge;
   /** Play the Endless Pond (the level's waves should be the endless ones). */
@@ -77,8 +84,14 @@ export interface Strategy {
   maxWaves?: number;
   /** Which final upgrade path to take (0 or 1, default 0). */
   path?: number;
+  /** 'smart' only: how many ducks to place before upgrading comes first (default CORE_DUCKS). */
+  core?: number;
+  /** On a boss wave, aim every other duck at the strongest predator (default true). */
+  bossAim?: boolean;
   /** Use every flock power the moment it's ready (a real player taps them; the balance tests don't). */
   powers?: boolean;
+  /** Called after each wave, for watching how a game goes while tuning a level. */
+  trace?: (game: Game) => void;
 }
 
 /**
@@ -90,8 +103,17 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | r
   const team = kind === null ? [] : typeof kind === 'string' ? [kind] : [...kind];
   const slots = bestSlots(info, team[0] ? DUCKS[team[0]].range : 0);
   let placed = 0;
-  /** The next duck on the team to place. */
-  const nextKind = () => team[placed % team.length];
+  /** The next duck on the team to place: taking turns, except that the 'smart' player picks a
+   *  duck that can hit flyers when the coming wave has them and nobody out can. */
+  const nextKind = () => {
+    const turn = team[placed % team.length];
+    if (strategy.upgrades !== 'smart' || isOver(game)) return turn;
+    const wave = game.waves[game.waveIndex];
+    const flyersComing = wave?.groups.some((g) => ENEMIES[g.enemy].flying) ?? false;
+    const hitters = game.battle.ducks.filter((d) => DUCKS[d.kind].canHitFlying).length;
+    const hitter = team.find((kind) => DUCKS[kind].canHitFlying);
+    return flyersComing && hitters < 2 && hitter ? hitter : turn;
+  };
   const upgrades = strategy.upgrades ?? 'none';
   const path = strategy.path ?? 0;
 
@@ -106,6 +128,8 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | r
       .filter((d) => (trainingCost(game, d.id) ?? Infinity) <= game.peas)
       .sort((a, b) => trainingCost(game, a.id)! - trainingCost(game, b.id)!)[0];
   const anyUpgradeLeft = () => game.battle.ducks.some((d) => nextUpgrade(d.kind, d.level));
+  /** The earliest-placed duck (so the one in the best nest) with an upgrade you can afford, if any. */
+  const bestNestUpgrade = () => game.battle.ducks.find((d) => canUpgrade(game, d.id, path));
 
   let usedBonusNests = false;
   while (!isOver(game) && game.waveIndex < (strategy.maxWaves ?? Infinity)) {
@@ -119,7 +143,13 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | r
       const kind = nextKind();
       const canPlace = !!kind && slots.length > 0 && canBuy(game, kind);
       const upgrade = upgrades === 'none' ? undefined : cheapestUpgrade();
-      if (upgrades === 'upgrade-first' && anyUpgradeLeft()) {
+      if (upgrades === 'smart') {
+        const core = bestNestUpgrade();
+        if (placed < (strategy.core ?? CORE_DUCKS) && canPlace) buyDuck(game, kind!, slots.shift()!), placed++;
+        else if (core) upgradeDuck(game, core.id, path);
+        else if (canPlace) buyDuck(game, kind!, slots.shift()!), placed++;
+        else break;
+      } else if (upgrades === 'upgrade-first' && anyUpgradeLeft()) {
         // Save up for upgrades while any duck can still improve.
         if (upgrade) upgradeDuck(game, upgrade.id, path);
         else break;
@@ -137,19 +167,25 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | r
       }
     }
     const lastWave = game.waveIndex === game.waves.length - 1;
-    // If a boss is coming, Craig's shield is saved for it, and every duck aims at the strongest
-    // predator (like a player would), so the boss's minions don't soak up all the pecking.
+    // If a boss is coming, Craig's shield is saved for it, and every other duck aims at the
+    // strongest predator (like a player would): some peck the boss, the rest keep its minions off.
     const bossComing = game.waves[game.waveIndex]!.groups.some((g) => ENEMIES[g.enemy].boss);
-    for (const duck of game.battle.ducks) setTargeting(game, duck.id, bossComing ? 'strong' : 'first');
+    // A boss still to come later in the level: Craig's one shield is kept for it.
+    const bossLater = game.waves.slice(game.waveIndex + 1).some((w) => w.groups.some((g) => ENEMIES[g.enemy].boss));
+    const aim = strategy.bossAim ?? true;
+    game.battle.ducks.forEach((duck, i) => setTargeting(game, duck.id, aim && bossComing && i % 2 === 0 ? 'strong' : 'first'));
     startWave(game);
     const dt = strategy.step ?? 1 / 30;
     for (let i = 0; i < 200_000 && game.phase === 'wave'; i++) {
       if (strategy.powers) for (const kind of DUCK_ORDER) if (canUsePower(game, kind)) usePower(game, kind);
-      // Like a player watching the door: call Craig when something (the boss, if there is one) is nearly in.
+      // Like a player watching the door: call Craig when something (the boss, if there is one) is
+      // nearly in, on the last wave, or on any wave once the hearts are nearly gone.
       const atTheDoor = (e: Enemy) => e.path.length - e.distance < CRAIG_CALL_DISTANCE && (!bossComing || !!ENEMIES[e.kind].boss);
-      if (strategy.craig && lastWave && canUseBlessing(game) && game.battle.enemies.some(atTheDoor)) useBlessing(game);
+      const desperate = game.hearts <= Math.max(2, Math.ceil(game.maxHearts / 4)) && !bossLater;
+      if (strategy.craig && (lastWave || desperate) && canUseBlessing(game) && game.battle.enemies.some(atTheDoor)) useBlessing(game);
       update(game, dt);
     }
+    strategy.trace?.(game);
   }
   return game;
 }

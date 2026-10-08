@@ -43,6 +43,8 @@ export interface Game {
   enemyHealth: number;
   /** The difficulty's multiplier on the peas from predators and wave bonuses. */
   peaRate: number;
+  /** How much tougher predators are by the last wave than the first (DifficultySettings.lateHealth). */
+  lateHealth: number;
   /** Seconds until each kind of duck's flock power is ready again (missing or 0 = ready). See src/logic/powers.ts. */
   powers: Partial<Record<DuckKind, number>>;
   /** The Sandbox: endless peas and hearts, and any wave on tap (see src/data/sandbox.ts). */
@@ -140,6 +142,7 @@ export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Dif
     waves: challengeWaves(waves, challenge),
     enemyHealth: settings.enemyHealth,
     peaRate: settings.peas,
+    lateHealth: endless ? 1 : settings.lateHealth,
     peas: settings.startingPeas,
     hearts: settings.hearts,
     waveIndex: 0,
@@ -388,7 +391,13 @@ function beginWave(game: Game): void {
   game.waveTime = 0;
   game.pending = scheduleWave(wave);
   game.battle.night = wave.time === 'night';
-  game.battle.enemyHealth = (wave.health ?? 1) * game.enemyHealth;
+  game.battle.enemyHealth = (wave.health ?? 1) * game.enemyHealth * lateHealthAt(game, game.waveIndex);
+}
+
+/** The difficulty's late-level toughness for a wave: 1 on the first wave, lateHealth on the last. */
+export function lateHealthAt(game: Game, waveIndex: number): number {
+  const last = game.waves.length - 1;
+  return last <= 0 ? 1 : 1 + (game.lateHealth - 1) * (waveIndex / last);
 }
 
 /** Whether you can send the next wave now: every predator in this wave is out, and there's another wave. */

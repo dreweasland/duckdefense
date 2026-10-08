@@ -106,9 +106,11 @@ flyers. `enemyStats(enemy)` in `src/logic/battle.ts` is the stats-with-twist loo
   the waves survived.
 - **Lives:** The duck house has hearts. Each predator that reaches it costs one (the Night Bandit costs five).
 - **Difficulties:** Easy, Normal, and Hard (`src/data/difficulty.ts`: peas, hearts, predator speed
-  and health, score multiplier). Hard has 5 hearts and predators 10% faster, so a boss getting in
-  is the end. `npm test` checks every level can be won on Hard by a sensible team. Progress,
-  stars, and leaderboards are kept per difficulty.
+  and health, a pea rate, a late-level health ramp, score multiplier). Hard has 5 hearts (so a
+  boss getting in is the end), predators 10% faster, 20% fewer peas, and predators that get 30%
+  tougher by the last wave. `npm test` checks every level can be won on Hard by a player who
+  knows the game (the simulator trying a few teams, both final paths, Big Moves, and Craig).
+  Progress, stars, and leaderboards are kept per difficulty.
 - **Day/night cycle:** Night waves are harder. The **solar battery meter** powers the
   pond fountain, whose refreshing spray makes nearby ducks hit harder. It charges during
   day waves and drains at night, just like the real Victron setup.
@@ -150,8 +152,12 @@ flyers. `enemyStats(enemy)` in `src/logic/battle.ts` is the stats-with-twist loo
 - **The balance simulator** (`src/logic/simulate.ts`) is the floor every level must clear: it
   fills the best-coverage nests with one kind of duck (or a team taking turns), upgrades with
   spare peas, and calls Craig when the boss (or anything, if there's no boss) is nearly at the
-  door. It never uses flock powers unless asked. `npm test` runs it on every level, trial, and
-  difficulty, so a change to a map or a number that makes something unwinnable fails loudly.
+  door, or when the hearts are nearly gone and no boss is still to come. On a boss wave every
+  other duck aims at the boss. Its `smart` strategy plays more like someone who knows the game:
+  a few ducks in the best nests, upgraded before weaker nests get one, and a hawk-hitter placed
+  when hawks are coming; the Hard check uses it with Big Moves. A `trace` callback prints a
+  game wave by wave while tuning. `npm test` runs it on every level, trial, and difficulty, so
+  a change to a map or a number that makes something unwinnable fails loudly.
 - **Endless Pond:** Waves on any map you've opened (pick one from the Endless sheet on the level
   select screen) until the hearts run out; the score is waves survived, with a leaderboard per map
   (the Endless tab has a pill for each). Waves are built by a formula (no randomness,
