@@ -23,8 +23,8 @@ export interface HatInfo {
 }
 
 // In the order they show in the Wardrobe. The crown needs 42 stars: every star on Easy and
-// Normal (7 levels x 3 stars x 2), or a mix with Hard. Ribbons come from Level Trials
-// (14 trials x 3 difficulties = 42): the laurel wreath needs 12 of them.
+// Normal (7 levels x 3 stars x 2), or a mix with Hard and Expert. Ribbons come from Level
+// Trials (14 trials on every difficulty): the laurel wreath needs 12 of them.
 export const HATS: Record<HatKind, HatInfo> = {
   party: { name: 'Party Hat', stars: 0 },
   flower: { name: 'Daisy', stars: 1 },

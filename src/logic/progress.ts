@@ -71,7 +71,12 @@ function parseRecord(record: Partial<LevelRecord> | undefined): LevelRecord | un
 }
 
 export function emptyProgress(): Progress {
-  return { version: 1, levels: { easy: {}, normal: {}, hard: {} } };
+  return { version: 1, levels: { easy: {}, normal: {}, hard: {}, expert: {} } };
+}
+
+/** Expert shows up on the title screen once any level has been won on Hard. */
+export function expertUnlocked(progress: Progress): boolean {
+  return Object.keys(progress.levels.hard).length > 0;
 }
 
 /** Records a Daily Challenge win, keeping the best for that day. An older day's results are dropped. */

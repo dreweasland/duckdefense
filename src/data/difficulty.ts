@@ -1,13 +1,14 @@
-// Easy, Normal, and Hard. Easy must be playable (and winnable) by a 6-year-old.
+// Easy, Normal, Hard, and Expert. Easy must be playable (and winnable) by a 6-year-old.
+// Expert is for players who find Hard easy: it shows up once a level has been won on Hard.
 
-export type Difficulty = 'easy' | 'normal' | 'hard';
+export type Difficulty = 'easy' | 'normal' | 'hard' | 'expert';
 
 /** The difficulties in order, easiest first (the order of the title screen's buttons). */
-export const DIFFICULTY_ORDER: readonly Difficulty[] = ['easy', 'normal', 'hard'];
+export const DIFFICULTY_ORDER: readonly Difficulty[] = ['easy', 'normal', 'hard', 'expert'];
 
 /** Whether something (from a web address or a saved game, say) is one of the difficulties. */
 export function isDifficulty(value: unknown): value is Difficulty {
-  return value === 'easy' || value === 'normal' || value === 'hard';
+  return value === 'easy' || value === 'normal' || value === 'hard' || value === 'expert';
 }
 
 export interface DifficultySettings {
@@ -61,5 +62,19 @@ export const DIFFICULTIES: Record<Difficulty, DifficultySettings> = {
     peas: 0.8,
     lateHealth: 1.3,
     scoreMultiplier: 3,
+  },
+  // Expert: for players who find Hard easy. Three hearts (one slip-up, and a boss is the end),
+  // quick, tough predators that keep getting tougher, and not many peas. Unlike the others,
+  // `npm test` does NOT check the simulator can win it: it can't, and that's the point. It only
+  // checks Expert is at least as harsh as Hard in every number. Tune it by playing it.
+  expert: {
+    label: 'Expert',
+    startingPeas: 200,
+    hearts: 3,
+    enemySpeed: 1.2,
+    enemyHealth: 1.25,
+    peas: 0.7,
+    lateHealth: 1.5,
+    scoreMultiplier: 4,
   },
 };

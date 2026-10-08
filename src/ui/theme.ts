@@ -54,6 +54,8 @@ export const COLORS = {
   pink: 0xff7aa2,
   red: 0xe0524c,
   redDark: 0xa33a35,
+  purple: 0x8a5cd6, // Expert
+  purpleDark: 0x5e3b9b,
   goldDark: 0xc99a1a, // the 3D edge under a gold round button
   pinkDark: 0xc2507a, // and under a pink one
   goldLight: 0xffe066, // glows and dizzy stars
@@ -81,6 +83,7 @@ export const DIFFICULTY_COLORS = {
   easy: { fill: COLORS.green, edge: COLORS.greenDark, css: '#3fbf5f' },
   normal: { fill: COLORS.orange, edge: COLORS.orangeDark, css: '#f28c28' },
   hard: { fill: COLORS.red, edge: COLORS.redDark, css: '#e0524c' },
+  expert: { fill: COLORS.purple, edge: COLORS.purpleDark, css: '#8a5cd6' },
 } as const;
 
 /** Draw order. Characters and scenery sort by their y within the "entities" band. */

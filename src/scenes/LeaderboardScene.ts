@@ -90,7 +90,7 @@ export class LeaderboardScene extends Phaser.Scene {
     });
     this.drawTab(tabX(tabs - 1), 138, tabWidth, '∞ Endless', () => this.board === 'endless', () => (this.board = 'endless'));
     DIFFICULTY_ORDER.forEach((difficulty, i) => {
-      const x = cx + (i - (DIFFICULTY_ORDER.length - 1) / 2) * 170;
+      const x = cx + (i - (DIFFICULTY_ORDER.length - 1) / 2) * 158;
       this.drawTab(x, 192, 150, DIFFICULTIES[difficulty].label, () => this.difficulty === difficulty, () => (this.difficulty = difficulty));
     });
 

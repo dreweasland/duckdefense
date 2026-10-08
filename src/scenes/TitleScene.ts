@@ -6,6 +6,7 @@ import { DUCK_ORDER } from '../data/ducks';
 import { COLORS, DIFFICULTY_COLORS, WORLD, entityDepth, setupCamera, textStyle } from '../ui/theme';
 import { playSound } from '../audio/sfx';
 import { hatFor } from '../logic/hats';
+import { expertUnlocked } from '../logic/progress';
 import { loadProgress } from '../save';
 import { duckWithHat } from '../ui/hats';
 import { drawBigButton, drawRoundButton, drawSoundButton, fadeToScene } from '../ui/widgets';
@@ -49,15 +50,19 @@ export class TitleScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(100);
 
-    // Picking a difficulty starts the game. Easy is green and comes first.
+    // Picking a difficulty starts the game. Easy is green and comes first; Expert joins the row
+    // once a level has been won on Hard (the buttons squeeze up to make room).
     const start = (difficulty: Difficulty) => {
       const data: LevelSelectSceneData = { difficulty };
       fadeToScene(this, 'LevelSelectScene', data, 250);
     };
-    DIFFICULTY_ORDER.forEach((difficulty, i) => {
-      const x = cx + (i - (DIFFICULTY_ORDER.length - 1) / 2) * 300;
+    const shown = DIFFICULTY_ORDER.filter((difficulty) => difficulty !== 'expert' || expertUnlocked(progress));
+    const spacing = shown.length > 3 ? 262 : 300;
+    const size = shown.length > 3 ? { width: 244, fontSize: 38 } : {};
+    shown.forEach((difficulty, i) => {
+      const x = cx + (i - (shown.length - 1) / 2) * spacing;
       const { fill, edge } = DIFFICULTY_COLORS[difficulty];
-      drawBigButton(this, x, 610, DIFFICULTIES[difficulty].label, fill, edge, () => start(difficulty)).setDepth(100);
+      drawBigButton(this, x, 610, DIFFICULTIES[difficulty].label, fill, edge, () => start(difficulty), size).setDepth(100);
     });
 
     drawSoundButton(this, WORLD.width - 40, WORLD.height - 40, 100);

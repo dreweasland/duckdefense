@@ -105,12 +105,15 @@ flyers. `enemyStats(enemy)` in `src/logic/battle.ts` is the stats-with-twist loo
   `PauseScene`: Play, Again, or Levels (the last two ask "are you sure?" first). Leaving an Endless Pond run this way still saves
   the waves survived.
 - **Lives:** The duck house has hearts. Each predator that reaches it costs one (the Night Bandit costs five).
-- **Difficulties:** Easy, Normal, and Hard (`src/data/difficulty.ts`: peas, hearts, predator speed
-  and health, a pea rate, a late-level health ramp, score multiplier). Hard has 5 hearts (so a
-  boss getting in is the end), predators 10% faster, 20% fewer peas, and predators that get 30%
-  tougher by the last wave. `npm test` checks every level can be won on Hard by a player who
-  knows the game (the simulator trying a few teams, both final paths, Big Moves, and Craig).
-  Progress, stars, and leaderboards are kept per difficulty.
+- **Difficulties:** Easy, Normal, Hard, and Expert (`src/data/difficulty.ts`: peas, hearts,
+  predator speed and health, a pea rate, a late-level health ramp, score multiplier). Hard has 5
+  hearts (so a boss getting in is the end), predators 10% faster, 20% fewer peas, and predators
+  that get 30% tougher by the last wave. `npm test` checks every level can be won on Hard by a
+  player who knows the game (the simulator trying a few teams, both final paths, Big Moves, and
+  Craig). Expert appears on the title screen once a level has been won on Hard; it's for players
+  who find Hard easy, the simulator can't win it, and `npm test` only checks it's at least as
+  harsh as Hard in every number, so tune it by playing it. Progress, stars, and leaderboards are
+  kept per difficulty.
 - **Day/night cycle:** Night waves are harder. The **solar battery meter** powers the
   pond fountain, whose refreshing spray makes nearby ducks hit harder. It charges during
   day waves and drains at night, just like the real Victron setup.

@@ -3,6 +3,7 @@
 // these fails, the level probably got too easy or too hard.
 import { describe, expect, it } from 'vitest';
 import { CHALLENGES } from '../data/challenges';
+import { DIFFICULTIES } from '../data/difficulty';
 import { DUCK_ORDER, DUCKS, type DuckKind } from '../data/ducks';
 import { LEVELS } from '../data/levels';
 import { TRIALS, findTrial } from '../data/trials';
@@ -99,6 +100,20 @@ describe('level trial balance', () => {
       });
     }
   }
+});
+
+describe('Expert', () => {
+  // The simulator can't win Expert and isn't asked to. It just mustn't drift easier than Hard.
+  it('is at least as harsh as Hard in every number', () => {
+    const { hard, expert } = DIFFICULTIES;
+    expect(expert.hearts).toBeLessThanOrEqual(hard.hearts);
+    expect(expert.startingPeas).toBeLessThanOrEqual(hard.startingPeas);
+    expect(expert.peas).toBeLessThanOrEqual(hard.peas);
+    expect(expert.enemySpeed).toBeGreaterThanOrEqual(hard.enemySpeed);
+    expect(expert.enemyHealth).toBeGreaterThanOrEqual(hard.enemyHealth);
+    expect(expert.lateHealth).toBeGreaterThanOrEqual(hard.lateHealth);
+    expect(expert.scoreMultiplier).toBeGreaterThan(hard.scoreMultiplier);
+  });
 });
 
 describe('flock powers', () => {

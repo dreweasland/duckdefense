@@ -5,6 +5,7 @@ import {
   dailyRecord,
   dailyStreak,
   emptyProgress,
+  expertUnlocked,
   endlessBest,
   hasWonTrial,
   isUnlocked,
@@ -74,6 +75,20 @@ describe('progress', () => {
     // A hat that isn't one (an object's built-in property names would otherwise slip through "in").
     const save = { ...emptyProgress(), hats: { sunny: 'constructor', potato: 'party' } };
     expect(parseProgress(JSON.stringify(save)).hats).toEqual({ potato: 'party' });
+  });
+});
+
+describe('Expert', () => {
+  it('shows up once any level has been won on Hard', () => {
+    expect(expertUnlocked(emptyProgress())).toBe(false);
+    expect(expertUnlocked(recordWin(emptyProgress(), 'normal', 6, 3, 999))).toBe(false);
+    expect(expertUnlocked(recordWin(emptyProgress(), 'hard', 0, 1, 100))).toBe(true);
+  });
+
+  it('keeps an old save (from before Expert) readable, with no Expert progress', () => {
+    const old = JSON.stringify({ version: 1, levels: { easy: { 0: { stars: 3, bestScore: 500 } }, normal: {}, hard: {} } });
+    expect(parseProgress(old).levels.expert).toEqual({});
+    expect(parseProgress(old).levels.easy[0]).toEqual({ stars: 3, bestScore: 500 });
   });
 });
 
