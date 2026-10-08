@@ -41,6 +41,8 @@ export interface Game {
   waves: readonly Wave[];
   /** The difficulty's health multiplier for every predator (on top of a wave's own). */
   enemyHealth: number;
+  /** The difficulty's multiplier on the peas from predators and wave bonuses. */
+  peaRate: number;
   /** Seconds until each kind of duck's flock power is ready again (missing or 0 = ready). See src/logic/powers.ts. */
   powers: Partial<Record<DuckKind, number>>;
   /** The Sandbox: endless peas and hearts, and any wave on tap (see src/data/sandbox.ts). */
@@ -137,6 +139,7 @@ export function createGame(map: GameMap, waves: readonly Wave[], difficulty: Dif
     }),
     waves: challengeWaves(waves, challenge),
     enemyHealth: settings.enemyHealth,
+    peaRate: settings.peas,
     peas: settings.startingPeas,
     hearts: settings.hearts,
     waveIndex: 0,
@@ -421,13 +424,13 @@ export function callNextWave(game: Game): number | undefined {
 /** The peas for clearing the current wave (Early Riser makes day waves pay more). */
 function waveBonus(game: Game): number {
   const wave = game.waves[game.waveIndex]!;
-  return Math.round(wave.bonusPeas * (wave.time === 'day' ? game.battle.mods.dayBonus : 1));
+  return Math.round(wave.bonusPeas * game.peaRate * (wave.time === 'day' ? game.battle.mods.dayBonus : 1));
 }
 
 /** The peas for chasing off a predator (Pea Picker and the like make them pay more). */
 export function killPeas(game: Game, enemy: Pick<Enemy, 'kind' | 'variant'>): number {
   const twist = enemy.variant ? VARIANTS[enemy.variant].peas : 1;
-  return Math.round(ENEMIES[enemy.kind].peas * twist * game.battle.mods.killPeas);
+  return Math.round(ENEMIES[enemy.kind].peas * twist * game.peaRate * game.battle.mods.killPeas);
 }
 
 /** Endless Pond: after every few waves, Craig has rested and her blessing is ready again. */

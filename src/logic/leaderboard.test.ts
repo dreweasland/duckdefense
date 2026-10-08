@@ -131,7 +131,9 @@ describe('maxPeasFor', () => {
       DIFFICULTIES.easy.startingPeas,
     );
     expect(maxPeasFor(0, 'easy')).toBe(expected);
-    expect(maxPeasFor(0, 'hard')).toBe(expected - DIFFICULTIES.easy.startingPeas + DIFFICULTIES.hard.startingPeas);
+    // Hard pays fewer peas per predator and wave (DIFFICULTIES.hard.peas), so its ceiling is lower.
+    expect(maxPeasFor(0, 'hard')).toBeLessThan(expected - DIFFICULTIES.easy.startingPeas + DIFFICULTIES.hard.startingPeas);
+    expect(maxPeasFor(0, 'hard')).toBeGreaterThan(DIFFICULTIES.hard.startingPeas);
   });
 
   it('allows for the minions a boss can call in while it is alive', () => {

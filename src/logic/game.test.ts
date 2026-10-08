@@ -113,6 +113,19 @@ describe('game', () => {
     expect(game.waveIndex).toBe(1);
   });
 
+  it("pays fewer peas on a difficulty with a lower pea rate (Hard's)", () => {
+    const game = createGame({ path }, [oneRaccoon], 'hard');
+    game.peas = 1000;
+    for (let i = 0; i < 3; i++) buyDuck(game, 'sunny', { x: 100, y: 0 });
+    const before = game.peas;
+    startWave(game);
+    const events = runUntilIdle(game);
+    const rate = DIFFICULTIES.hard.peas;
+    expect(rate).toBeLessThan(1);
+    expect(events).toContainEqual({ type: 'waveCleared', waveIndex: 0, bonus: Math.round(25 * rate) });
+    expect(game.peas).toBe(before + Math.round(ENEMIES.raccoon.peas * rate) + Math.round(25 * rate));
+  });
+
   it('wins after the last wave is cleared', () => {
     const game = createGame({ path }, [oneRaccoon], 'normal');
     game.peas = 1000;

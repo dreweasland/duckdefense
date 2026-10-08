@@ -29,11 +29,12 @@ export const BOSS_TIME_ALLOWANCE = 300;
  */
 export function maxPeasFor(level: number, difficulty: Difficulty, twist?: Challenge): number {
   const waves = challengeWaves(LEVEL_WAVES[level] ?? [], twist);
+  const settings = challengeSettings(difficulty, twist);
   const reward = (kind: EnemyKind, variant?: VariantKind) =>
-    Math.round(ENEMIES[kind].peas * (variant ? VARIANTS[variant].peas : 1)) + EARLY_CALL.peasPerPredator;
-  let peas = challengeSettings(difficulty, twist).startingPeas;
+    Math.round(ENEMIES[kind].peas * (variant ? VARIANTS[variant].peas : 1) * settings.peas) + EARLY_CALL.peasPerPredator;
+  let peas = settings.startingPeas;
   for (const wave of waves) {
-    peas += wave.bonusPeas;
+    peas += Math.round(wave.bonusPeas * settings.peas);
     for (const group of wave.groups) {
       peas += group.count * reward(group.enemy, group.variant);
       const stats = ENEMIES[group.enemy];

@@ -16,6 +16,7 @@ export interface DifficultySettings {
   hearts: number; // predators that can reach the duck house before you lose
   enemySpeed: number; // multiplies every predator's speed (0.5 = half speed)
   enemyHealth: number; // multiplies every predator's health (1.2 = 20% tougher)
+  peas: number; // multiplies the peas from chasing off predators and clearing waves (0.7 = a lot fewer)
   scoreMultiplier: number; // the leaderboard score is multiplied by this
 }
 
@@ -26,6 +27,7 @@ export const DIFFICULTIES: Record<Difficulty, DifficultySettings> = {
     hearts: 20,
     enemySpeed: 0.7,
     enemyHealth: 1,
+    peas: 1,
     scoreMultiplier: 1,
   },
   normal: {
@@ -34,16 +36,20 @@ export const DIFFICULTIES: Record<Difficulty, DifficultySettings> = {
     hearts: 10,
     enemySpeed: 1,
     enemyHealth: 1,
+    peas: 1,
     scoreMultiplier: 2,
   },
-  // Hard: for players who've beaten Normal. Half the hearts (so a boss getting in is the end)
-  // and quicker predators. `npm test` checks every level can still be won by a sensible team.
+  // Hard: for players who've beaten Normal. Half the hearts (so a boss getting in is the end),
+  // quicker predators, and fewer peas, so upgrades have to be chosen instead of bought for
+  // everyone. `npm test` checks every level can still be won by a sensible team; the
+  // simulator only just manages it, so a harder Hard needs a smarter simulator first.
   hard: {
     label: 'Hard',
     startingPeas: 200,
     hearts: 5,
     enemySpeed: 1.1,
     enemyHealth: 1,
+    peas: 0.8,
     scoreMultiplier: 3,
   },
 };

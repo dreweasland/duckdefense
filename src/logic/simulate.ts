@@ -16,6 +16,7 @@ import {
   isOver,
   mapFromLevel,
   repairHouse,
+  setTargeting,
   startWave,
   trainDuck,
   trainingCost,
@@ -136,8 +137,10 @@ export function play(info: LevelInfo, difficulty: Difficulty, kind: DuckKind | r
       }
     }
     const lastWave = game.waveIndex === game.waves.length - 1;
-    // If a boss is coming, Craig's shield is saved for it.
+    // If a boss is coming, Craig's shield is saved for it, and every duck aims at the strongest
+    // predator (like a player would), so the boss's minions don't soak up all the pecking.
     const bossComing = game.waves[game.waveIndex]!.groups.some((g) => ENEMIES[g.enemy].boss);
+    for (const duck of game.battle.ducks) setTargeting(game, duck.id, bossComing ? 'strong' : 'first');
     startWave(game);
     const dt = strategy.step ?? 1 / 30;
     for (let i = 0; i < 200_000 && game.phase === 'wave'; i++) {
